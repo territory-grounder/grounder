@@ -1,0 +1,15 @@
+{
+ "nav": {
+  "group": "OBSERVE",
+  "label": "Logs",
+  "view_key": "logs",
+  "badge": "logs",
+  "icon_svg_inner": "<rect x=\"1.5\" y=\"2.5\" width=\"13\" height=\"11\" rx=\"1\"/><path d=\"M4 6l2.2 2L4 10\"/><path d=\"M8 10.5h4\"/>"
+ },
+ "view_meta": [
+  "Logs",
+  "Streaming evidence \u2014 unified event stream across connectors, agent, gates, executor and governance"
+ ],
+ "purpose": "Replace the static 7-line log box with a real streaming-evidence surface: a dense, filterable, live-tailing monospace stream that unifies connector, agent, gate, executor and governance events, with epistemic entity highlighting (hosts=territory steel, action_ids=map indigo) and one-click pivot from any line to its session.",
+ "notes": "Design decisions. (1) Epistemic color law holds inside the stream: message entities are parsed live \u2014 hosts (site-prefixed dc1*/dc2*) render in --territory steel, action_ids (act_hex) in --map indigo; actor chips follow the spec (ai=--map, human=--accent per the module brief, system=--territory) and every status is color+label+shape (bordered chip with text, plus a left row stripe for warn/error). (2) Live tail is fully deterministic: LOG_TAIL cycles in fixed order and timestamps derive from tick index (LOG_LAST_T + 1800*(n+1)), never Date.now; under reduceMotion the tail starts PAUSED and the LIVE dot never pulses (class gated by JS and belt-and-braces prefers-reduced-motion media query); the interval self-clears via body.isConnected so route swaps never leak timers. (3) Tail behavior matches real terminals: auto-scroll only while the user is within 40px of the bottom; scrolling up suspends stick without pausing ingestion. (4) Cap at 400 lines via a drop counter (oldest lines fall off; full repaint only on overflow, incremental append otherwise). (5) State (query, facet Sets, appended lines) lives in LOG_STATE at module scope so returning to the view preserves the operator's filters and the accumulated tail. (6) Honest-data rule: a --hazard \"FIXTURE / READ-ONLY PREVIEW\" tag sits in the header. (7) Fixtures are 58 lines forming five coherent correlation arcs that mirror the TG lifecycle (ingest -> triage -> classify -> gate -> ledger -> verify), including one MATCH, one PARTIAL, one DEVIATION, a POLL_PAUSE with human approval, and repeated \"GATED - MUTATION OFF\" executor lines. (8) Row click (or Enter, rows are focusable) pivots via openSession() with a toast; unlinked lines toast their correlation id \u2014 no dead ends. (9) No chart primitives were needed for this surface; everything is token-styled, --accent is used only for focus/selection/human-actor per the brief, and all names are log-/LOG_-prefixed to avoid collisions."
+}

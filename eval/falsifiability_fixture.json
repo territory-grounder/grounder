@@ -1,0 +1,61 @@
+{
+  "_comment": "HAND-AUTHORED falsifiability scenarios (placement-grounded SYNTHETIC outcome records, NOT telemetry and NOT generated from the estate graph — generating them from the graph would rig the negative-control test, INV-22). Each 'observed' set is a hand-picked SUBSET of the hosts that would truly be hit (verifiable against real Proxmox placement / LibreNMS dependency config) plus one SURPRISE host that genuinely lives elsewhere and is not transitively in the target's radius. The negative control is SIBLINGS-SYMMETRIC (a same-shape null, TG-87): the real prediction AND its degree-preserving shuffle both include common-cause siblings — no rigged asymmetry. Under that honest null, STRICT falsifiability (expect_falsifiable=true) holds only on HIGH-FANOUT placement nodes: pve01 (59 guests) and pve04 (27 guests) beat the shuffle (control_tp=0), because with dozens of siblings a degree-preserving shuffle rarely reproduces the specific observed subset. pve02 (only 7 guests) carries expect_falsifiable=false: too few siblings, so the shuffle reproduces the observed 3 (control_tp==real_tp==3) — the SAME underpowered-null limitation as the depends_on scenarios (redis03/sw01, 11-edge tier). So 3 of 5 scenarios are documented underpowered-null limitations and 2 genuinely beat their same-shape control; the AGGREGATE differentiator still holds (AvgRealTP 2.4 vs AvgControlTP 1.2, SignalRatio 2.0 > 1). Measured limitation (fixture 2026-07-17; siblings-symmetric-control recalibration TG-87, 2026-07-19) — revisit as more high-fanout tiers and the LibreNMS dependency/learned tiers populate more edges. Placement facts used: pve02 hosts gitea01/redis02/meshcentral01 (7 guests); pve04 hosts cap01/claude01/dmz01 (27 guests); pve01 hosts cl01file01/code01/cloudbeaver01 (59 guests); nextcloud01 declares redis03 a dependency parent; ap01/ap03 declare sw01 their dependency parent.",
+  "scenarios": [
+    {
+      "ref": "fx-pve02-down",
+      "target_host": "dc1pve02",
+      "site": "dc1",
+      "expect_falsifiable": false,
+      "observed": [
+        {"host": "dc1gitea01", "rule": "HostDown", "site": "dc1"},
+        {"host": "dc1redis02", "rule": "HostDown", "site": "dc1"},
+        {"host": "dc1meshcentral01", "rule": "HostDown", "site": "dc1"},
+        {"host": "dc1calibre01", "rule": "HostDown", "site": "dc1"}
+      ]
+    },
+    {
+      "ref": "fx-pve04-down",
+      "target_host": "dc1pve04",
+      "site": "dc1",
+      "expect_falsifiable": true,
+      "observed": [
+        {"host": "dc1cap01", "rule": "HostDown", "site": "dc1"},
+        {"host": "dc1claude01", "rule": "HostDown", "site": "dc1"},
+        {"host": "dc1dmz01", "rule": "HostDown", "site": "dc1"},
+        {"host": "dc1gitea01", "rule": "HostDown", "site": "dc1"}
+      ]
+    },
+    {
+      "ref": "fx-pve01-down",
+      "target_host": "dc1pve01",
+      "site": "dc1",
+      "expect_falsifiable": true,
+      "observed": [
+        {"host": "dc1cl01file01", "rule": "HostDown", "site": "dc1"},
+        {"host": "dc1code01", "rule": "HostDown", "site": "dc1"},
+        {"host": "dc1cloudbeaver01", "rule": "HostDown", "site": "dc1"},
+        {"host": "dc1redis02", "rule": "HostDown", "site": "dc1"}
+      ]
+    },
+    {
+      "ref": "fx-redis03-down",
+      "target_host": "dc1redis03",
+      "site": "dc1",
+      "expect_falsifiable": false,
+      "observed": [
+        {"host": "dc1nextcloud01", "rule": "HighLatency", "site": "dc1"}
+      ]
+    },
+    {
+      "ref": "fx-sw01-down",
+      "target_host": "dc1sw01",
+      "site": "dc1",
+      "expect_falsifiable": false,
+      "observed": [
+        {"host": "dc1ap01", "rule": "HostDown", "site": "dc1"},
+        {"host": "dc1ap03", "rule": "HostDown", "site": "dc1"},
+        {"host": "dc1bookwyrm01", "rule": "HostDown", "site": "dc1"}
+      ]
+    }
+  ]
+}

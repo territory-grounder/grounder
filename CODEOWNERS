@@ -1,0 +1,32 @@
+# Territory Grounder — code ownership of the "law" surfaces.
+#
+# These files are the guardrails an autonomous coding agent operates UNDER; per SDD best practice
+# (ADR-0009, finding (ii): "if it must happen, it belongs in a gate the agent cannot bypass"), changes
+# to them require an explicit human code-owner review rather than being silently rewritten by an agent.
+#
+# NOTE: replace the placeholder owner with the GitLab @handle (or group) once known, and enable
+# "Require approval from Code Owners" on the protected `main` branch for enforcement. Until then this
+# file is advisory.
+
+* @ncpjfuzl
+
+# The inviolable law and its mechanical core.
+/docs/CONSTITUTION.md            @ncpjfuzl
+/core/safety/                    @ncpjfuzl
+
+# Architecture decisions are immutable once Accepted (a reversal is a new ADR).
+/docs/adr/                       @ncpjfuzl
+
+# The executable spec lattice and its gate.
+/spec/                           @ncpjfuzl
+/tools/specvalidate/             @ncpjfuzl
+/docs/SDD-WORKFLOW.md            @ncpjfuzl
+/docs/GOVERNED-BEHAVIORS.md      @ncpjfuzl
+
+# The security gates and agent orientation.
+/.gitlab-ci.yml                  @ncpjfuzl
+/scripts/lint-forbidden.sh       @ncpjfuzl
+/.gitleaks.toml                  @ncpjfuzl
+/AGENTS.md                       @ncpjfuzl
+/CLAUDE.md                       @ncpjfuzl
+/CODEOWNERS                      @ncpjfuzl

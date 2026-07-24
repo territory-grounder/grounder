@@ -1,0 +1,81 @@
+/* Skill store (spec/014 T-014-9, partial: library + editor; the trial dashboard deepens with the trial
+   engine). Representative fixtures mirroring the REAL /v1/skills DTOs (core/httpapi/skills.go
+   SkillSummary / SkillDetailView / TrialView) so the view renders identically for demo and live. The
+   library mirrors what the boot importer seeds from the compiled registry (7 behavioral skills,
+   conservative-remediation pinned = the floor), plus one hand draft and one flywheel candidate
+   mid-trial, so every surface state is visible in the preview. */
+const SK_FIX = (() => {
+  const AW_FULL = { exec_classes: ["STANDARD_AGENT", "DEEP_INVESTIGATION"] };
+  const HX = "9b1f3a77c4d2e6088a51f0b6d94e2c7a13598d0e4f6b2a81c5d7e9f01234abcd";
+  const hx = id => (id.toString(16).padStart(4, "0") + HX).slice(0, 64);
+  const t0 = "2026-07-11T06:02:14Z";
+  const BODIES = {
+    "proving-your-work": "## Proving your work\nDo not assert — SHOW the evidence. Paste the actual output line, not a summary (a service is \"active\", not \"running fine\").\nNever claim a fix applied without the post-fix state; if you could not capture it, say so and lower your confidence.",
+    "loop-red-flags": "## Loop red flags\nThe same probe twice with the same result is a loop, not diligence.\nThree hypotheses without a discriminating test = step back and re-read the alert.\nEscalate the moment the plan needs a credential you do not hold.",
+    "debugging-protocol": "## Debugging protocol\nReproduce before you theorize. Narrow by halves.\nChange ONE variable per probe; record the expected vs observed result of every step.",
+    "shortcuts-to-resist": "## Shortcuts to resist\nNo restart-first \"fixes\" — a restart destroys the evidence and proves nothing.\nNo config edits to \"see if it helps\". No silencing an alert to make a dashboard green.",
+    "conservative-remediation": "## Conservative remediation\nPrefer observation over action; prefer reversible over irreversible; prefer the smallest scope that can prove the hypothesis.\nAn irreversible action is NEVER proposed above the floor — it goes to a human, every time.",
+    "triage-1.0.0": "## Triage protocol\n1. Read the alert; restate the symptom in one line.\n2. Establish blast radius before any hypothesis.\n3. Commit the consequence prediction BEFORE proposing the action.",
+    "triage-1.1.0": "## Triage protocol\n1. Read the alert; restate the symptom in one line.\n2. Establish blast radius from the estate graph before any hypothesis.\n3. Several related hosts failing together = propose against the shared upstream cause, never host-by-host.\n4. Commit the consequence prediction BEFORE proposing the action.\n5. Cite ground truth for every claim.",
+    "triage-1.2.0": "## Triage protocol\n1. Read the alert; restate the symptom in one line.\n2. Establish blast radius from the estate graph before any hypothesis.\n3. Several related hosts failing together = propose against the shared upstream cause, never host-by-host.\n4. Commit the consequence prediction BEFORE proposing the action.\n5. Cite ground truth for every claim — paste the probe output and name its source.\n6. Before closing, verify the post-state and score your own prediction honestly.",
+    "alert-class-playbooks": "## Alert-class playbooks\nDisk pressure: identify the writer before freeing space.\nInterface flap: check the far end first.\nAuth failures: count accepted logins before assuming breach.",
+  };
+  const skills = [
+    { name: "proving-your-work", kind: "behavioral", pinned: false, position: 0, production_version: "1.0.0", production_source: "compiled-import", version_count: 2, active_trial: false },
+    { name: "loop-red-flags", kind: "behavioral", pinned: false, position: 1, production_version: "1.0.0", production_source: "compiled-import", version_count: 1, active_trial: false },
+    { name: "debugging-protocol", kind: "behavioral", pinned: false, position: 2, production_version: "1.0.0", production_source: "compiled-import", version_count: 1, active_trial: false },
+    { name: "shortcuts-to-resist", kind: "behavioral", pinned: false, position: 3, production_version: "1.0.0", production_source: "compiled-import", version_count: 1, active_trial: false },
+    { name: "conservative-remediation", kind: "behavioral", pinned: true, position: 4, production_version: "1.0.0", production_source: "compiled-import", version_count: 1, active_trial: false },
+    { name: "triage-protocol", kind: "behavioral", pinned: false, position: 5, production_version: "1.1.0", production_source: "compiled-import", version_count: 3, active_trial: true },
+    { name: "alert-class-playbooks", kind: "behavioral", pinned: false, position: 6, production_version: "1.1.0", production_source: "compiled-import", version_count: 1, active_trial: false },
+  ];
+  const prod = (id, ver, body, aw, seq) => ({
+    id, version: ver, status: "production", body, applies_when: aw,
+    content_hash: hx(id), author: "compiled", source: "compiled-import",
+    rationale: "[production] compiled registry boot import",
+    ledger_seq: seq, created_at: t0, status_changed_at: t0,
+  });
+  const details = {};
+  const det = (name, versions) => { details[name] = Object.assign({}, skills.find(x => x.name === name), { versions }); };
+  det("loop-red-flags", [prod(12, "1.0.0", BODIES["loop-red-flags"], {}, 1409)]);
+  det("debugging-protocol", [prod(13, "1.0.0", BODIES["debugging-protocol"], AW_FULL, 1410)]);
+  det("shortcuts-to-resist", [prod(14, "1.0.0", BODIES["shortcuts-to-resist"], AW_FULL, 1411)]);
+  det("conservative-remediation", [prod(15, "1.0.0", BODIES["conservative-remediation"], {}, 1412)]);
+  det("alert-class-playbooks", [prod(16, "1.1.0", BODIES["alert-class-playbooks"], AW_FULL, 1413)]);
+  det("proving-your-work", [
+    { id: 33, version: "1.0.1", status: "draft",
+      body: BODIES["proving-your-work"] + "\nA high-confidence claim (CONFIDENCE >= 0.8) with no fenced evidence block is a red flag — cite the block or lower the score.",
+      applies_when: {}, content_hash: hx(33), author: "kyriakos", source: "hand",
+      rationale: "[draft] operators keep accepting summaries as proof — make the fenced-evidence rule explicit",
+      ledger_seq: 1424, created_at: "2026-07-15T10:41:02Z", status_changed_at: "2026-07-15T10:41:02Z" },
+    prod(11, "1.0.0", BODIES["proving-your-work"], {}, 1408),
+  ]);
+  det("triage-protocol", [
+    { id: 41, version: "1.2.0", status: "trial", body: BODIES["triage-1.2.0"], applies_when: AW_FULL,
+      content_hash: hx(41), author: "flywheel", source: "flywheel",
+      rationale: "[draft] eval regression: verification dimension 3.1 < 3.5 over 6 judged sessions — rewrite tightens evidence citation and adds a post-state check\n[trial] offline gate passed: regression set held, verification 3.2 → 3.9 on the discovery set; admitted against production control v1.1.0",
+      eval_offline: { verification: 3.9, safety: 4.2, regression: "held" },
+      ledger_seq: 1430, created_at: "2026-07-14T03:22:47Z", status_changed_at: "2026-07-15T08:00:11Z" },
+    { id: 26, version: "1.1.0", status: "production", body: BODIES["triage-1.1.0"], applies_when: AW_FULL,
+      content_hash: hx(26), author: "compiled", source: "compiled-import",
+      rationale: "[production] compiled registry boot import",
+      ledger_seq: 1415, created_at: t0, status_changed_at: t0 },
+    { id: 9, version: "1.0.0", status: "retired", body: BODIES["triage-1.0.0"], applies_when: AW_FULL,
+      content_hash: hx(9), author: "compiled", source: "compiled-import",
+      rationale: "[production] compiled registry boot import\n[retired] compiled registry upgraded to v1.1.0",
+      ledger_seq: 1414, created_at: "2026-07-04T05:40:09Z", status_changed_at: t0 },
+  ]);
+  const trials = [
+    { id: 3, skill_name: "triage-protocol", dimension: "verification", status: "active",
+      candidate_ids: [41], control_version_id: 26, min_samples_per_arm: 15, min_lift: 0.05, p_threshold: 0.1,
+      ends_at: "2026-07-29T08:00:11Z", assignments: { "-1": 11, "0": 5 },
+      note: "[start] admitted from the offline gate — target dimension verification, production v1.1.0 as concurrent control",
+      created_at: "2026-07-15T08:00:11Z" },
+    { id: 2, skill_name: "proving-your-work", dimension: "safety", status: "graduated",
+      candidate_ids: [31], control_version_id: 11, min_samples_per_arm: 15, min_lift: 0.05, p_threshold: 0.1,
+      ends_at: "2026-07-12T09:00:00Z", assignments: { "-1": 15, "0": 15 }, winner_version_id: 31,
+      note: "[start] admitted from the offline gate — target dimension safety\n[finalize] Welch t-test cleared min-lift 0.05 at p<0.1 over 15/arm — candidate v1.0.1 promoted to production",
+      created_at: "2026-06-28T09:00:00Z", finalized_at: "2026-07-12T09:04:31Z" },
+  ];
+  return { skills, details, trials };
+})();

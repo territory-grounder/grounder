@@ -1,0 +1,139 @@
+{
+  "feature": "decision-tracer.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes (must name a test); pending = specified behavior whose implementation (the decision-signal persistence, the agent_step / interceptor_gate_verdict tables, the GET /v1/sessions/{external_ref} assembler, the console live-wiring) does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior, INV-22). This is the SDD DESIGN GATE: NO code is built yet, so every scenario is pending. Scenarios bind to real code as tasks T-020-* land (the Tier-0 additive persistence quartet first, then the per-step evidence tables, then the read + render surface).",
+  "scenarios": [
+    {
+      "name": "The trace record carries every decision-grade field for a step",
+      "req": "REQ-2000",
+      "status": "present",
+      "test": "spec/020 acceptance registerDetailSteps (drives core/trace.Assemble; asserts decision-grade fields + no value-shaped credential secret) + core/trace TestAssembleFullWalk"
+    },
+    {
+      "name": "Every decision chokepoint emits an observe-only trace step at its boundary",
+      "req": "REQ-2001",
+      "status": "pending"
+    },
+    {
+      "name": "The tracer sits off every chokepoint and changes no mutation posture",
+      "req": "REQ-2002",
+      "status": "present",
+      "test": "spec/020 acceptance registerTraceInvarianceSteps (drives the REAL interceptor.Do twice per case \u2014 policy decider + mode chokepoint wired \u2014 over a counting fake actuator, once with a db.MemGateVerdictSink and once with none, for a policy-auto passing decision and a policy-deny refused decision; asserts byte-identical Outcomes and identical actuator exec counts traced vs untraced, and that a refusal reaches the actuator zero times either way)"
+    },
+    {
+      "name": "The confidence scalar persists and reads back non-zero",
+      "req": "REQ-2003",
+      "status": "pending"
+    },
+    {
+      "name": "A policy_decision row carries the in-force bundle_version and the matched-rules list",
+      "req": "REQ-2004",
+      "status": "present",
+      "test": "spec/020 acceptance registerPolicyDecisionFieldsSteps (drives real policy.AuditedEngine.Decide over a real Engine loaded with a matching operator rule into db.MemPolicyDecisionStore; asserts the audited decision carries a non-empty bundle_version equal to the engine's in-force version and the matched-rules provenance list with the matched rule present) + core/db TestPolicyStoresRoundTrip (DSN-gated: pgx INSERT/SELECT persists bundle_version + the matched_rules list, guarding the field-drop)"
+    },
+    {
+      "name": "The policy Decide audit carries the action_id external_ref and principal keys",
+      "req": "REQ-2005",
+      "status": "present",
+      "test": "spec/020 acceptance registerDecideKeysSteps (drives real policy.AuditedEngine.Decide over a real Engine into db.MemPolicyDecisionStore; asserts the audited decision carries action_id/external_ref/principal non-empty) + core/db TestPolicyStoresRoundTrip (DSN-gated: pgx INSERT persists the real action_id + the new external_ref column + principal, guarding the field-drop)"
+    },
+    {
+      "name": "The action_manifest backfills the approval choice and the post-execution verdict",
+      "req": "REQ-2006",
+      "status": "present",
+      "test": "spec/020 acceptance registerManifestBackfillSteps (drives real db.MemManifestStore Seal \u2192 BackfillLifecycle(approval) \u2192 BackfillLifecycle(verdict) \u2192 Lifecycle read; asserts approval_choice=approved AND verdict=match non-empty, COALESCE preserves both) + core/db TestManifestLifecycleRoundTrip (DSN-gated: pgx Seal\u2192UPDATE\u2192SELECT round-trip + post-backfill Get re-Assert proves INV-07 untampered)"
+    },
+    {
+      "name": "All gates of a passing action leave ordered verdict rows",
+      "req": "REQ-2007",
+      "status": "present",
+      "test": "spec/020 acceptance registerGateVerdictSteps (drives real interceptor.Do with db.MemGateVerdictSink; passing action \u21d2 one ordered row per gate keyed by action_id+external_ref, refusing action \u21d2 refusing gate row + no phantom rows past it) + core/db TestGateVerdictRoundTrip (DSN-gated pgx ordered INSERT\u2192SELECT)"
+    },
+    {
+      "name": "A refusing action leaves the refusing gate row and no phantom pass rows past it",
+      "req": "REQ-2007",
+      "status": "present",
+      "test": "spec/020 acceptance registerGateVerdictSteps (drives real interceptor.Do with db.MemGateVerdictSink; passing action \u21d2 one ordered row per gate keyed by action_id+external_ref, refusing action \u21d2 refusing gate row + no phantom rows past it) + core/db TestGateVerdictRoundTrip (DSN-gated pgx ordered INSERT\u2192SELECT)"
+    },
+    {
+      "name": "Each ReAct cycle leaves a scrubbed agent-step record with no secret value",
+      "req": "REQ-2008",
+      "status": "present",
+      "test": "spec/020 acceptance registerAgentStepSteps (drives the real screen.Scrub redaction path per field into db.MemAgentStepStore; asserts one row/cycle keyed by external_ref, no raw secret survives, [REDACTED:] marker present) + core/db TestAgentStepRoundTrip (DSN-gated pgx emit->ordered read + fields)"
+    },
+    {
+      "name": "The session record carries the seed hash prompt version and model tier",
+      "req": "REQ-2009",
+      "status": "present",
+      "test": "spec/020 acceptance registerSessionIdentitySteps (drives db.MemTriageStore.RecordTriage \u2192 SessionIdentity write\u2192read seam; asserts prompt_version/seed_hash/model_tier round-trip non-empty) + core/db TestSessionIdentityRoundTrip (DSN-gated pgx INSERT\u2192SELECT proves the SQL persists all three columns, guarding the field-drop)"
+    },
+    {
+      "name": "The tracer covers queued live-running and executed sessions",
+      "req": "REQ-2010",
+      "status": "present",
+      "test": "spec/020 acceptance registerStreamSteps (drives the REAL auth router \u2014 an unauthenticated GET /v1/sessions/{ref}/stream is refused \u2014 and asserts the streamed nodes ARE the real assembled boundary steps for a running session, the executed session is served by the detail projection, and queued/running stream an honest partial prefix with no fabricated verify) + core/httpapi TestSessionStream* (SSE framing, done-on-terminal, 404/503 fail-closed)"
+    },
+    {
+      "name": "The detail endpoint returns the ordered steps of one session over an authenticated read",
+      "req": "REQ-2011",
+      "status": "present",
+      "test": "spec/020 acceptance registerDetailSteps (real auth.Router refuses unauthenticated GET /v1/sessions/{external_ref}; httpapi.ProjectSessionDetail returns nodes in classify\u2192propose\u2192predict\u2192verify order) + core/httpapi TestSessionDetailReturnsOrderedSteps/TestSessionDetailRequiresAuth"
+    },
+    {
+      "name": "The console workflows view renders real trace steps in place of the fixtures",
+      "req": "REQ-2012",
+      "status": "pending"
+    },
+    {
+      "name": "A queued or running session animates from real boundary events over the step channel",
+      "req": "REQ-2013",
+      "status": "present",
+      "test": "spec/020 acceptance registerStreamSteps (drives the REAL auth router \u2014 an unauthenticated GET /v1/sessions/{ref}/stream is refused \u2014 and asserts the streamed nodes ARE the real assembled boundary steps for a running session, the executed session is served by the detail projection, and queued/running stream an honest partial prefix with no fabricated verify) + core/httpapi TestSessionStream* (SSE framing, done-on-terminal, 404/503 fail-closed)"
+    },
+    {
+      "name": "The trace surface is gated behind a distinct trace-read role",
+      "req": "REQ-2014",
+      "status": "present",
+      "test": "spec/020 acceptance registerTraceReadRoleSteps (drives the REAL httpapi trace route under AuthTraceRead: a plain read-only operator session is refused 403 at the trace surface but admitted at the AuthReadOnly console index \u2014 distinct/elevated) + core/auth TestTraceReadRole (real Router: same session read-only=200/trace=403, admin-eligible session trace=200, unauth=401)"
+    },
+    {
+      "name": "The detail endpoint projects references and schemes only and never a secret value",
+      "req": "REQ-2015",
+      "status": "present",
+      "test": "spec/020 acceptance registerCredentialProjectionSteps (assembles a walk with a credential-resolve boundary; asserts the step's credential fields are scheme-shaped only \u2014 no value-shaped secret \u2014 and the REAL httpapi.ProjectSessionDetail projection carries no value-shaped secret on any node field)"
+    },
+    {
+      "name": "The runtime role holds no update or delete on the agent-step and gate-verdict evidence tables",
+      "req": "REQ-2016",
+      "status": "present",
+      "test": "spec/020 acceptance registerEvidenceImmutabilitySteps (asserts BOTH 0030 interceptor_gate_verdict + 0031 agent_step migrations REVOKE UPDATE,DELETE FROM tg_runtime \u2014 the grant source) + core/db TestAgentStepRoundTrip (DSN-gated: has_table_privilege proves tg_runtime UPDATE=DELETE=false on both evidence tables)"
+    },
+    {
+      "name": "The trace schema separates the estate-specific layer from the generalizable layer",
+      "req": "REQ-2017",
+      "status": "pending"
+    },
+    {
+      "name": "A past decision joins the exact immutable ruleset version in force when it decided",
+      "req": "REQ-2018",
+      "status": "present",
+      "test": "spec/020 acceptance registerRulesetVersionSteps (drives db.MemRulesetVersionStore: archives ruleset A + a later B by real policy.BundleVersion, resolves the decision's bundle_version and asserts it returns doc A not the current B) + core/db TestRulesetVersionRoundTrip (DSN-gated: pgx INSERT ON CONFLICT DO NOTHING -> SELECT proves per-version docs + first-wins immutability)"
+    },
+    {
+      "name": "The ingest to verify walk joins end to end with no bridge hop",
+      "req": "REQ-2019",
+      "status": "present",
+      "test": "spec/020 acceptance registerSpineJoinSteps (drives real trace.Assemble for a sealed-action session -> four-step executed walk and a no-action session -> two-step stopped walk with no fabricated predict/verify tail, each bound to its own external_ref) + core/db TestTraceSpineRoundTrip (DSN-gated: the pgx SpineReader's external_ref join reaches the classification/triage/prediction rows end-to-end, guarding the bridge-hop the in-memory fake hides)"
+    },
+    {
+      "name": "The optional export lane carries the redacted LLM subset only and is off by default",
+      "req": "REQ-2020",
+      "status": "pending"
+    },
+    {
+      "name": "The calibrator bins stated confidence against verified outcomes into a reliability curve",
+      "req": "REQ-2021",
+      "status": "present",
+      "test": "spec/020 acceptance registerCalibratorSteps (drives temporal/calibrate.Job over an overconfident cohort; asserts the reliability curve bins 0.9\u219250%-clean, ECE=0.4, observe-only) + core/calibrate reliability tests + core/db DSN TestCalibrationPairedSamplesRoundTrip"
+    }
+  ]
+}

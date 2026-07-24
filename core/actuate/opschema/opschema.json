@@ -1,0 +1,49 @@
+{
+  "op_classes": [
+    {
+      "op_class": "restart-service",
+      "op": "restart",
+      "params": [
+        { "name": "unit", "type": "string", "required": true, "example": "nginx", "description": "the systemd unit to restart" }
+      ]
+    },
+    {
+      "op_class": "restart-container",
+      "op": "restart",
+      "params": [
+        { "name": "container", "type": "string", "required": true, "example": "librespeed", "description": "the docker container to restart" }
+      ]
+    },
+    {
+      "op_class": "reload-service",
+      "op": "reload",
+      "params": [
+        { "name": "unit", "type": "string", "required": true, "example": "nginx", "description": "the systemd unit to reload (re-read config, non-disruptive)" }
+      ]
+    },
+    {
+      "op_class": "start-service",
+      "op": "start",
+      "params": [
+        { "name": "unit", "type": "string", "required": true, "example": "nginx", "description": "the systemd unit to START (bring a down service back up)" }
+      ]
+    },
+    {
+      "op_class": "disk-grow",
+      "op": "grow",
+      "effect_kind": "awx-launch",
+      "params": [
+        { "name": "filesystem", "type": "string", "required": true, "example": "/var", "description": "the mount point / logical volume to GROW (never shrink, never delete) — the disk-full remediation" },
+        { "name": "grow_by", "type": "string", "required": true, "example": "10G", "description": "how much to grow by (an increment the AWX play's guards bound), e.g. 10G" }
+      ]
+    },
+    {
+      "op_class": "start-guest",
+      "op": "start",
+      "effect_kind": "proxmox-lifecycle",
+      "params": [
+        { "name": "guest", "type": "string", "required": true, "example": "librespeed01", "description": "the Proxmox VE guest (VM/LXC) to START — bring a DOWN guest that should be up back up (reversible; stop is its inverse)" }
+      ]
+    }
+  ]
+}

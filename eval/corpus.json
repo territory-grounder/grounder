@@ -1,0 +1,182 @@
+[
+ {
+  "external_ref": "eval-01",
+  "source_id": "eval-harness",
+  "alert_rule": "Devices up/down",
+  "host": "dc1bookwyrm01",
+  "severity": "critical",
+  "site": "dc1",
+  "summary": "dc1bookwyrm01 not responding (real down device)"
+ },
+ {
+  "external_ref": "eval-02",
+  "source_id": "eval-harness",
+  "alert_rule": "Devices up/down",
+  "host": "dc1calibre01",
+  "severity": "critical",
+  "site": "dc1",
+  "summary": "dc1calibre01 not responding (real down device)"
+ },
+ {
+  "external_ref": "eval-03",
+  "source_id": "eval-harness",
+  "alert_rule": "Device Down (SNMP unreachable)",
+  "host": "dc1actualbudget01",
+  "severity": "critical",
+  "site": "dc1",
+  "summary": "SNMP unreachable"
+ },
+ {
+  "external_ref": "eval-04",
+  "source_id": "eval-harness",
+  "alert_rule": "Port status up/down",
+  "host": "dc1ap01",
+  "severity": "critical",
+  "site": "dc1",
+  "summary": "uplink port down"
+ },
+ {
+  "external_ref": "eval-05",
+  "source_id": "eval-harness",
+  "alert_rule": "Service up/down",
+  "host": "dc1atlantis01",
+  "severity": "critical",
+  "site": "dc1",
+  "summary": "a monitored service is down"
+ },
+ {
+  "external_ref": "eval-06",
+  "source_id": "eval-harness",
+  "alert_rule": "01 Ping Latency",
+  "host": "dc1ap02",
+  "severity": "critical",
+  "site": "dc1",
+  "summary": "ping latency over threshold"
+ },
+ {
+  "external_ref": "eval-07",
+  "source_id": "eval-harness",
+  "alert_rule": "Device rebooted",
+  "host": "dc1bookwyrm01",
+  "severity": "critical",
+  "site": "dc1",
+  "summary": "device rebooted unexpectedly"
+ },
+ {
+  "external_ref": "eval-08",
+  "source_id": "eval-harness",
+  "alert_rule": "Processor usage over 85%",
+  "host": "dc1bookwyrm01",
+  "severity": "warning",
+  "site": "dc1",
+  "summary": "sustained CPU >85%"
+ },
+ {
+  "external_ref": "eval-09",
+  "source_id": "eval-harness",
+  "alert_rule": "Linux High Memory Usage, >= 90% in use",
+  "host": "dc1calibre01",
+  "severity": "warning",
+  "site": "dc1",
+  "summary": "memory >=90%"
+ },
+ {
+  "external_ref": "eval-10",
+  "source_id": "eval-harness",
+  "alert_rule": "Space on / is >= 90% and < 95% in use",
+  "host": "dc1cl01file01",
+  "severity": "warning",
+  "site": "dc1",
+  "summary": "root filesystem >=90%"
+ },
+ {
+  "external_ref": "eval-11",
+  "source_id": "eval-harness",
+  "alert_rule": "Sensor over limit - Check Device Health Settings",
+  "host": "dc1cl01file02",
+  "severity": "critical",
+  "site": "dc1",
+  "summary": "temperature sensor over limit"
+ },
+ {
+  "external_ref": "eval-12",
+  "source_id": "eval-harness",
+  "alert_rule": "Devices up/down",
+  "host": "dc1redis03",
+  "severity": "critical",
+  "site": "dc1",
+  "summary": "dc1redis03 down \u2014 dependency parent (cascade candidate)"
+ },
+ {
+  "external_ref": "eval-13",
+  "source_id": "eval-harness",
+  "alert_rule": "Devices up/down",
+  "host": "dc1ghost99",
+  "severity": "critical",
+  "site": "dc1",
+  "summary": "alert for a host not in inventory (unknown-host edge case)"
+ },
+ {
+  "external_ref": "eval-14",
+  "source_id": "eval-harness",
+  "alert_rule": "Port utilisation over threshold",
+  "host": "dc1ap01",
+  "severity": "critical",
+  "site": "dc1",
+  "summary": "port utilisation over threshold (ambiguous \u2014 could be normal peak)"
+ },
+ {
+  "external_ref": "eval-15",
+  "source_id": "eval-harness",
+  "alert_rule": "Processor usage over 85%",
+  "host": "dc1cl01filearb01",
+  "severity": "warning",
+  "site": "dc1",
+  "summary": "resource threshold"
+ },
+ {
+  "external_ref": "eval-16",
+  "source_id": "eval-harness",
+  "alert_rule": "Linux High Memory Usage, >= 90% in use",
+  "host": "dc1cl01garbd01",
+  "severity": "warning",
+  "site": "dc1",
+  "summary": "resource threshold"
+ },
+ {
+  "external_ref": "eval-17",
+  "source_id": "eval-harness",
+  "alert_rule": "Space on / is >= 90% and < 95% in use",
+  "host": "dc1cl01iot01",
+  "severity": "warning",
+  "site": "dc1",
+  "summary": "resource threshold"
+ },
+ {
+  "external_ref": "eval-18",
+  "source_id": "eval-harness",
+  "alert_rule": "Processor usage over 85%",
+  "host": "dc1cl01iot02",
+  "severity": "warning",
+  "site": "dc1",
+  "summary": "resource threshold"
+ },
+ {
+  "external_ref": "eval-19",
+  "source_id": "eval-harness",
+  "alert_rule": "Linux High Memory Usage, >= 90% in use",
+  "host": "dc1cl01iotarb01",
+  "severity": "warning",
+  "site": "dc1",
+  "summary": "resource threshold"
+ },
+ {
+  "external_ref": "eval-20",
+  "source_id": "eval-harness",
+  "alert_rule": "Space on / is >= 90% and < 95% in use",
+  "host": "dc1cl01mariadb01",
+  "severity": "warning",
+  "site": "dc1",
+  "summary": "resource threshold"
+ }
+]

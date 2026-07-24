@@ -1,0 +1,114 @@
+{
+  "spec": "001-risk-classification",
+  "tasks": [
+    {
+      "id": "T-001-1",
+      "title": "Mechanical fail-closed primitives: Band zero-value, never-auto floor, remediation lane",
+      "files_owned": [
+        "core/safety/safety.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-004",
+        "REQ-006"
+      ],
+      "acceptance": {
+        "feature": "risk-classification.feature",
+        "scenarios": [
+          "The zero-value band is POLL_PAUSE",
+          "An unmatched band value stringifies as POLL_PAUSE",
+          "Irreversible operation classes are on the never-auto floor",
+          "A reversible operation class is not on the never-auto floor",
+          "The remediation lane fails closed by default"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 150,
+        "max_wall_clock_minutes": 30
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-001-2",
+      "title": "core/risk.Classifier typed admission gate: emit AUTO / AUTO_NOTICE / POLL_PAUSE; write session_risk_audit",
+      "files_owned": [
+        "core/risk/classifier.go",
+        "core/risk/input.go",
+        "core/risk/audit.go"
+      ],
+      "deps": [
+        "T-001-1"
+      ],
+      "req_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003",
+        "REQ-007"
+      ],
+      "acceptance": {
+        "feature": "risk-classification.feature",
+        "scenarios": [
+          "A low-risk reversible action is classified AUTO",
+          "A reversible-mixed action on a critical host is classified AUTO_NOTICE",
+          "A high-risk irreversible action is classified POLL_PAUSE",
+          "An incident with no learned prior is classified POLL_PAUSE"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-001-3",
+      "title": "Evidence-bound AUTO-RESOLVE stripping under silent_cognition_guard",
+      "files_owned": [
+        "core/risk/evidence.go"
+      ],
+      "deps": [
+        "T-001-2"
+      ],
+      "req_ids": [
+        "REQ-008"
+      ],
+      "acceptance": {
+        "feature": "risk-classification.feature",
+        "scenarios": [
+          "An AUTO-RESOLVE lacking bound evidence is downgraded to a poll"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 200,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-001-4",
+      "title": "Deterministic secret/PII redaction in the input screen (core/screen.Scrub) before model/log/ledger",
+      "files_owned": [
+        "core/screen/screen.go",
+        "core/screen/screen_test.go"
+      ],
+      "deps": [
+        "T-001-1"
+      ],
+      "req_ids": [
+        "REQ-010"
+      ],
+      "acceptance": {
+        "feature": "risk-classification.feature",
+        "scenarios": [
+          "A leaked credential in the untrusted seed is redacted before it reaches the model or the ledger",
+          "A benign alert body is not mangled by the secret redaction pass"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 320,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    }
+  ]
+}

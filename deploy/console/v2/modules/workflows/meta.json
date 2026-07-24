@@ -1,0 +1,15 @@
+{
+ "nav": {
+  "group": "OPERATE",
+  "label": "Workflows",
+  "view_key": "workflows",
+  "badge": "wf_live",
+  "icon_svg_inner": "<circle cx=\"4.5\" cy=\"3.5\" r=\"1.7\"/><circle cx=\"4.5\" cy=\"12.5\" r=\"1.7\"/><path d=\"M4.5 5.2v5.6M8.5 3.5H14M8.5 8H12M8.5 12.5H14M4.5 8h1.5\"/>"
+ },
+ "view_meta": [
+  "Workflows",
+  "AI sessions as live, replayable typed runs \u2014 every step, tool call, gate and verdict"
+ ],
+ "purpose": "Replaces the thin Sessions list with a two-pane WORKFLOWS run view: a compact band-striped run list on the left, and a Temporal-style vertical typed timeline of the selected AI run on the right \u2014 ingested \u2192 correlate \u2192 rag-context \u2192 classify(band) \u2192 prediction.commit \u2192 agent-loop (nested tool calls) \u2192 screen \u2192 prediction-gate \u2192 execute \u2192 verify(verdict) \u2014 with live advancing, breathing active node, sticky instrument header, and every actuation control gated behind MUTATION OFF.",
+ "notes": "Design decisions, faithful to the TG color language:\n- Epistemic hue discipline: every payload block carries a left border encoding its source \u2014 indigo (--map) for AI claims (classify reasoning, committed plans, screen/gate rationale), steel (--territory) for observed telemetry (ingest, correlate, rag facts, tool-call results). The verify node renders an explicit MAP vs TERRITORY comparison grid, and the verdict (match/partial/deviation) colors both its chip and its timeline dot.\n- Status is never color-alone: dots vary in SHAPE (filled circle=done, dashed circle=pending, thick ring=paused-for-human, rotated diamond=FLOORED hazard, square=deviation/failed) and every chip pairs a glyph with an uppercase label.\n- Bands: left stripe on each run row + chip in the sticky header use --auto/--notice/--pause; the never-auto floor renders in --hazard on --hazard-bar (gate node, MUTATION OFF chip, blocked execute).\n- Liveness (all guarded): the .wf-anim class is only added when !reduceMotion; the active node's dot breathes, the spine segment into it flows (animated dashed gradient), the active tool call shows a blinking cursor, the elapsed clock ticks every 1s (both list row and sticky header via data-wf-clock), and every 6s the live run genuinely ADVANCES \u2014 the active tool call completes with a duration and the next one from WF_TOOL_POOL is appended (capped at 9 calls). The interval self-clears when the root leaves the DOM, so no route() teardown is required.\n- Density: per-node duration bars are sqrt-scaled against the run max for at-a-glance hot-spot reading; dot-leader rules connect labels to the ts/duration column; all evidentiary content (hashes, hosts, queries, results, durations, verdicts) is --mono with tabular-nums.\n- Honest preview: list header carries a \"FIXTURE DATA\" tag; mutation is OFF so completed execute nodes are labeled \"execute (dry-run)\" with rendered-not-applied payloads, and the POLL_PAUSE run's \"approve & execute\" button is present but disabled with a "
+}

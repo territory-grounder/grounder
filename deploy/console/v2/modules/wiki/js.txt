@@ -1,0 +1,258 @@
+/* ===================== wiki module (wk-) =====================
+   Three facets: Lessons (the distilled confirmed-clean corpus — the SAME file the retriever
+   reloads), Runbooks (pages embedded in the grounder binary), Skills (the production library by
+   reference — one click through to #skills). Honesty contract: fixture data wears the FIXTURE chip;
+   live data comes from /v1/wiki, and every unavailable or empty state says exactly why. */
+const wkUI = { sel: null, doc: null };  // sel = open lesson page {slug}; doc = selected runbook slug
+let wkQuery = "";
+const wkLive = { idx: null, err: null, loading: false, pages: {} };
+
+function wkRerender(){ if ((location.hash || "").replace("#", "") === "wiki") route("wiki"); }
+/* in-place refresh that preserves the search box focus (the knowledge module's pattern) */
+function wkRefresh(){
+  const host = document.querySelector(".main .view");
+  if (!host) return;
+  host.innerHTML = ""; host.append(views.wiki());
+  const s = host.querySelector(".wk-search");
+  if (s) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
+}
+function wkData(){
+  if (liveState.on) return { live: true, idx: wkLive.idx, err: wkLive.err };
+  return { live: false, idx: WIKI_FIX.index, err: null };
+}
+function wkBadge(){
+  const d = wkData();
+  const n = d.idx ? ((d.idx.lessons || []).length + (d.idx.runbooks || []).length) : null;
+  $$('[data-badge="wiki"]').forEach(el => { el.textContent = n == null ? "—" : String(n); });
+}
+async function wkLoadIndex(){
+  if (wkLive.loading) return;
+  wkLive.loading = true;
+  try { wkLive.idx = await liveGet("/v1/wiki"); wkLive.err = null; }
+  catch (e) { wkLive.idx = null; wkLive.err = e.status === 503 ? "unwired" : (e.status || "net"); }
+  wkLive.loading = false;
+  wkBadge(); wkRerender();
+}
+async function wkLoadPage(slug){
+  wkLive.pages[slug] = null;                 /* null = in flight, undefined = not fetched */
+  try { wkLive.pages[slug] = await liveGet("/v1/wiki/" + encodeURIComponent(slug)); }
+  catch (e) { wkLive.pages[slug] = { err: e.status || 0 }; }
+  wkRerender();
+}
+/* fixture lesson page composed the same way the server composes it — framing only, fields verbatim */
+function wkFixLessonPage(l){
+  let b = "";
+  if (l.summary) b += "## What happened\n\n" + l.summary + "\n\n";
+  if (l.resolution) b += "## What resolved it\n\n" + l.resolution + "\n\n";
+  b += "*Distilled from a confirmed-clean resolution (mechanical verdict `match` + confirmed clear).*\n";
+  const meta = {};
+  if (l.host) meta.host = l.host;
+  if (l.alert_rule) meta.alert_rule = l.alert_rule;
+  if (l.site) meta.site = l.site;
+  if (l.tags && l.tags.length) meta.tags = l.tags.join(", ");
+  return { slug: l.slug, title: l.alert_rule ? l.alert_rule + (l.host ? " on " + l.host : "") : l.slug,
+    kind: "lesson", body: b, meta };
+}
+function wkPageData(slug, kind){
+  if (liveState.on) return wkLive.pages[slug];
+  if (kind === "runbook") return WIKI_FIX.pages[slug] || null;
+  const l = (WIKI_FIX.index.lessons || []).find(x => x.slug === slug);
+  return l ? wkFixLessonPage(l) : null;
+}
+
+/* ---- the tiny markdown-ish renderer (headers/bold/code/fences/lists/quotes) — DOM-built,
+   textContent only, no innerHTML over served content ---- */
+function wkInline(s){
+  const frag = document.createDocumentFragment();
+  const re = /(\*\*[^*]+\*\*|`[^`]+`)/g;
+  let last = 0, m;
+  while ((m = re.exec(s))) {
+    if (m.index > last) frag.append(document.createTextNode(s.slice(last, m.index)));
+    const tok = m[0];
+    if (tok[0] === "*") frag.append(h("b", {}, tok.slice(2, -2)));
+    else frag.append(h("code", {}, tok.slice(1, -1)));
+    last = m.index + tok.length;
+  }
+  if (last < s.length) frag.append(document.createTextNode(s.slice(last)));
+  return frag;
+}
+function wkMd(text){
+  const root = h("div", { class: "wk-md" });
+  const lines = String(text || "").split("\n");
+  let i = 0, para = [], list = null;
+  const flushP = () => { if (para.length) { root.append(h("p", {}, wkInline(para.join(" ")))); para = []; } };
+  const flushL = () => { if (list) { root.append(list); list = null; } };
+  while (i < lines.length) {
+    const ln = lines[i];
+    if (/^```/.test(ln)) {
+      flushP(); flushL();
+      const buf = []; i++;
+      while (i < lines.length && !/^```/.test(lines[i])) { buf.push(lines[i]); i++; }
+      i++; root.append(h("pre", {}, h("code", {}, buf.join("\n")))); continue;
+    }
+    if (/^###\s/.test(ln)) { flushP(); flushL(); root.append(h("h4", {}, wkInline(ln.slice(4)))); }
+    else if (/^##\s/.test(ln)) { flushP(); flushL(); root.append(h("h3", {}, wkInline(ln.slice(3)))); }
+    else if (/^#\s/.test(ln)) { flushP(); flushL(); root.append(h("h2", {}, wkInline(ln.slice(2)))); }
+    else if (/^>\s?/.test(ln)) { flushP(); flushL(); root.append(h("blockquote", {}, wkInline(ln.replace(/^>\s?/, "")))); }
+    else if (/^-\s/.test(ln)) { flushP(); if (!list) list = h("ul", {}); list.append(h("li", {}, wkInline(ln.slice(2)))); }
+    else if (!ln.trim()) { flushP(); flushL(); }
+    else para.push(ln.trim());
+    i++;
+  }
+  flushP(); flushL();
+  return root;
+}
+
+/* ---- page pane (loading / error / rendered markdown + meta chips) ---- */
+function wkPagePane(slug, kind){
+  const pane = h("div", { class: "wk-page" });
+  const page = wkPageData(slug, kind);
+  if (page === undefined || page === null) {
+    if (page === undefined && liveState.on) wkLoadPage(slug);
+    pane.append(skEmpty("fetching /v1/wiki/" + slug + "…", ""));
+    return pane;
+  }
+  if (page.err) {
+    pane.append(skEmpty(
+      page.err === 404 ? "unknown page" : page.err === 503 ? "wiki unavailable" : "cannot load this page",
+      "/v1/wiki/" + slug + " answered " + page.err));
+    return pane;
+  }
+  if (page.meta && Object.keys(page.meta).length) {
+    const mrow = h("div", { style: "display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px" });
+    Object.entries(page.meta).forEach(([k, v]) => mrow.append(h("span", { class: "wk-kv" }, k + ": ", h("b", {}, String(v)))));
+    pane.append(mrow);
+  }
+  pane.append(wkMd(page.body || ""));
+  return pane;
+}
+
+/* ---- Lessons facet ---- */
+function wkSearchBox(placeholder){
+  return h("input", { class: "wk-search", type: "search", placeholder, value: wkQuery,
+    "aria-label": "filter wiki pages", oninput: e => { wkQuery = e.target.value; wkRefresh(); } });
+}
+function wkLessons(d){
+  if (wkUI.sel) {  /* an open lesson page */
+    const wrap = h("div", { style: "display:flex;flex-direction:column;gap:12px" });
+    wrap.append(h("div", { style: "display:flex;gap:9px;align-items:center;flex-wrap:wrap" },
+      h("button", { class: "sk-btn", onclick: () => { wkUI.sel = null; wkRerender(); } }, "← lessons"),
+      h("span", { class: "wk-ref" }, wkUI.sel), h("span", { class: "wk-kv" }, "lesson")));
+    wrap.append(wkPagePane(wkUI.sel, "lesson"));
+    return wrap;
+  }
+  const idx = d.idx;
+  const wrap = h("div", { style: "display:flex;flex-direction:column;gap:8px" });
+  const all = idx.lessons || [];
+  wrap.append(h("div", { class: "tiles", style: "margin-bottom:4px" },
+    h("div", { class: "tile stripe ok" }, h("div", { class: "lbl" }, "Lessons"), h("div", { class: "big ok" }, String(idx.lesson_total || 0)),
+      h("div", { class: "sub" }, "confirmed-clean resolutions — the corpus the retriever reloads")),
+    h("div", { class: "tile" }, h("div", { class: "lbl" }, "Runbooks"), h("div", { class: "big" }, String((idx.runbooks || []).length)),
+      h("div", { class: "sub" }, "operator pages embedded in the binary")),
+    h("div", { class: "tile stripe map" }, h("div", { class: "lbl" }, "Skills"), h("div", { class: "big", style: "color:var(--map)" },
+      idx.skills_available ? String((idx.skills || []).length) : "—"),
+      h("div", { class: "sub" }, idx.skills_available ? "production library, by reference" : "skill store not wired"))));
+  wrap.append(wkSearchBox("filter lessons — host, rule, tag…"));
+  const q = wkQuery.trim().toLowerCase();
+  const hits = all.filter(l => !q ||
+    (l.slug + " " + (l.host || "") + " " + (l.alert_rule || "") + " " + (l.summary || "") + " " +
+     (l.resolution || "") + " " + (l.tags || []).join(" ")).toLowerCase().includes(q));
+  hits.forEach(l => {
+    wrap.append(h("div", { class: "wk-card", tabindex: "0", role: "button",
+      onclick: () => { wkUI.sel = l.slug; if (liveState.on && wkLive.pages[l.slug] === undefined) wkLoadPage(l.slug); wkRerender(); },
+      onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.currentTarget.click(); } } },
+      h("div", { class: "wk-card-top" },
+        h("span", { class: "wk-ref" }, l.external_ref),
+        l.alert_rule ? h("span", { class: "wk-kv" }, "rule ", h("b", {}, l.alert_rule)) : null,
+        l.host ? h("span", { class: "wk-kv" }, "host ", h("b", {}, l.host)) : null,
+        l.site ? h("span", { class: "wk-kv" }, "site ", h("b", {}, l.site)) : null,
+        ...(l.tags || []).map(t => h("span", { class: "tag" }, t))),
+      l.resolution ? h("div", { class: "wk-res" }, h("b", {}, "resolved by: "), l.resolution)
+                   : h("div", { class: "wk-res", style: "color:var(--ink4)" }, "no resolution text recorded")));
+  });
+  if (!all.length) wrap.append(skEmpty("no lessons yet",
+    "a lesson is distilled ONLY from a confirmed-clean resolution (mechanical verdict match + a confirmed clear) — the corpus is honestly empty, nothing is invented"));
+  else if (!hits.length) wrap.append(skEmpty("no lessons match “" + wkQuery + "”", ""));
+  if ((idx.lesson_total || 0) > all.length) wrap.append(h("div", { class: "lbl", style: "padding:4px 2px;color:var(--ink4)" },
+    "showing " + all.length + " of " + idx.lesson_total + " lessons (bounded list — the total is the true corpus size)"));
+  return wrap;
+}
+
+/* ---- Runbooks facet: index rail + rendered page ---- */
+function wkRunbooks(d){
+  const idx = d.idx;
+  const docs = (idx.runbooks || []).slice();
+  const wrap = h("div", { style: "display:flex;flex-direction:column;gap:10px" });
+  wrap.append(wkSearchBox("filter runbooks…"));
+  const q = wkQuery.trim().toLowerCase();
+  const hits = docs.filter(r => !q || (r.slug + " " + (r.title || "")).toLowerCase().includes(q));
+  if (!docs.length) { wrap.append(skEmpty("no runbook pages", "the deployed binary embeds none — the docs/wiki set was empty at build time")); return wrap; }
+  if (!hits.length) { wrap.append(skEmpty("no runbooks match “" + wkQuery + "”", "")); return wrap; }
+  let sel = wkUI.doc && hits.find(r => r.slug === wkUI.doc) ? wkUI.doc : hits[0].slug;
+  const grid = h("div", { class: "wk-grid" });
+  const rail = h("div", { class: "wk-rail" });
+  hits.forEach(r => rail.append(h("a", { class: "wk-item" + (r.slug === sel ? " active" : ""), href: "#wiki",
+    onclick: e => { e.preventDefault(); wkUI.doc = r.slug; if (liveState.on && wkLive.pages[r.slug] === undefined) wkLoadPage(r.slug); wkRerender(); } },
+    h("span", { class: "wk-item-t" }, r.slug),
+    h("span", { class: "wk-item-s" }, r.title || ""))));
+  grid.append(rail, wkPagePane(sel, "runbook"));
+  wrap.append(grid);
+  return wrap;
+}
+
+/* ---- Skills facet: the library by reference — the Skills surface owns it ---- */
+function wkSkillsRefs(d){
+  const idx = d.idx;
+  const wrap = h("div", { style: "display:flex;flex-direction:column;gap:8px" });
+  if (!idx.skills_available) {
+    wrap.append(skEmpty("skill store not wired",
+      "/v1/skills answers 503 on this deployment — seed composition falls back to the compiled registry"));
+    return wrap;
+  }
+  wrap.append(h("div", { style: "display:flex;gap:10px;align-items:center;flex-wrap:wrap" },
+    h("p", { class: "desc", style: "font-size:11.5px;margin:0;flex:1;min-width:24ch" },
+      "The production skill library, by reference — the wiki lists it; the Skills surface owns the history, diffs, drafts, and trials."),
+    h("button", { class: "sk-btn primary", onclick: () => route("skills") }, "open the skill library →")));
+  (idx.skills || []).forEach(s => wrap.append(h("div", { class: "sk-row", tabindex: "0", role: "button",
+    onclick: () => route("skills"),
+    onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.currentTarget.click(); } } },
+    h("span", { class: "sk-name" }, s.name),
+    h("span", { class: "tag" }, s.kind || "—"),
+    s.pinned ? skPinBadge() : null,
+    s.active_trial ? h("span", { class: "sk-chip st-trial" }, "TRIAL LIVE") : null,
+    h("span", { style: "flex:1" }),
+    s.production_version
+      ? h("span", { class: "sk-chip st-prod" }, "prod v" + s.production_version)
+      : h("span", { class: "sk-chip st-retired" }, "no production"),
+    h("span", { class: "sk-meta", style: "color:var(--ink4)" }, "▸"))));
+  if (!(idx.skills || []).length) wrap.append(skEmpty("the library is empty",
+    "the boot importer seeds the store from the compiled registry on the worker's first start"));
+  return wrap;
+}
+
+/* ---- the view ---- */
+function wkView(){
+  const facet = (typeof facetState !== "undefined" && facetState.wiki) || "runbooks";
+  const d = wkData();
+  if (d.live && d.idx === null && d.err === null && !wkLive.loading) wkLoadIndex();
+  const root = h("div", { class: "wk-root" });
+  root.append(h("div", { class: "wk-toolbar" },
+    d.live
+      ? h("span", { class: "lbl", style: "color:var(--match)" }, "LIVE · /v1/wiki — the living knowledge base")
+      : h("span", { class: "lbl" }, "the living wiki — verified lessons · embedded runbooks · the skill library"),
+    d.live ? null : h("span", { class: "sk-fixture" }, "FIXTURE DATA — design preview")));
+  if (d.live && d.idx === null) {
+    if (wkLive.loading) { root.append(skEmpty("querying /v1/wiki…", "")); return root; }
+    root.append(skEmpty(
+      d.err === "unwired" ? "wiki unavailable" : "cannot reach /v1/wiki",
+      d.err === "unwired"
+        ? "the control plane answered 503 — the wiki reader is not wired on this deployment"
+        : "the wiki read surface answered " + d.err));
+    root.append(h("button", { class: "sk-btn", style: "align-self:center", onclick: () => { wkLive.err = null; wkLoadIndex(); } }, "Retry"));
+    return root;
+  }
+  if (facet === "runbooks") root.append(wkRunbooks(d));
+  else if (facet === "skills") root.append(wkSkillsRefs(d));
+  else root.append(wkLessons(d));
+  return root;
+}

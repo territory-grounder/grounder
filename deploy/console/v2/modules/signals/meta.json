@@ -1,0 +1,15 @@
+{
+ "nav": {
+  "group": "OBSERVE",
+  "label": "Signals",
+  "view_key": "signals",
+  "badge": "signals",
+  "icon_svg_inner": "<path d=\"M1.5 8.5h3.2l1.8-5 3 9.5 2-4.5h3\"/><circle cx=\"13\" cy=\"3.5\" r=\"1.2\"/>"
+ },
+ "view_meta": [
+  "Signals",
+  "Golden-signal telemetry \u2014 observed territory (steel) against the model's predicted map (indigo)"
+ ],
+ "purpose": "SIGNALS metrics dashboard \u2014 golden-signal small-multiples (payments-api, k8s nodes, storage) that render the map-vs-territory thesis in real charts: observed steel series against indigo predicted envelopes/forecast rays, out-of-envelope runs shaded in verdict tones, TG action event markers, an estate-health heat row, and a summarize-first tile strip. Charts are context; the queue is the job \u2014 this screen is deliberately secondary to Command.",
+ "notes": "Verified end-to-end in a Playwright DOM harness built from the real console-v2 tokens + h() helper + shared fixtures (harness + screenshots in scratchpad signals-mod/: shot-dark.png, shot-light.png, shot-1h.png, shot-24h.png; 9 panels, all 3 ranges, both themes, facet filtering, session-chip and heat-cell openSession clicks \u2014 zero console errors). IMPORTANT INTEGRATION NOTE: the \"FOUNDATION: CHART PRIMITIVES API\" section of my brief arrived empty, so the module ships its own metricPanel implementation (sigMetricPanel) meeting the required contract \u2014 event markers + predicted-vs-observed overlays appear on FOUR panels (p99 latency: historical indigo envelope + rollback/alert markers + red out-of-envelope shading; imagefs: DiskPressure threshold + eviction marker + two forecast rays into a FORECAST\u00b7MAP zone; volume1: prune marker showing the drop + future settle envelope; backup-latency: predicted transient envelope). Only svgEl is taken from the foundation, via a delegating sigSvgEl that falls back to a local namespace-aware implementation if svgEl is absent \u2014 if the foundation's metricPanel exists, sigMetricPanel does NOT collide with it (different name) and a later pass can swap call sites. Story is aligned to the shared SESSIONS fixtures (s-4d90 rollback\u2192DEVIATION db01 unpredicted, s-8f31 w3 imagefs 92% drain POLL_PAUSE, s-6c55 nas prune AUTO_NOTICE executing); clock anchor 14:31 matches ALERTS/LEDGER timestamps; session chips resolve via host/keyword lookup so they degrade gracefully if fixtures change. Time-range chips are fully functional (deterministic generators over absolute hours-ago, so 1h shows post-incident detail, 6h the full incident, 24h the diurnal context; restart bars scale counts by bucket width so totals stay honest across ranges). Range-chip active state and hovers use --accent (interaction only); all data encoding uses territory/map/verdict/band tokens with glyph+label pairing throughout (colorblind-safe). Motion: single live-sample dot pulse, "
+}

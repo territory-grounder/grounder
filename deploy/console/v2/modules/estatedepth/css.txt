@@ -1,0 +1,109 @@
+/* ============ estatedepth — estate depth ============ */
+.e2-view{display:flex;flex-direction:column;gap:10px;min-width:0}
+.e2-cols{display:grid;grid-template-columns:236px minmax(0,1fr);gap:10px;align-items:start}
+.e2-pane{background:var(--g1);border:1px solid var(--line);border-radius:var(--radius);min-width:0}
+.e2-ph{display:flex;align-items:baseline;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line);font:600 10px/1 var(--sans);letter-spacing:.09em;color:var(--ink3)}
+/* node list — the row height must track the INSPECTOR (right column), not the ~200-row list, or a large
+   orphaned gap opens above the master-clock. CSS can't make one grid item's height equal a sibling's, so
+   est2View installs a ResizeObserver that caps this list to the inspector's content height (the list then
+   scrolls within it). This max-height is only the pre-observe / no-ResizeObserver FALLBACK bound — kept
+   modest so the tall list never flashes at full intrinsic height. The narrow (single-column) breakpoint
+   keeps its own bound since there the panes stack and the list can't borrow the inspector's height. */
+.e2-list{overflow-y:auto;max-height:520px}
+.e2-lrow{display:flex;align-items:center;gap:7px;padding:5px 10px;border-bottom:1px solid var(--line);color:var(--ink2);text-decoration:none;font:11px/1.5 var(--mono)}
+.e2-lrow:hover{background:var(--g2)}
+.e2-lrow.sel{background:var(--g2);box-shadow:inset 2px 0 0 var(--accent);color:var(--ink)}
+.e2-lid{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.e2-lrole{font:9px/1 var(--sans);color:var(--ink4);letter-spacing:.04em;text-transform:uppercase}
+/* detail panel */
+.e2-detail{display:flex;flex-direction:column;min-width:0}
+.e2-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line2)}
+.e2-host{font:600 15px/1.2 var(--mono);color:var(--ink);letter-spacing:.01em}
+.e2-tags{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.e2-tag{font:9px/1 var(--sans);text-transform:uppercase;letter-spacing:.08em;color:var(--ink3);border:1px solid var(--line2);border-radius:var(--radius-s);padding:3px 6px;background:var(--g2)}
+.e2-sec{padding:8px 12px 10px;border-bottom:1px solid var(--line)}
+.e2-sec:last-of-type{border-bottom:0}
+.e2-h{display:flex;align-items:baseline;gap:8px;font:600 10px/1 var(--sans);letter-spacing:.09em;color:var(--ink3);margin-bottom:7px}
+.e2-hnote{font:9px/1 var(--mono);color:var(--ink4);letter-spacing:0}
+.e2-sp{flex:1}
+/* epistemic source tags */
+.e2-src{font:600 8.5px/1 var(--sans);letter-spacing:.1em;padding:2px 5px;border-radius:var(--radius-s)}
+.e2-src-t{color:var(--territory);border:1px solid var(--territory-dim)}
+.e2-src-m{color:var(--map);border:1px dashed var(--map-dim)}
+/* chips + glyphs (color + shape + label, never color alone) */
+.e2-chip{display:inline-flex;align-items:center;gap:4px;font:600 9px/1 var(--sans);letter-spacing:.08em}
+.e2-vchip{border:1px solid;border-radius:var(--radius-s);padding:3px 6px}
+.e2-g{font-family:var(--mono);font-size:9px}
+/* golden signals */
+.e2-sigrow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius-s);overflow:hidden}
+.e2-sig{background:var(--g1);padding:6px 8px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.e2-sigl{font:600 9px/1 var(--sans);letter-spacing:.1em;color:var(--ink3)}
+.e2-sig svg{display:block;width:100%;height:26px}
+.e2-sigv{font:600 13px/1 var(--mono);color:var(--ink);font-variant-numeric:tabular-nums}
+.e2-u{font:400 9px/1 var(--mono);color:var(--ink4);margin-left:3px}
+.e2-hot{color:var(--deviation)}
+/* alerts */
+.e2-arow{display:flex;align-items:center;gap:9px;padding:4px 0;border-bottom:1px dotted var(--line);font:11px/1.5 var(--mono);color:var(--ink2)}
+.e2-arow:last-child{border-bottom:0}
+.e2-arule{flex:1;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.e2-asrc{font-size:9px;color:var(--ink4);text-transform:uppercase;letter-spacing:.06em}
+.e2-num{font:11px/1 var(--mono);color:var(--ink3);font-variant-numeric:tabular-nums}
+/* dependencies + blast radius */
+.e2-deps{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.e2-dch{font:600 9px/1.6 var(--sans);letter-spacing:.07em;color:var(--ink4);margin-bottom:3px}
+.e2-drow,.e2-brow{display:flex;align-items:center;gap:8px;padding:3px 0;font:11px/1.5 var(--mono)}
+.e2-navh{color:var(--ink);text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+a.e2-navh:hover{color:var(--accent)}
+.e2-wbar{width:56px;height:4px;background:var(--g3s);border-radius:1px;overflow:hidden;flex:none}
+.e2-wfill{display:block;height:100%;background:var(--map-dim)}
+.e2-brow .e2-wfill{background:var(--map)}
+.e2-hop{font:600 8.5px/1 var(--mono);color:var(--map);border:1px dashed var(--map-dim);border-radius:var(--radius-s);padding:2px 4px;flex:none}
+/* sessions on node */
+.e2-srow{display:flex;align-items:center;gap:9px;padding:4px 0;font:11px/1.5 var(--mono);color:var(--ink2);text-decoration:none;border-bottom:1px dotted var(--line)}
+.e2-srow:last-child{border-bottom:0}
+.e2-srow:hover .e2-open{color:var(--accent)}
+.e2-sref{font:600 11px/1 var(--mono);color:var(--ink)}
+.e2-stitle{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:11px/1.4 var(--sans)}
+.e2-open{font:600 9px/1 var(--sans);letter-spacing:.07em;color:var(--ink4)}
+/* gated actuation (mutation OFF) */
+.e2-gate{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--hazard-bar);border-top:1px solid var(--line2)}
+.e2-gbtn{font:600 10px/1 var(--mono);color:var(--ink3);background:var(--g2);border:1px solid var(--line3);border-radius:var(--radius-s);padding:5px 9px;cursor:not-allowed;opacity:.6}
+.e2-gnote{font:600 9px/1.4 var(--sans);letter-spacing:.07em;color:var(--hazard)}
+/* misc */
+.e2-empty{font:10px/1.6 var(--mono);color:var(--ink4);padding:3px 0}
+.e2-fix{font:600 8px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink4);border:1px dotted var(--line3);border-radius:var(--radius-s);padding:2px 4px}
+/* ---- incident master-clock ---- */
+.e2-clockpane{overflow:hidden;max-width:868px}
+.e2-clock{padding:9px 12px 10px;min-width:0;max-width:844px} /* whole instrument (head/readout/legend) caps with the plot */
+.e2-chead{display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+.e2-ch{margin-bottom:0}
+.e2-cbody{position:relative}
+.e2-csvg{display:block;width:100%;height:auto;max-width:820px} /* cap near design size (viewBox 720) so the instrument's type stays in proportion with the page; the 680px drawer is unaffected */
+.e2-xread{position:absolute;top:2px;right:0;font:10px/1.2 var(--mono);color:var(--ink2);font-variant-numeric:tabular-nums;pointer-events:none;min-height:12px}
+.e2-grid{stroke:var(--line);stroke-width:1}
+.e2-base{stroke:var(--line2);stroke-width:1}
+.e2-lead{stroke:var(--line);stroke-width:1}
+.e2-cross{stroke:var(--ink4);stroke-width:1;stroke-dasharray:2 2}
+.e2-ax{font:8.5px var(--mono);fill:var(--ink4)}
+.e2-t0{fill:var(--hazard);font-weight:700}
+.e2-lt{font:600 8.5px var(--sans);letter-spacing:.1em;fill:var(--ink4)}
+.e2-haz{fill:var(--hazard)}
+.e2-elbl{font:8.5px var(--mono)}
+.e2-clegend{display:flex;flex-wrap:wrap;gap:14px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)}
+.e2-li{display:inline-flex;align-items:center;gap:5px;font:9px/1 var(--sans);letter-spacing:.05em;color:var(--ink3)}
+.e2-sw{width:16px;height:0;border-top:2px solid;flex:none}
+.e2-sw-t{border-color:var(--territory)}
+.e2-sw-m{border-top-style:dashed;border-color:var(--map)}
+.e2-sw-x{width:2px;height:10px;border:0;background:var(--hazard)}
+.e2-sw-d{border-color:var(--deviation)}
+.e2-livedot{width:6px;height:6px;border-radius:50%;background:var(--match);display:inline-block;flex:none}
+.e2-livedot.pulse{animation:e2pulse 1.6s ease-in-out infinite}
+@keyframes e2pulse{0%,100%{opacity:1}50%{opacity:.25}}
+@media (max-width:880px){.e2-cols{grid-template-columns:1fr}.e2-list{max-height:420px}.e2-sigrow{grid-template-columns:repeat(2,minmax(0,1fr))}.e2-deps{grid-template-columns:1fr}}
+/* The row height is driven by the INSPECTOR (right column); the node list (left) fills that height and
+   SCROLLS within it — so neither a short list (few nodes) nor a long one (the real ~200-host estate) leaves
+   an orphaned gap. The min-height:0 + overflow:hidden on the pane stops the tall list from forcing the row
+   to its full intrinsic height (the bug that opened a huge gap above the master-clock). */
+.e2-cols{align-items:stretch}
+.e2-cols>.e2-pane:first-child{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.e2-cols>.e2-pane:first-child .e2-list{flex:1;min-height:0;overflow-y:auto}

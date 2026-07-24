@@ -1,0 +1,165 @@
+{
+ "spec": "024-secret-plane",
+ "tasks": [
+  {
+   "id": "T-024-1",
+   "title": "Complete the OpenBao bao: migration of the ~20 plaintext business secrets (deploy-config only)",
+   "files_owned": [],
+   "deps": [],
+   "req_ids": [
+    "REQ-2403"
+   ],
+   "acceptance": {
+    "feature": "secret-plane.feature",
+    "scenarios": [
+     "A business secret migrates from env to a backend with an unchanged resolved value"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 1,
+    "max_wall_clock_minutes": 180
+   },
+   "notes": "No code. Flip each env:->bao: in deploy config one at a time, verify the resolved value is byte-identical (like netbox 2026-07-22). Live-secrets op \u2014 do carefully, per-secret verified.",
+   "status": "pending"
+  },
+  {
+   "id": "T-024-2",
+   "title": "Complete the process SecretRef enumeration for the policy (deps.go -> full declared set + test)",
+   "files_owned": [
+    "cmd/grounder/deps.go"
+   ],
+   "deps": [],
+   "req_ids": [
+    "REQ-2402"
+   ],
+   "acceptance": {
+    "feature": "secret-plane.feature",
+    "scenarios": [
+     "Every process secret reference is enumerated for the policy"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 200,
+    "max_wall_clock_minutes": 120
+   },
+   "notes": "Read-side; a ref the gate can't see is a hole. Test asserts the enumerated set == the declared SecretRef fields.",
+   "status": "pending"
+  },
+  {
+   "id": "T-024-3",
+   "title": "TG_SECRET_POLICY boot gate (off/warn/enforce) + permanent exemption set + tighten literal linter",
+   "files_owned": [
+    "core/preflight/secrets.go",
+    "core/config/config.go"
+   ],
+   "deps": [
+    "T-024-2"
+   ],
+   "req_ids": [
+    "REQ-2400",
+    "REQ-2401",
+    "REQ-2409"
+   ],
+   "acceptance": {
+    "feature": "secret-plane.feature",
+    "scenarios": [
+     "Enforce policy refuses to boot on a plaintext business secret",
+     "Off policy preserves pre-feature behavior",
+     "Warn policy logs each plaintext reference and continues",
+     "The permanent exemption set alone may remain plaintext under enforce",
+     "A hardcoded env default is a violation under enforce"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 350,
+    "max_wall_clock_minutes": 180
+   },
+   "notes": "The forcing function. Sibling to CheckSSHKeys. Ship default=off, then warn, then flip prod to enforce. Companion spec/016 amendment + lockstep restamp (touches core/config + core/preflight).",
+   "status": "pending"
+  },
+  {
+   "id": "T-024-4",
+   "title": "Secret-zero: wrapped-AppRole (Compose) + k8s-auth (pod) vault Auth variants; retire on-disk OpenBao token",
+   "files_owned": [
+    "modules/credsource/vault/vault.go",
+    "core/credential/delivery.go"
+   ],
+   "deps": [
+    "T-024-3"
+   ],
+   "req_ids": [
+    "REQ-2407"
+   ],
+   "acceptance": {
+    "feature": "secret-plane.feature",
+    "scenarios": [
+     "The OpenBao token bootstraps without a durable on-disk secret"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 450,
+    "max_wall_clock_minutes": 210
+   },
+   "notes": "Two Auth variants; relax DeliveryConfig.Validate to accept wrapped-AppRole (RoleID env:, wrap token file: tmpfs) or k8s-JWT. Companion spec/022 amendment + lockstep restamp.",
+   "status": "pending"
+  },
+  {
+   "id": "T-024-5",
+   "title": "modules/credsource/passbolt: passbolt: resolver (OpenPGP robot, native-Go)",
+   "files_owned": [
+    "modules/credsource/passbolt/passbolt.go",
+    "modules/credsource/passbolt/passbolt_test.go"
+   ],
+   "deps": [
+    "T-024-3"
+   ],
+   "req_ids": [
+    "REQ-2404",
+    "REQ-2406",
+    "REQ-2408"
+   ],
+   "acceptance": {
+    "feature": "secret-plane.feature",
+    "scenarios": [
+     "The Passbolt resolver retrieves a resource field via an OpenPGP robot identity",
+     "A new backend registers read-only at the scheme registry and fails closed"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 500,
+    "max_wall_clock_minutes": 210
+   },
+   "notes": "go-passbolt (pin+vendor), JWT preferred + GPGAuth fallback. SECOND-TIER; ref grammar passbolt:<resourceID>#<field>.",
+   "status": "pending"
+  },
+  {
+   "id": "T-024-6",
+   "title": "modules/credsource/vaultwarden: vw: resolver (native-Go Bitwarden crypto)",
+   "files_owned": [
+    "modules/credsource/vaultwarden/vaultwarden.go",
+    "modules/credsource/vaultwarden/vaultwarden_test.go"
+   ],
+   "deps": [
+    "T-024-3"
+   ],
+   "req_ids": [
+    "REQ-2404",
+    "REQ-2405",
+    "REQ-2408"
+   ],
+   "acceptance": {
+    "feature": "secret-plane.feature",
+    "scenarios": [
+     "The Vaultwarden resolver decrypts a vault item field in native Go",
+     "The homelab backends are labeled second-tier and are not the default"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 700,
+    "max_wall_clock_minutes": 300
+   },
+   "notes": "Password Manager API only (Secrets Manager is a NON-GOAL, unsupported by Vaultwarden). Native-Go Bitwarden E2E crypto (PBKDF2/Argon2id + AES-CBC-HMAC EtM). Highest crypto risk; SECOND-TIER; ref grammar vw:<collection>/<item>#<field>.",
+   "status": "pending"
+  }
+ ]
+}

@@ -1,0 +1,24 @@
+/* ---- estate2 fixtures (representative, deterministic — labeled "fixture" in the UI) ---- */
+/* golden-signal profiles: [base, amplitude, hot-tail?] per signal; hosts not listed get a
+   deterministic profile derived from their id + health (est2DefaultProfile). */
+const EST2_PROFILES={
+  "dc1k8s-w3":{cpu:[62,30,true],mem:[74,10],disk:[38,4],net:[46,26]},
+  "dc1db01":{cpu:[41,14],mem:[83,6],disk:[71,3],net:[22,12]},
+  "dc1fw01":{cpu:[18,10],mem:[42,4],disk:[22,2],net:[68,30]},
+  "dc2nas01":{cpu:[12,8],mem:[34,6],disk:[87,2,true],net:[31,22]},
+  "dc2pve02":{cpu:[47,18],mem:[66,8],disk:[54,4],net:[28,14]}};
+/* chip lexicons: [glyph, color-token, label] — color + shape + label, never color alone */
+const EST2_HEALTH={ok:["●","var(--match)","OK"],warn:["▲","var(--partial)","WARN"],crit:["■","var(--deviation)","CRIT"]};
+const EST2_VERDICT={match:["✓","var(--match)","MATCH"],partial:["◐","var(--partial)","PARTIAL"],deviation:["▲","var(--deviation)","DEVIATION"]};
+const EST2_BAND={auto:["▸","var(--auto)"],notice:["▲","var(--notice)"],pause:["‖","var(--pause)"]};
+const EST2_SEV={crit:["■","var(--deviation)","CRIT"],warn:["▲","var(--partial)","WARN"],info:["●","var(--ink3)","INFO"]};
+/* master-clock event lexicon: shape + epistemic color per kind
+   alert=territory fact, hyp/commit=AI claims (map), approve=human, exec=hazard, verify=verdict-colored ring */
+const EST2_KINDS={
+  alert:{shape:"tri",c:"var(--deviation)"},
+  hyp:{shape:"circ",c:"var(--map)"},
+  commit:{shape:"diam",c:"var(--map)"},
+  approve:{shape:"sq",c:"var(--ink2)"},
+  exec:{shape:"bar",c:"var(--hazard)"},
+  verify:{shape:"ring",c:"var(--match)"}};
+const EST2_FACETS=[["all","All"],["crit","Crit"],["warn","Warn"],["ok","OK"]];

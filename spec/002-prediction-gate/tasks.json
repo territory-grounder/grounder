@@ -1,0 +1,108 @@
+{
+  "spec": "002-prediction-gate",
+  "tasks": [
+    {
+      "id": "T-002-1",
+      "title": "Fail-closed prediction gate: commit plan_hash prediction before poll; GatedProposal default-deny; analysis-only records without gating",
+      "files_owned": [
+        "core/predict/gate.go",
+        "core/predict/prediction.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-101",
+        "REQ-102",
+        "REQ-105"
+      ],
+      "acceptance": {
+        "feature": "prediction-gate.feature",
+        "scenarios": [
+          "A prediction is committed before the approval poll starts",
+          "A proposal with no committed prediction is denied",
+          "An approval poll cannot be built without a gated prediction",
+          "Analysis-only mode records the prediction without gating the approval"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 420,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-002-2",
+      "title": "Deterministic verifier: sole writer of the match/partial/deviation verdict; deviation never auto-resolves",
+      "files_owned": [
+        "core/verify/verdict.go"
+      ],
+      "deps": [
+        "T-002-1"
+      ],
+      "req_ids": [
+        "REQ-103",
+        "REQ-103a",
+        "REQ-104"
+      ],
+      "acceptance": {
+        "feature": "prediction-gate.feature",
+        "scenarios": [
+          "The mechanical verdict is written only by the deterministic verifier",
+          "The acting model has no write path to the verdict columns",
+          "The verifier returns a typed verdict detail whose enum matches the bare verdict",
+          "A deviation verdict blocks auto-resolution"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 320,
+        "max_wall_clock_minutes": 75
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-002-3",
+      "title": "ActionManifest content-hash binding threaded through predict/approve/execute/verify",
+      "files_owned": [
+        "core/manifest/manifest.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-102"
+      ],
+      "acceptance": {
+        "feature": "prediction-gate.feature",
+        "scenarios": [
+          "The action_id is threaded unchanged through predict approve execute and verify",
+          "A mid-session action change mints a new action_id and forces a re-gate"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 200,
+        "max_wall_clock_minutes": 45
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-002-4",
+      "title": "Single ParseProposal -> typed Proposal (one grammar; unparseable/second-grammar fails closed, closing H-02)",
+      "files_owned": [
+        "core/proposal/proposal.go",
+        "core/proposal/parse.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-102"
+      ],
+      "acceptance": {
+        "feature": "prediction-gate.feature",
+        "scenarios": [
+          "The sole ParseProposal entry point rejects every second grammar"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 75
+      },
+      "status": "completed"
+    }
+  ]
+}

@@ -1,0 +1,157 @@
+/* ============================================================================
+   GROUNDING module (grnd-) — the verifier's report card (REQ-517).
+   The thesis of the whole console, made quantitative: every autonomous decision
+   COMMITS a prediction before acting; a SEPARATE mechanical verifier scores that
+   prediction against what the territory actually did. This surface publishes that
+   score from real rows — verdict distribution (match/partial/deviation), the
+   falsifiability signal (real prediction vs a degree-preserving shuffled-graph
+   control), blast-radius precision/recall, and the autonomy-band distribution.
+   Epistemics: the AI's committed prediction is MAP-indigo; the measured territory
+   outcome is TERRITORY-steel; a verdict is where the two are compared.
+   ============================================================================ */
+
+function grndVar(name) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || "#7a8a94";
+}
+const grndPct = x => (x == null || !isFinite(x)) ? "—" : (x * 100).toFixed(x >= 0.999 ? 0 : 1) + "%";
+const grndNum = x => (x == null || !isFinite(x)) ? "—" : (Math.round(x * 100) / 100).toString();
+
+function grndSec(lbl, title, ...extra) {
+  return h("div", { class: "sec" }, h("span", { class: "lbl" }, lbl), h("h3", {}, title),
+    h("span", { class: "rule" }), ...extra);
+}
+
+/* the big paired readout: a value + caption, tinted by role */
+function grndStat(value, cap, tint, sub) {
+  return h("div", { class: "grnd-stat" },
+    h("div", { class: "grnd-stat-v", style: tint ? "color:" + tint : "" }, value),
+    h("div", { class: "grnd-stat-c" }, cap),
+    sub ? h("div", { class: "grnd-stat-s" }, sub) : null);
+}
+
+/* the signature: the falsifiability bars — real prediction over its shuffled-graph control.
+   Two tracks share one scale; the real (steel) track is solid, the control (faint) is the chance
+   floor. The gap between them IS the signal — the thing no other tool measures. */
+function grndFalsify(realTP, ctrlTP) {
+  const max = Math.max(realTP, ctrlTP, 1);
+  const bar = (v, cls, lbl, note) => h("div", { class: "grnd-fbar-row" },
+    h("span", { class: "grnd-fbar-lbl" }, lbl),
+    h("span", { class: "grnd-fbar-track" },
+      h("i", { class: "grnd-fbar-fill " + cls, style: "width:" + Math.min(100, (v / max) * 100).toFixed(1) + "%" })),
+    h("span", { class: "grnd-fbar-val" }, grndNum(v)),
+    h("span", { class: "grnd-fbar-note" }, note));
+  return h("div", { class: "grnd-falsify" },
+    bar(realTP, "real", "Committed prediction", "true-positives · observed"),
+    bar(ctrlTP, "ctrl", "Shuffled-graph control", "chance baseline · INV-22"));
+}
+
+/* render the whole surface from a normalized scorecard object (fixture OR live). */
+function grndRender(sc, live) {
+  const wrap = h("div");
+  const m = sc.verdicts || {};
+  const match = m.match || 0, partial = m.partial || 0, deviation = m.deviation || 0;
+  const total = sc.verdict_total || (match + partial + deviation);
+  const ratio = sc.signal_ratio || 0;
+  const beats = ratio >= 1.15;
+
+  /* ---- hero: the report card headline ---- */
+  const hero = h("div", { class: "grnd-hero" },
+    h("div", { class: "grnd-hero-lead" },
+      h("div", { class: "lbl", style: "color:" + (live ? "var(--match)" : "var(--ink3)") },
+        live ? "LIVE · mechanical verifier" : "design preview · mechanical verifier"),
+      h("h2", { class: "grnd-hero-title" }, "The map met the territory ", grndPct(sc.match_rate), " of the time"),
+      h("p", { class: "grnd-hero-desc" },
+        "Every autonomous decision commits a consequence prediction before it acts. A separate, ",
+        "non-LLM verifier scores that prediction against what the estate actually did. ",
+        "These are those scores — computed from ", h("b", {}, total.toLocaleString()),
+        " verdicts and ", h("b", {}, (sc.predictions || 0).toLocaleString()),
+        " scored predictions, never asserted.")),
+    h("div", { class: "grnd-hero-figs" },
+      grndStat(grndPct(sc.match_rate), "verifier match-rate", "var(--match)",
+        match + " match · " + partial + " partial · " + deviation + " deviation"),
+      grndStat(ratio ? "×" + grndNum(ratio) : "—", "falsifiability signal",
+        beats ? "var(--map)" : "var(--partial)",
+        beats ? "prediction beats chance" : "at or below chance")));
+  wrap.append(hero);
+
+  /* ---- row: verdict donut + falsifiability signal ---- */
+  const row1 = h("div", { class: "grnd-grid2" });
+
+  const vCard = h("div", { class: "wrapcard grnd-card" },
+    grndSec("verdict distribution", "How the verifier scored committed predictions"));
+  const dseg = [
+    { label: "match", value: match, color: grndVar("--match") },
+    { label: "partial", value: partial, color: grndVar("--partial") },
+    { label: "deviation", value: deviation, color: grndVar("--deviation") },
+  ];
+  const dwrap = h("div", { class: "grnd-donut-wrap" });
+  if (typeof donut === "function" && total > 0) dwrap.append(donut(dseg, { size: 148 }));
+  else dwrap.append(h("div", { class: "empty", style: "padding:20px" },
+    h("div", { class: "big" }, total > 0 ? String(total) : "No verdicts yet"),
+    h("div", { class: "desc" }, "A quiet estate commits few predictions — the spine fills as incidents flow.")));
+  vCard.append(dwrap);
+  vCard.append(h("p", { class: "grnd-foot" },
+    "A ", h("b", { style: "color:var(--deviation)" }, "deviation"),
+    " is the safety-critical case: the observed outcome diverged from the committed prediction, so the ",
+    "action is clamped to never-auto — it can never run unattended again without human sign-off."));
+  row1.append(vCard);
+
+  const fCard = h("div", { class: "wrapcard grnd-card" },
+    grndSec("falsifiability", "Did the prediction beat a shuffled-graph control?", h("span", { class: "grnd-tag" }, "INV-22")));
+  fCard.append(grndFalsify(sc.avg_real_tp || 0, sc.avg_control_tp || 0));
+  fCard.append(h("p", { class: "grnd-foot" },
+    beats
+      ? ["The committed prediction identifies real cascade hosts at ", h("b", { style: "color:var(--map)" }, "×" + grndNum(ratio)),
+        " the rate of a degree-preserving shuffled graph with the same shape. The signal is genuine, not graph density."]
+      : ["The prediction is not yet clearing its chance baseline — either too few scored predictions, or the ",
+        "estate graph is too sparse for cascade inference. This is the honest reading, not a hidden failure."]));
+  row1.append(fCard);
+  wrap.append(row1);
+
+  /* ---- row: blast-radius accuracy + autonomy bands ---- */
+  const row2 = h("div", { class: "grnd-grid2" });
+
+  const bCard = h("div", { class: "wrapcard grnd-card" },
+    grndSec("blast-radius accuracy", "Predicted cascade vs observed cascade"),
+    h("div", { class: "grnd-accu" },
+      grndStat(grndPct(sc.precision), "precision", "var(--map)", "of predicted hosts, how many were hit"),
+      grndStat(grndNum(sc.avg_false_positives), "over-prediction (FP/pred, lower=better)", "var(--partial)",
+        "mean false positives per scored prediction — the honest over-prediction rate precision can't express; a correctly-restrained prediction lowers it"),
+      grndStat(grndPct(sc.recall), "recall", "var(--map)", "of hit hosts, how many were predicted")),
+    h("p", { class: "grnd-foot" },
+      "Scored over ", h("b", {}, (sc.predictions || 0).toLocaleString()),
+      " predictions the verifier has closed. Precision and recall are computed from the true/false-positive ",
+      "and false-negative counts the verifier wrote — one score per bound action, first-wins, append-only."));
+  row2.append(bCard);
+
+  const bands = sc.bands || {};
+  const bandTotal = (bands.AUTO || 0) + (bands.AUTO_NOTICE || 0) + (bands.POLL_PAUSE || 0);
+  const aCard = h("div", { class: "wrapcard grnd-card" },
+    grndSec("autonomy bands", "How the never-auto floor shaped outcomes"));
+  const brow = (lbl, key, cls, note) => {
+    const v = bands[key] || 0;
+    return h("div", { class: "grnd-fbar-row" },
+      h("span", { class: "grnd-fbar-lbl" }, h("span", { class: "bandtag " + cls }, lbl)),
+      h("span", { class: "grnd-fbar-track" },
+        h("i", { class: "grnd-fbar-fill", style: "width:" + (bandTotal ? Math.min(100, (v / bandTotal) * 100) : 0).toFixed(1) + "%;background:var(--" + cls + ")" })),
+      h("span", { class: "grnd-fbar-val" }, String(v)),
+      h("span", { class: "grnd-fbar-note" }, note));
+  };
+  aCard.append(h("div", { class: "grnd-falsify" },
+    brow("AUTO", "AUTO", "auto", "resolved unattended"),
+    brow("AUTO · NOTICE", "AUTO_NOTICE", "notice", "acted, operator notified"),
+    brow("PAUSE", "POLL_PAUSE", "pause", "held for a human")));
+  aCard.append(h("p", { class: "grnd-foot" },
+    h("b", { style: "color:var(--pause)" }, (sc.floor_holds || 0).toLocaleString() + " decisions"),
+    " were held at the never-auto floor — an irreversible or low-confidence action that the classifier ",
+    "refused to let run unattended. The floor is non-configurable: it cannot be tuned away."));
+  row2.append(aCard);
+  wrap.append(row2);
+
+  return wrap;
+}
+
+function grndView() {
+  return grndRender(GROUNDING, false);
+}

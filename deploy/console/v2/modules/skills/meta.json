@@ -1,0 +1,17 @@
+{
+ "nav": {
+  "group": "Configure",
+  "label": "Skills",
+  "view_key": "skills",
+  "badge": "skills",
+  "icon_svg_inner": "<path d=\"M8 2.2 14 5 8 7.8 2 5z\"/><path d=\"M2 8l6 2.8L14 8M2 11l6 2.8L14 11\"/>"
+ },
+ "view_meta": [
+  "Skills",
+  "the versioned skill library — history + rationale, diffs, drafts, trials (spec/014)"
+ ],
+ "facets": [["library", "Library"], ["trials", "Trials"]],
+ "purpose": "SKILLS surface (configure domain, spec/014): the operator window onto the versioned skill library and the auto-improvement flywheel — each skill's history + rationale, version diffs, drafts, and prompt-patch trials. Rendered from a clearly-labeled FIXTURE (SK_FIX) in preview; on a live session skLoadList()/skLoadDetail() (modules/_live/js.txt liveAdopt() is wrapped by this module's eager-live-load wiring) replace it with the served library. Read-only: no control here graduates, edits, or launches a trial.",
+ "notes": "The skills wiring wraps liveAdopt (defined by the live layer, which is emitted BEFORE this module) so the library + badge go live the moment a session lands; this is why skills JS is appended AFTER the live layer in assemble.py (LATE_JS). Honesty contract: the FIXTURE chip marks preview data; empty library = empty state said plainly. Reuses the console design system (sk- prefix over tokens/chips/tbl/wrapcard/tiles/sec/empty).",
+ "provenance": "#55: this module was back-ported OUT of the hand-maintained deploy/console/v2/index.html INTO the assemble.py pipeline source. index.html is byte-unchanged; assemble.py now reproduces it (guarded by `make console-verify` / the CI console-drift job). Do not edit index.html by hand — edit these part-files and re-run assemble.py."
+}

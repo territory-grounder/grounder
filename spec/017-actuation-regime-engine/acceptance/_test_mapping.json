@@ -1,0 +1,119 @@
+{
+  "feature": "actuation-regime-engine.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes (must name a test); pending = specified behavior whose implementation (core/regime.Engine + modules/actuation/awxjob, Phase 2) does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior, INV-22). This is the SDD DESIGN GATE (TG-110): NO code is built yet, so every scenario is pending. Scenarios bind to real code as tasks T-017-* land (AWX-job actuator first, after the resolver core + lane seam).",
+  "scenarios": [
+    {
+      "name": "A target resolves to exactly one regime and its lane",
+      "req": "REQ-1700",
+      "status": "present",
+      "test": "spec/017-actuation-regime-engine/acceptance/acceptance_test.go:TestActuationRegimeEngineAcceptance"
+    },
+    {
+      "name": "An unknown regime falls back to the default lane or refuses and an ambiguous regime fails closed",
+      "req": "REQ-1701",
+      "status": "present",
+      "test": "spec/017-actuation-regime-engine/acceptance/acceptance_test.go:TestActuationRegimeEngineAcceptance"
+    },
+    {
+      "name": "Every lane is reachable only through the actuation interceptor chain",
+      "req": "REQ-1702",
+      "status": "present",
+      "test": "spec/017-actuation-regime-engine/acceptance/acceptance_test.go:TestActuationRegimeEngineAcceptance"
+    },
+    {
+      "name": "Regime resolution matches on the same estate object-model as policy and credential",
+      "req": "REQ-1703",
+      "status": "present",
+      "test": "spec/017-actuation-regime-engine/acceptance/acceptance_test.go:TestActuationRegimeEngineAcceptance"
+    },
+    {
+      "name": "The AWX-job actuator launches only an allowlisted policy-authorized template",
+      "req": "REQ-1704",
+      "status": "present",
+      "test": "spec/017-actuation-regime-engine/acceptance/acceptance_test.go:TestActuationRegimeEngineAcceptance"
+    },
+    {
+      "name": "The AWX-job effect is a template plus typed extra_vars and rejects unknown keys",
+      "req": "REQ-1705",
+      "status": "present",
+      "test": "spec/017-actuation-regime-engine/acceptance/acceptance_test.go:TestActuationRegimeEngineAcceptance"
+    },
+    {
+      "name": "The AWX-job lane resolves the token after policy and launches only while the mode chokepoint permits",
+      "req": "REQ-1706",
+      "status": "present",
+      "test": "spec/017-actuation-regime-engine/acceptance/acceptance_test.go:TestActuationRegimeEngineAcceptance"
+    },
+    {
+      "name": "A read-only setup job is a sensor and a mutating template stays off until the flip",
+      "req": "REQ-1707",
+      "status": "present",
+      "test": "spec/017-actuation-regime-engine/acceptance/acceptance_test.go:TestActuationRegimeEngineAcceptance"
+    },
+    {
+      "name": "The AWX token is a sealed SecretRef and the sensor token is read-only and distinct",
+      "req": "REQ-1708",
+      "status": "present",
+      "test": "spec/017-actuation-regime-engine/acceptance/acceptance_test.go:TestActuationRegimeEngineAcceptance"
+    },
+    {
+      "name": "An async actuation returns a job handle and is polled to a terminal state",
+      "req": "REQ-1709",
+      "status": "present",
+      "test": "spec/017-actuation-regime-engine/acceptance/acceptance_test.go:TestActuationRegimeEngineAcceptance"
+    },
+    {
+      "name": "The launch is a prediction verified against the terminal outcome and fed to the graduation ladder",
+      "req": "REQ-1710",
+      "status": "present",
+      "test": "spec/017-actuation-regime-engine/acceptance/acceptance_test.go:TestActuationRegimeEngineAcceptance"
+    },
+    {
+      "name": "A launched but unverified job counts as no clean run and times out to unverified",
+      "req": "REQ-1711",
+      "status": "present",
+      "test": "spec/017-actuation-regime-engine/acceptance/acceptance_test.go:TestActuationRegimeEngineAcceptance"
+    },
+    {
+      "name": "A second launch for the same action_id is refused",
+      "req": "REQ-1712",
+      "status": "present",
+      "test": "spec/017-actuation-regime-engine/acceptance/acceptance_test.go:TestActuationRegimeEngineAcceptance"
+    },
+    {
+      "name": "The knowledge lane ingests templates and inventory read-only re-read by id",
+      "req": "REQ-1713",
+      "status": "present",
+      "test": "TestActuationRegimeEngineAcceptance"
+    },
+    {
+      "name": "The knowledge lane launches nothing and only proposes a runbook",
+      "req": "REQ-1714",
+      "status": "present",
+      "test": "TestActuationRegimeEngineAcceptance"
+    },
+    {
+      "name": "Every resolution launch and verdict is appended to the ledger with no secret and the tables are append-only",
+      "req": "REQ-1715",
+      "status": "present",
+      "test": "spec/017-actuation-regime-engine/acceptance/acceptance_test.go:TestActuationRegimeEngineAcceptance"
+    },
+    {
+      "name": "The console renders the regime map allowlist pending-verification queue and lane coverage",
+      "req": "REQ-1716",
+      "status": "present",
+      "test": "spec/017-actuation-regime-engine/acceptance/regimeconsole_steps_test.go:TestActuationRegimeEngineAcceptance"
+    },
+    {
+      "name": "Every allowlist edit is appended to the tamper-evident ledger",
+      "req": "REQ-1716",
+      "status": "pending"
+    },
+    {
+      "name": "The native-ssh lane can resolve its effect leaf per action target",
+      "req": "REQ-1717",
+      "status": "present",
+      "test": "TestActuationRegimeEngineAcceptance"
+    }
+  ]
+}

@@ -1,0 +1,198 @@
+{
+  "feature": "actor-attribution.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes (must name a test); pending = specified behavior whose implementation does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior, INV-22). Phase 1 (T-023-1..7) landed: the seam, the deterministic attributor, the rules-as-data mapping, the PVE reader, the runner wiring, the persistence, and the security routing. The embedded default ruleset is GENERIC (taxonomy->disposition mapping only); site principals + pool carve-outs are supplied by a deploy-time override (TG_ATTRIBUTION_CONFIG) and are never baked into the binary. REQ-2304 dominance is per-record: a positively-unsanctioned actor co-occurring with a sanctioned/self/carve-out record still resolves attributed-suspicious (a carve-out can never mask an intruder into authorized-test). Persistence covers the taxonomy outcome + minimized evidence on session_triage; the matched rule id and candidate set are not separately columned in Phase 1 (a Phase-2 refinement). Phase-2 items (the covered-trail-no-entry disposition, the tracer named step, the journal/k8s/netbox/awx/gitops/docker readers, the expires_at retention job) remain pending.",
+  "scenarios": [
+    {
+      "name": "Every classification carries a typed attribution derived from reader evidence",
+      "req": "REQ-2300",
+      "status": "present",
+      "test": "TestRunnerAttributionUnattributableWhenNoReader; TestAttribute (core/attribution)"
+    },
+    {
+      "name": "An admin-attributed fault stands down to the approver graph and is never auto-undone",
+      "req": "REQ-2301",
+      "status": "present",
+      "test": "TestRunnerAttributionAuthorizedStandsDown; TestAttribute/REQ-2301"
+    },
+    {
+      "name": "A TG-self-remediated incident terminates already-remediated without re-actuation",
+      "req": "REQ-2302",
+      "status": "present",
+      "test": "TestRunnerAttributionSelfNoopTerminates; TestSelfHealOnPoolHostStaysSelf (core/attribution \u2014 self survives a carve-out)"
+    },
+    {
+      "name": "Absent evidence yields unattributable and the pre-feature ladder unchanged",
+      "req": "REQ-2303",
+      "status": "present",
+      "test": "TestRunnerAttributionUnattributableWhenNoReader; TestUnattributableIsTheZeroValue"
+    },
+    {
+      "name": "An unsanctioned-actor change polls with security escalation and is never auto-healed",
+      "req": "REQ-2304",
+      "status": "present",
+      "test": "TestRunnerAttributionSuspiciousEscalates; TestSuspiciousDominatesContradiction; TestSuspiciousDominatesCarveOut (a carve-out never masks an intruder); TestDispositionForResolution (suspicious keeps security-escalate under a contradiction)"
+    },
+    {
+      "name": "A covered audit trail missing an entry for an observed mutation escalates as suspicious",
+      "req": "REQ-2304",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "An authorized-test outcome traverses every existing gate unchanged",
+      "req": "REQ-2305",
+      "status": "present",
+      "test": "TestRunnerAttributionCarveOutHealsUnchanged; TestRunnerAttributionUnattributableWhenNoReader"
+    },
+    {
+      "name": "Actor evidence is collected only by registered read-only readers with least-privilege credentials",
+      "req": "REQ-2306",
+      "status": "present",
+      "test": "adapters/actorevidence.Reader seam; cmd/worker config-gated registration (TG_PVE_RO_TOKEN_REF)"
+    },
+    {
+      "name": "The PVE task-log reader returns actor evidence for a guest lifecycle change",
+      "req": "REQ-2306",
+      "status": "present",
+      "test": "TestReadProducesTypedLifecycleEvidence (modules/actorevidence/pve)"
+    },
+    {
+      "name": "The PVE reader authenticates with a read-only token distinct from the actuation token",
+      "req": "REQ-2306",
+      "status": "present",
+      "test": "TestResolveSelfActorUsesActuationCredentialNotReadToken (cmd/worker \u2014 self=actuation cred, reader=separate RO token); TestSelfPrincipalFromToken"
+    },
+    {
+      "name": "A reader error is treated as absent evidence with a recorded warning and never blocks triage",
+      "req": "REQ-2307",
+      "status": "present",
+      "test": "TestRunnerAttributionReaderErrorDegradesToUnattributable; TestReadFailsClosedOnAmbiguousOrMissingGuest; TestReadDegradesOnShortErrorBodyWithoutPanic (a short auth-failure body degrades, never panics)"
+    },
+    {
+      "name": "The taxonomy-to-disposition mapping is loadable data with a closed disposition enum",
+      "req": "REQ-2308",
+      "status": "present",
+      "test": "TestParseConfigDefault (generic embedded default: no site principals/carve-outs); TestParseConfigOverride (deploy-time site override parses); TestClosedEnums (core/attribution)"
+    },
+    {
+      "name": "An absent or corrupt mapping escalates every non-unattributable taxonomy to a human",
+      "req": "REQ-2308",
+      "status": "present",
+      "test": "TestDispositionForResolution; TestParseConfigFailsClosedOnUnknownEnum"
+    },
+    {
+      "name": "A valid carve-out classifies a harness fault authorized-test, heals, and records the attribution",
+      "req": "REQ-2309",
+      "status": "present",
+      "test": "TestRunnerAttributionCarveOutHealsUnchanged; TestAttribute/REQ-2309 valid"
+    },
+    {
+      "name": "An expired carve-out rule no longer matches and the attribution stands down",
+      "req": "REQ-2309",
+      "status": "present",
+      "test": "TestAttribute/REQ-2309 expired"
+    },
+    {
+      "name": "Contradictory non-suspicious evidence escalates to the approver graph with all candidates recorded",
+      "req": "REQ-2310",
+      "status": "present",
+      "test": "TestAttribute/REQ-2310; TestDispositionForResolution"
+    },
+    {
+      "name": "The attribution outcome and evidence references persist on session_triage and the governance ledger",
+      "req": "REQ-2311",
+      "status": "present",
+      "test": "migration 0035 + TriageStore.RecordTriage (actor_attribution/actor_evidence columns); recordTriage threading in workflow.go"
+    },
+    {
+      "name": "The decision tracer surfaces the attribution as a named trace step",
+      "req": "REQ-2311",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "Agent free-text can never set or alter the taxonomy value",
+      "req": "REQ-2312",
+      "status": "present",
+      "test": "TestAttribute (taxonomy derived from typed reader evidence only, core/attribution)"
+    },
+    {
+      "name": "Persisted evidence is retention-bounded and redacted at every boundary",
+      "req": "REQ-2313",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "The journal reader returns typed actor evidence for a privileged host action",
+      "req": "REQ-2314",
+      "status": "present",
+      "test": "TestReadParsesSudoActorEvidence; TestSudoInvoker (modules/actorevidence/journal)"
+    },
+    {
+      "name": "The journal reader fails closed when no known-hosts file is configured",
+      "req": "REQ-2314",
+      "status": "present",
+      "test": "TestReadDegradesOnUnresolvableCredential; TestReadDegradesOnRunnerError; TestReadRefusesHostNotInAllowlist (modules/actorevidence/journal)"
+    },
+    {
+      "name": "An identity fact can never by itself set a taxonomy value",
+      "req": "REQ-2315",
+      "status": "present",
+      "test": "TestAttribute (taxonomy from action-evidence only); TestUIDFallbackActorIsNotQueried (ldapident)"
+    },
+    {
+      "name": "Identity enrichment leaves the deterministic core attributor unchanged",
+      "req": "REQ-2316",
+      "status": "present",
+      "test": "TestEnrichSanctionedPromotesAndDemotes (base config unmutated, temporal/runner)"
+    },
+    {
+      "name": "A confirmed live admin is promoted to a stand-down",
+      "req": "REQ-2317",
+      "status": "present",
+      "test": "TestResolveConfirmedAndDisabled (ldapident); TestEnrichSanctionedPromotesAndDemotes (temporal/runner)"
+    },
+    {
+      "name": "A disabled admin credential in use is demoted to a security escalation",
+      "req": "REQ-2318",
+      "status": "present",
+      "test": "TestDisabledDominatesConfirmed (ldapident); TestEnrichSanctionedPromotesAndDemotes (temporal/runner)"
+    },
+    {
+      "name": "A directory outage reproduces the Phase-1 classification",
+      "req": "REQ-2319",
+      "status": "present",
+      "test": "TestResolveFailsOpenOnError (ldapident); TestEnrichSanctionedFailsOpenOnError (temporal/runner)"
+    },
+    {
+      "name": "Identity data is retention-bounded and redacted at every boundary",
+      "req": "REQ-2320",
+      "status": "present",
+      "test": "TestWarningsCarryNoPrincipal (ldapident \u2014 provider+domain only, no principal); SanctionFacts carries no membership field; identity facts are never persisted (transient in the activity)"
+    },
+    {
+      "name": "A missing authentication event never moves a classification",
+      "req": "REQ-2321",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "The AWX job-history reader returns actor evidence for a playbook-driven change",
+      "req": "REQ-2306",
+      "status": "present",
+      "test": "TestReadEmitsActorEvidenceForPlaybookRun; TestReadRendersNonHumanLauncher; TestReadFailsClosedOnUnknownHost (modules/actorevidence/awx)"
+    },
+    {
+      "name": "The NetBox changelog reader returns actor evidence for an inventory change",
+      "req": "REQ-2306",
+      "status": "present",
+      "test": "TestReadEmitsActorEvidenceForInventoryChange; TestReadFallsBackToUserNameWhenUserObjectAbsent; TestReadFailsClosedOnUnknownDevice (modules/actorevidence/netbox)"
+    },
+    {
+      "name": "The GitOps MR-history reader returns actor evidence for a declarative change",
+      "req": "REQ-2306",
+      "status": "present",
+      "test": "TestReadEmitsEvidenceForDeployMR; TestReadSkipsNonManifestMR; TestReadFollowsPagination (modules/actorevidence/gitopsmr)"
+    }
+  ]
+}

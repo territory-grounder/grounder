@@ -1,0 +1,138 @@
+{
+  "feature": "tier1-suppression.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes; pending = specified behavior whose implementation (core/suppression.Chain and its registries, Phase 2) does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior). All scenarios are pending until core/suppression is built.",
+  "scenarios": [
+    {
+      "name": "A phase exception fails open to escalation",
+      "req": "REQ-405",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "An unconfirmed suppression match fails open to escalation",
+      "req": "REQ-405",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "A critical-severity reboot is never suppressed",
+      "req": "REQ-407",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "An unknown-severity alert is never suppressed",
+      "req": "REQ-407",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "A future-dated triage entry is rejected and the alert escalates",
+      "req": "REQ-408",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "A negative-age triage entry is rejected and the alert escalates",
+      "req": "REQ-408",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "A prior entry within the window is accepted for dedup evaluation",
+      "req": "REQ-408",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "A currently-valid suppression-policy record activates the fold",
+      "req": "REQ-402",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "An active fold posts the child alert as a notice without a session",
+      "req": "REQ-403",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "An expired suppression-policy record fails open",
+      "req": "REQ-402",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "A stale-verified suppression-policy record fails open",
+      "req": "REQ-402",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "An on-schedule reboot with a live registered schedule is suppressed",
+      "req": "REQ-404",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "An observing schedule does not suppress",
+      "req": "REQ-404",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "A reboot outside the schedule window escalates",
+      "req": "REQ-404",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "A critical reboot with a matching schedule is not suppressed",
+      "req": "REQ-407",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "A host-agnostic transient rule matches by alert rule",
+      "req": "REQ-401",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "A transient rule does not match a different alert rule",
+      "req": "REQ-401",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "A dirty boot after a suppressed reboot reopens and pages",
+      "req": "REQ-406",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "A clean systemd-reboot stays suppressed",
+      "req": "REQ-406",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "A schedule promotes to live after two in-window boots",
+      "req": "REQ-404",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "A single in-window boot does not promote the schedule",
+      "req": "REQ-404",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    },
+    {
+      "name": "A removed schedule drifts to disabled",
+      "req": "REQ-404",
+      "status": "present",
+      "test": "TestTier1SuppressionAcceptance"
+    }
+  ]
+}

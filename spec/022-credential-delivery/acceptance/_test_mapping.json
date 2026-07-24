@@ -1,0 +1,54 @@
+{
+  "feature": "credential-delivery.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes (must name a test); pending = specified behavior whose implementation does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior, INV-22). Nothing is built yet, so every scenario is pending — this is the DESIGN GATE for the credential-delivery refactor (owner-approved 2026-07-22, from audits TG-153/TG-154). Scenarios bind to real code as tasks T-022-* land.",
+  "scenarios": [
+    {
+      "name": "High-value secrets are delivered as SecretRefs, never as plaintext environment values",
+      "req": "REQ-2200",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "An unresolvable credential refuses the operation with no plaintext fallback",
+      "req": "REQ-2204",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "The master key never resides in the worker and seal/unseal calls the external key service",
+      "req": "REQ-2201",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "The actuation SSH identity is resolved just-in-time and not persisted between actuations",
+      "req": "REQ-2202",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "A leased actuation credential expires after its bounded lifetime",
+      "req": "REQ-2207",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "The read-only triage plane cannot resolve an actuation credential",
+      "req": "REQ-2203",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "A resolved secret value never reaches a log, export, or error output",
+      "req": "REQ-2205",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "The image-signing key is resolved from the substrate, not a plaintext CI variable",
+      "req": "REQ-2206",
+      "status": "pending",
+      "test": ""
+    }
+  ]
+}

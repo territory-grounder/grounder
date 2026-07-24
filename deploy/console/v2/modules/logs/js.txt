@@ -1,0 +1,145 @@
+/* ================= logs module (log-) — view + helpers ================= */
+const LOG_ACTOR_LBL = {ai:"AI", human:"HUM", system:"SYS"};
+const LOG_LVL_LBL   = {debug:"DBG", info:"INF", warn:"WRN", error:"ERR"};
+/* entity highlighter: hosts (site-prefixed) => territory steel; action_ids => map indigo */
+const LOG_ENT_RE = /((?:dc1|dc2)[a-z0-9][a-z0-9-]*)|(act_[0-9a-f]{6,})/g;
+
+function logFmtTs(t){
+  const d = new Date(LOG_T0 + t), p = (n,w)=>String(n).padStart(w,"0");
+  return p(d.getHours(),2)+":"+p(d.getMinutes(),2)+":"+p(d.getSeconds(),2)+"."+p(d.getMilliseconds(),3);
+}
+
+function logMsgNode(msg){
+  const el = h("span",{class:"log-msg"});
+  let i = 0, m; LOG_ENT_RE.lastIndex = 0;
+  while((m = LOG_ENT_RE.exec(msg))){
+    if(m.index > i) el.appendChild(document.createTextNode(msg.slice(i, m.index)));
+    el.appendChild(h("span",{class:m[1] ? "log-host" : "log-act"}, m[0]));
+    i = m.index + m[0].length;
+  }
+  if(i < msg.length) el.appendChild(document.createTextNode(msg.slice(i)));
+  return el;
+}
+
+function logToast(msg){
+  let t = $(".log-toast");
+  if(!t){ t = h("div",{class:"log-toast"}); document.body.appendChild(t); }
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(logToast._t);
+  logToast._t = setTimeout(()=>t.classList.remove("show"), 2400);
+}
+
+/* row click pivots to the owning session — never a dead end */
+function logPivot(l){
+  if(!l.session){ logToast("no session linked — correlation "+l.cid); return; }
+  const s = (typeof SESSIONS !== "undefined" ? SESSIONS : []).find(x => x.id === l.session || x.ref === l.session);
+  logToast("pivot → session "+l.session+(s ? "" : " (not in fixture set)"));
+  if(s && typeof openSession === "function") openSession(s);
+}
+
+function logMatch(l, st){
+  if(st.actor.size && !st.actor.has(l.actor)) return false;
+  if(st.lvl.size   && !st.lvl.has(l.lvl))     return false;
+  if(st.src.size   && !st.src.has(l.src))     return false;
+  if(st.q){
+    const q = st.q.toLowerCase();
+    if(!(l.msg+" "+l.cid+" "+l.src+" "+l.actor+" "+l.lvl+" "+(l.session||"")).toLowerCase().includes(q)) return false;
+  }
+  return true;
+}
+
+function logAll(){ return LOG_LINES.concat(LOG_STATE.extra).slice(LOG_STATE.drop); }
+
+function logRow(l){
+  return h("div",{class:"log-row log-lvl-"+l.lvl, tabindex:"0", title:l.msg,
+      onclick:()=>logPivot(l),
+      onkeydown:e=>{ if(e.key === "Enter") logPivot(l); }},
+    h("span",{class:"log-ts"}, logFmtTs(l.t)),
+    h("span",{class:"log-chip log-c-"+l.lvl}, LOG_LVL_LBL[l.lvl]),
+    h("span",{class:"log-chip log-a-"+l.actor}, LOG_ACTOR_LBL[l.actor]),
+    h("span",{class:"log-src"}, l.src),
+    h("span",{class:"log-cid"}, l.cid),
+    logMsgNode(l.msg));
+}
+
+let LOG_TIMER = null;
+
+function logsView(){
+  const st = LOG_STATE;
+  const counter = h("span",{class:"log-count"});
+  const body = h("div",{class:"log-body"});
+  let stick = true, shownN = 0;   /* stick = user is at the tail; scrolling up suspends auto-scroll */
+  body.addEventListener("scroll", ()=>{ stick = body.scrollHeight - body.scrollTop - body.clientHeight < 40; });
+
+  function setCounter(total){ counter.textContent = shownN+" / "+total+" lines"; }
+
+  function paint(){
+    body.textContent = "";
+    const all = logAll(), frag = document.createDocumentFragment();
+    shownN = 0;
+    for(const l of all) if(logMatch(l, st)){ frag.appendChild(logRow(l)); shownN++; }
+    if(!shownN) frag.appendChild(h("div",{class:"log-empty"},"no lines match the current filters"));
+    body.appendChild(frag);
+    setCounter(all.length);
+    if(st.live && stick) body.scrollTop = body.scrollHeight;
+  }
+
+  const search = h("input",{class:"log-search", type:"text",
+    placeholder:"filter — host, action_id, cid, message…", value:st.q,
+    oninput:e=>{ st.q = e.target.value.trim(); paint(); }});
+
+  const liveTxt = h("span",{class:"log-live-t"},"LIVE");
+  const liveBtn = h("button",{class:"log-live", type:"button", title:"toggle live tail",
+    onclick:()=>{ st.live = !st.live; syncLive(); if(st.live){ stick = true; body.scrollTop = body.scrollHeight; } }},
+    h("span",{class:"log-dot"}), liveTxt);
+  function syncLive(){
+    liveBtn.classList.toggle("on", st.live);
+    liveBtn.classList.toggle("anim", st.live && !reduceMotion);  /* pulse only if motion allowed */
+    liveTxt.textContent = st.live ? "LIVE" : "PAUSED";
+  }
+  syncLive();
+
+  function chipGroup(label, dim, keys){
+    return h("div",{class:"log-fgrp"}, h("span",{class:"log-flbl"}, label),
+      keys.map(k=>{
+        const c = h("button",{class:"log-fchip log-k-"+k, type:"button",
+          onclick:()=>{ st[dim].has(k) ? st[dim].delete(k) : st[dim].add(k);
+            c.classList.toggle("on", st[dim].has(k)); paint(); }},
+          h("span",{class:"log-sq"}), k);
+        c.classList.toggle("on", st[dim].has(k));
+        return c;
+      }));
+  }
+
+  const head = h("div",{class:"log-head"},
+    h("div",{class:"log-row1"},
+      search, liveBtn, counter,
+      h("span",{class:"log-fix", title:"design preview — representative fixture data, mutation OFF"},
+        "FIXTURE · READ-ONLY PREVIEW")),
+    h("div",{class:"log-row2"},
+      chipGroup("ACTOR","actor",["ai","human","system"]),
+      chipGroup("LEVEL","lvl",["debug","info","warn","error"]),
+      chipGroup("SOURCE","src",["librenms","prometheus","crowdsec","agent","gate","executor","governance"])));
+
+  const root = h("div",{class:"log-root"}, head, body);
+  paint();
+
+  /* live tail: deterministic sequence, ~1.8s cadence, capped at LOG_CAP, self-cleans when detached */
+  if(LOG_TIMER) clearInterval(LOG_TIMER);
+  LOG_TIMER = setInterval(()=>{
+    if(!body.isConnected){ clearInterval(LOG_TIMER); LOG_TIMER = null; return; }
+    if(!st.live) return;
+    const n = st.n++, tpl = LOG_TAIL[n % LOG_TAIL.length];
+    const line = Object.assign({}, tpl, {t: LOG_LAST_T + 1800*(n+1)});
+    st.extra.push(line);
+    if(LOG_LINES.length + st.extra.length - st.drop > LOG_CAP){ st.drop++; paint(); return; }
+    if(logMatch(line, st)){
+      const empty = body.querySelector(".log-empty"); if(empty) empty.remove();
+      body.appendChild(logRow(line)); shownN++;
+      if(stick) body.scrollTop = body.scrollHeight;
+    }
+    setCounter(logAll().length);
+  }, 1800);
+
+  return root;
+}

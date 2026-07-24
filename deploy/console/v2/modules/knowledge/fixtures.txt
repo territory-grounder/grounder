@@ -1,0 +1,33 @@
+/* Knowledge (the living wiki) — representative fixture (design preview). Unlike the predecessor's
+   hand-written MkDocs wiki, TG's knowledge is DERIVED: every page is composed from the estate graph,
+   the incidents that touched an entity, and the verifier's verdicts. On a live session these fixtures
+   are replaced by pages built from /v1/estate, /v1/sessions and /v1/alerts. */
+const KNOW = {
+  hosts: [
+    { name: "dc1k8s-w3", type: "host", role: "Kubernetes worker",
+      depends_on: [{ to: "dc1k8s-cp1", rel: "runs_on", confidence: 0.95, source: "pve" },
+                   { to: "dc1stor01", rel: "mounts", confidence: 0.82, source: "netbox" }],
+      dependents: [{ from: "ingress-nl", rel: "schedules_on", confidence: 0.7, source: "librenms" }],
+      incidents: [{ ref: "librenms-4821", band: "AUTO", verdict: "match", note: "kubelet flap, self-recovered" }] },
+    { name: "dc1k8s-cp1", type: "host", role: "Kubernetes control-plane",
+      depends_on: [{ to: "dc1pve01", rel: "runs_on", confidence: 0.98, source: "pve" }],
+      dependents: [{ from: "dc1k8s-w3", rel: "runs_on", confidence: 0.95, source: "pve" }],
+      incidents: [{ ref: "librenms-4713", band: "POLL_PAUSE", verdict: "partial", note: "etcd latency; held for a human" }] },
+    { name: "dc1pve01", type: "pve_node", role: "Proxmox hypervisor",
+      depends_on: [], dependents: [{ from: "dc1k8s-cp1", rel: "runs_on", confidence: 0.98, source: "pve" }],
+      incidents: [] },
+  ],
+  incidents: [
+    { ref: "librenms-4821", band: "AUTO", risk: "low", verdict: "match", host: "dc1k8s-w3",
+      classified: "2026-07-16T22:14:07Z",
+      learned: "A kubelet flap on a worker with a healthy control-plane predecessor is self-limiting; the committed prediction (no cascade) matched — this pattern is now a known-good precedent." },
+    { ref: "librenms-4713", band: "POLL_PAUSE", risk: "high", verdict: "partial", host: "dc1k8s-cp1",
+      classified: "2026-07-15T09:02:41Z",
+      learned: "Rising etcd latency on a control-plane node predicted a partial cascade; the verifier scored PARTIAL, so the remediation is clamped to human-gated until a match is observed." },
+  ],
+  rules: [
+    { title: "Never-auto floor is non-configurable", body: "Any action classified irreversible or below the confidence floor is clamped to POLL_PAUSE and can never run unattended — the floor cannot be tuned away, per core/safety." },
+    { title: "A deviation demotes forever", body: "When the verifier scores a deviation, that bound action is permanently marked never-auto; it requires human sign-off on every future occurrence until re-proven." },
+    { title: "Predictions are committed before acting", body: "The consequence prediction is content-hashed into the ActionManifest before execution, so the verifier scores a prediction that could not have been edited after the fact." },
+  ],
+};

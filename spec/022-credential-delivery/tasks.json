@@ -1,0 +1,147 @@
+{
+  "spec": "022-credential-delivery",
+  "tasks": [
+    {
+      "id": "T-022-1",
+      "title": "Deliver high-value secrets as bao: SecretRefs (env->OpenBao KV), fail-closed",
+      "files_owned": [
+        "core/credential/delivery.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-2200",
+        "REQ-2204"
+      ],
+      "acceptance": {
+        "feature": "credential-delivery.feature",
+        "scenarios": [
+          "High-value secrets are delivered as SecretRefs, never as plaintext environment values",
+          "An unresolvable credential refuses the operation with no plaintext fallback"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 120
+      }
+    },
+    {
+      "id": "T-022-2",
+      "title": "Master key via an external key service (OpenBao Transit) - the worker never holds it",
+      "files_owned": [
+        "core/seal/master.go",
+        "core/seal/transit.go"
+      ],
+      "deps": [
+        "T-022-1"
+      ],
+      "req_ids": [
+        "REQ-2201"
+      ],
+      "acceptance": {
+        "feature": "credential-delivery.feature",
+        "scenarios": [
+          "The master key never resides in the worker and seal/unseal calls the external key service"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 450,
+        "max_wall_clock_minutes": 120
+      }
+    },
+    {
+      "id": "T-022-3",
+      "title": "Just-in-time actuation SSH identity + bounded-lifetime lease (SSH-CA / OTP)",
+      "files_owned": [
+        "modules/actuation/ssh/jit.go"
+      ],
+      "deps": [
+        "T-022-1"
+      ],
+      "req_ids": [
+        "REQ-2202",
+        "REQ-2207"
+      ],
+      "acceptance": {
+        "feature": "credential-delivery.feature",
+        "scenarios": [
+          "The actuation SSH identity is resolved just-in-time and not persisted between actuations",
+          "A leased actuation credential expires after its bounded lifetime"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 120
+      }
+    },
+    {
+      "id": "T-022-4",
+      "title": "Split the read-only triage plane from the actuation-credential plane (disjoint OpenBao roles)",
+      "files_owned": [
+        "core/credential/plane_split.go"
+      ],
+      "deps": [
+        "T-022-1"
+      ],
+      "req_ids": [
+        "REQ-2203"
+      ],
+      "acceptance": {
+        "feature": "credential-delivery.feature",
+        "scenarios": [
+          "The read-only triage plane cannot resolve an actuation credential"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 90
+      }
+    },
+    {
+      "id": "T-022-5",
+      "title": "Redact secret material on every substrate resolver error/output path",
+      "files_owned": [
+        "modules/credsource/openbao/redact.go"
+      ],
+      "deps": [
+        "T-022-1"
+      ],
+      "req_ids": [
+        "REQ-2205"
+      ],
+      "acceptance": {
+        "feature": "credential-delivery.feature",
+        "scenarios": [
+          "A resolved secret value never reaches a log, export, or error output"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 75
+      }
+    },
+    {
+      "id": "T-022-6",
+      "title": "cosign image-signing key stored in OpenBao; sign-on-build + verify-before-deploy",
+      "files_owned": [
+        "scripts/cosign-sign.sh",
+        "scripts/cosign-verify.sh"
+      ],
+      "deps": [
+        "T-022-1"
+      ],
+      "req_ids": [
+        "REQ-2206"
+      ],
+      "acceptance": {
+        "feature": "credential-delivery.feature",
+        "scenarios": [
+          "The image-signing key is resolved from the substrate, not a plaintext CI variable"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 90
+      }
+    }
+  ]
+}

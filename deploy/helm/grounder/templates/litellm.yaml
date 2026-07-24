@@ -1,0 +1,115 @@
+{{/*
+LiteLLM model-gateway (spec/009 REQ-901, REQ-904). Parity with the compose `litellm` service.
+
+The provider fallback ladder is config (a ConfigMap here, the same shape as deploy/litellm-config.yaml);
+the master key and every provider API key arrive by Secret env reference (INV-13), never as literals.
+*/}}
+{{- $ll := include "grounder.componentName" (dict "root" . "component" "litellm") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $ll }}-config
+  labels:
+    {{- include "grounder.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    # LiteLLM provider fallback ladder — z.ai → DeepSeek → Mistral → Anthropic → OpenAI → Grok.
+    # Keys arrive as env references (os.environ/...), sourced from the credential Secret. No literals.
+    model_list:
+      - model_name: primary
+        litellm_params:
+          model: openai/glm-4.6
+          api_base: https://api.z.ai/api/paas/v4
+          api_key: os.environ/ZAI_API_KEY
+      - model_name: fallback-deepseek
+        litellm_params:
+          model: deepseek/deepseek-chat
+          api_key: os.environ/DEEPSEEK_API_KEY
+      - model_name: fallback-mistral
+        litellm_params:
+          model: mistral/mistral-large-latest
+          api_key: os.environ/MISTRAL_API_KEY
+      - model_name: fallback-anthropic
+        litellm_params:
+          model: anthropic/claude-sonnet-4-5
+          api_key: os.environ/ANTHROPIC_API_KEY
+      - model_name: fallback-openai
+        litellm_params:
+          model: openai/gpt-4o
+          api_key: os.environ/OPENAI_API_KEY
+      - model_name: fallback-grok
+        litellm_params:
+          model: xai/grok-2-latest
+          api_key: os.environ/XAI_API_KEY
+    router_settings:
+      fallbacks:
+        - primary: [fallback-deepseek, fallback-mistral, fallback-anthropic, fallback-openai, fallback-grok]
+      num_retries: 2
+      allowed_fails: 1
+    litellm_settings:
+      drop_params: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $ll }}
+  labels:
+    {{- include "grounder.labels" . | nindent 4 }}
+    {{- include "grounder.selectorLabels" (dict "root" . "component" "litellm") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "grounder.selectorLabels" (dict "root" . "component" "litellm") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.litellm.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $ll }}
+  labels:
+    {{- include "grounder.labels" . | nindent 4 }}
+    {{- include "grounder.selectorLabels" (dict "root" . "component" "litellm") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "grounder.selectorLabels" (dict "root" . "component" "litellm") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "grounder.labels" . | nindent 8 }}
+        {{- include "grounder.selectorLabels" (dict "root" . "component" "litellm") | nindent 8 }}
+    spec:
+      containers:
+        - name: litellm
+          image: "{{ .Values.litellm.image.repository }}:{{ .Values.litellm.image.tag }}"
+          imagePullPolicy: {{ .Values.litellm.image.pullPolicy }}
+          args: ["--config", "/etc/litellm/config.yaml", "--port", "{{ .Values.litellm.port }}"]
+          ports:
+            - name: http
+              containerPort: {{ .Values.litellm.port }}
+          env:
+            # master key (mandatory) + provider keys by Secret reference (spec/009 REQ-904 / INV-13). The
+            # provider keys are OPTIONAL: an operator supplies only the backends they use (the litellm fallback
+            # ladder degrades over absent providers, deploy/.env.example). A mandatory ref to an absent key would
+            # wedge the whole gateway in CreateContainerConfigError.
+            {{- include "grounder.secretEnv" (dict "root" . "name" "LITELLM_MASTER_KEY" "key" .Values.secrets.keys.litellmMasterKey) | nindent 12 }}
+            {{- include "grounder.secretEnv" (dict "root" . "name" "ZAI_API_KEY" "key" .Values.secrets.keys.zaiApiKey "optional" true) | nindent 12 }}
+            {{- include "grounder.secretEnv" (dict "root" . "name" "DEEPSEEK_API_KEY" "key" .Values.secrets.keys.deepseekApiKey "optional" true) | nindent 12 }}
+            {{- include "grounder.secretEnv" (dict "root" . "name" "MISTRAL_API_KEY" "key" .Values.secrets.keys.mistralApiKey "optional" true) | nindent 12 }}
+            {{- include "grounder.secretEnv" (dict "root" . "name" "ANTHROPIC_API_KEY" "key" .Values.secrets.keys.anthropicApiKey "optional" true) | nindent 12 }}
+            {{- include "grounder.secretEnv" (dict "root" . "name" "OPENAI_API_KEY" "key" .Values.secrets.keys.openaiApiKey "optional" true) | nindent 12 }}
+            {{- include "grounder.secretEnv" (dict "root" . "name" "XAI_API_KEY" "key" .Values.secrets.keys.xaiApiKey "optional" true) | nindent 12 }}
+          resources:
+            {{- toYaml .Values.litellm.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/litellm
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $ll }}-config

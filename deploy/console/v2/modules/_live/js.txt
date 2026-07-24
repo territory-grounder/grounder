@@ -1,0 +1,1546 @@
+/* ==================== LIVE layer — the console's real API client ====================
+   Consumes the browser operator session (REQ-508) + read surfaces: /api/v1/whoami, /v1/stats,
+   /v1/ledger, /v1/sessions (REQ-509). Honesty contract: surfaces that adopt live data are tagged
+   LIVE; everything else keeps its FIXTURE tags. No fetched value is invented — an unavailable
+   endpoint leaves the fixture view in place with its preview label. */
+
+const liveState = { on:false, operator:"", mutation:null, postureStale:null, chainSeq:null, sessions:null, sessionsErr:null, ledger:null, decisions:null, config:null };
+
+/* When the sessions fetch fails, say WHY honestly: a 401/403 is an auth gate (sign in / lack the
+   trace-read role), not a missing deploy. Only a genuine transport/5xx or absent surface is "not
+   served". Called by both the Command audit-spine strip and the decision-tracer inspector. */
+function liveSessionsUnavailable(){
+  const st = liveState.sessionsErr;
+  if(st===401 || st===403)
+    return "Sign in as an admin to view recorded sessions — this surface needs the trace-read role.";
+  return "The /v1/sessions surface isn't reachable right now (the trace spine may still be deploying).";
+}
+/* credential engine (TG-107) read state — undefined until adopted, null on a fail-closed endpoint. */
+liveState.credSources = undefined; liveState.credCoverage = undefined; liveState.credResolutions = undefined;
+/* policy engine (TG-94) read state — undefined until adopted, null on a fail-closed endpoint. */
+liveState.policyMode = undefined; liveState.policyRules = undefined; liveState.policyGraduation = undefined; liveState.policyDecisions = undefined;
+/* actuation regime engine (spec/017) read state — undefined until adopted, null on a fail-closed endpoint. */
+liveState.regime = undefined;
+
+async function liveGet(path){
+  const r = await fetch("/api"+path, { credentials:"same-origin" });
+  if(!r.ok) throw Object.assign(new Error(path+" -> "+r.status), { status:r.status });
+  return r.json();
+}
+
+/* ---- fail-closed auth gate ----
+   console.html renders #authGate (full-screen, themed) by default and #appRoot [hidden]. This is the
+   ONLY UI while unauthenticated — no modal over a live shell, no dismiss-and-browse escape hatch.
+   Function NAMES below are kept exactly as before (liveLoginOverlay, liveLogin, liveAdopt) — the
+   skills and wiki modules further down this bundle each wrap `liveAdopt` by reassigning the global
+   binding (see "eager live load" near the end), and the skills write-lane calls `liveLoginOverlay()`
+   by name on a 401 to re-prompt mid-session; renaming either would break both undetected. liveAdopt
+   now reveals the console (revealConsole(), defined at the tail with boot) FIRST on a verified
+   session, THEN performs every data fetch — nothing below that line can run before authentication. */
+function agSpine(state){ const el=$("#agSpine"); if(el) el.dataset.state=state; }
+function agErr(msg){ const el=$("#agErr"); if(el) el.textContent = msg||""; }
+function agBusy(b){
+  const btn=$("#agSubmit"); if(btn) btn.disabled=b;
+  const op=$("#agOp"), tok=$("#agTok");
+  if(op) op.disabled=b; if(tok) tok.disabled=b;
+}
+(function agWireForm(){
+  const form=$("#agForm");
+  if(form) form.addEventListener("submit", liveLogin);
+})();
+
+// liveLoginOverlay: (re)shows the static full-screen #authGate — the initial boot path (liveAdopt's
+// 401 branch) and the skills/config write-lane's session-expiry recovery both call this by name.
+function liveLoginOverlay(){
+  const gate=$("#authGate"); if(gate) gate.hidden=false;
+  agSpine("idle"); agErr(""); agBusy(false);
+  const op=$("#agOp"); if(op) op.focus();
+}
+
+async function liveLogin(e){
+  if(e) e.preventDefault();
+  const op=$("#agOp"), tok=$("#agTok");
+  const name=(op&&op.value||"").trim(), token=(tok&&tok.value)||"";
+  if(!name||!token){ agSpine("err"); agErr("username and password are required"); return; }
+  agBusy(true); agSpine("verifying"); agErr("");
+  let r=null;
+  try{
+    r = await fetch("/api/v1/session",{ method:"POST", credentials:"same-origin",
+      headers:{ "X-TG-Operator":name, "Authorization":"Bearer "+token } });
+  }catch(ex){ agBusy(false); agSpine("err"); agErr("network error — retry"); return; }
+  if(r.status===429){ agBusy(false); agSpine("err"); agErr("rate limited — wait a minute and retry"); return; }
+  if(!r.ok){ agBusy(false); agSpine("err"); agErr("unauthenticated — check the operator name and token"); return; }
+  agSpine("ok");
+  await liveAdopt();
+}
+
+/* ---- adoption: swap ONLY what the live surface actually serves ---- */
+/* liveInjectEstateDepth wires the Estate Depth inspector (#estatedepth) to REAL data by replacing the
+   fixture globals its render reads (ESTATE.nodes/edges, HOSTS, ALERTS) with the live estate graph
+   (/v1/estate) and accepted-alert window (/v1/alerts) — the LEDGER.push pattern. The estate2 render
+   (estateNodeDetail/est2View) is consumed UNCHANGED: node list, dependencies, blast radius, node metadata,
+   and active-alerts become real. Node health is DERIVED honestly from the alerts on that node (a crit alert
+   → crit, a warn → warn, else ok) since the estate graph carries no health field. Golden signals + the
+   incident master-clock stay their labeled "fixture" (they need a per-node prometheus time-series that has
+   no endpoint yet). Sessions-on-node stays empty until the session list carries host. Called once per adopt,
+   before the post-adopt re-render, so a direct land on #estatedepth shows real data. */
+function liveEstSev(s){ s=String(s||"").toLowerCase(); return s.startsWith("crit")?2:(s.startsWith("warn")?1:0); }
+function liveEstSite(name){ const m=String(name||"").match(/^([a-z]{2}[a-z]*\d{2})/i); return m?m[1]:String(name||"").slice(0,7); }
+function liveEstTime(t){ if(!t) return ""; const d=new Date(t); return isNaN(d)?"":d.toISOString().slice(11,19); }
+function liveInjectEstateDepth(){
+  if(typeof ESTATE==="undefined") return; // estate2 module not loaded
+  // worst live-alert severity per host → the node's health chip + list sort
+  const sevByHost={};
+  (Array.isArray(liveState.alerts)?liveState.alerts:[]).forEach(a=>{
+    if(!a || !a.host) return; const r=liveEstSev(a.severity||a.sev);
+    if(!(a.host in sevByHost) || r>sevByHost[a.host]) sevByHost[a.host]=r; });
+  const health=hn=>({2:"crit",1:"warn"})[sevByHost[hn]]||"ok";
+  const est=liveState.estate;
+  if(est && Array.isArray(est.nodes)){
+    // /v1/estate models the same host as MULTIPLE node types — a network-discovered 'host' AND its proxmox
+    // 'lxc'/'vm'/'pve_node' (name+type is unique, but ~150 names appear twice). The inspector shows ONE row
+    // per host, so dedupe by name, preferring the specific virtualization type over the generic 'host'.
+    const byName={};
+    est.nodes.forEach(n=>{ const c=byName[n.name];
+      if(!c || (c.type==="host" && n.type!=="host")) byName[n.name]={name:n.name,type:n.type}; });
+    const uniq=Object.keys(byName).map(k=>byName[k]);
+    ESTATE.nodes = uniq.map(n=>({ id:n.name, health:health(n.name), r:n.type, type:n.type }));
+    ESTATE.edges = (est.edges||[]).map(e=>[ e.from, e.to, (e.confidence==null?1:e.confidence) ]);
+    if(typeof HOSTS!=="undefined"){
+      Object.keys(HOSTS).forEach(k=>delete HOSTS[k]);
+      uniq.forEach(n=>{ HOSTS[n.name]={ site:liveEstSite(n.name), role:n.type, health:health(n.name) }; });
+    }
+  }
+  if(typeof ALERTS!=="undefined" && Array.isArray(liveState.alerts)){
+    const sevName=s=>({2:"crit",1:"warn"})[liveEstSev(s)]||"info";
+    const mapped=liveState.alerts.map(a=>({
+      id:a.external_ref||a.source_id||"", src:a.source_type||a.src||"", host:a.host||"",
+      rule:a.alert_rule||a.rule||"", sev:sevName(a.severity||a.sev),
+      ts:a.ts||liveEstTime(a.observed_at||a.received_at), state:a.state||"active",
+      session:a.workflow_id||null }));
+    ALERTS.length=0; ALERTS.push(...mapped);
+  }
+}
+
+async function liveAdopt(){
+  agBusy(true); agSpine("verifying"); agErr("");
+  let who;
+  try { who = await liveGet("/v1/whoami"); }
+  catch(e){ liveLoginOverlay(); return; }
+  liveState.on = true;
+  liveState.operator = String(who.source||"").replace(/^operator:/,"");
+  liveState.mutation = !!who.mutation_enabled;
+  liveState.postureStale = !!who.posture_stale;
+
+  // Reveal the console now — identity is verified. Every fetch below runs AFTER this, never before.
+  revealConsole();
+
+  // posture bar: identity + posture become live
+  const whoEl=$("#whoName"); if(whoEl && liveState.operator) whoEl.textContent = liveState.operator;
+  const conn=$("#connTxt"); if(conn) conn.textContent = "API LIVE";
+  // The mutation posture reported here is the WORKER's live posture (not the read-only grounder's gate);
+  // when it is stale/unpublished the breaker shows "unverified", never a confident OFF.
+  setBreaker(liveState.mutation, liveState.postureStale, who.posture_source);
+
+  // the preview flag tells the truth per-state
+  $$(".preview-flag").forEach(el=>{
+    el.innerHTML=""; el.append(h("i",{style:"background:var(--match)"}),
+      "LIVE · "+(liveState.operator||"operator")+" · read-only session");
+    el.style.borderStyle="solid";
+  });
+  const foot=$(".rail .foot div:last-child");
+  if(foot) foot.innerHTML="Posture, ledger &amp; sessions are <b>live</b> from the control plane.<br>Charts/logs remain labeled fixtures until their read surfaces land.";
+
+  // live ledger
+  try{
+    const page = await liveGet("/v1/ledger");
+    if(Array.isArray(page.entries)){
+      liveState.ledger = page.entries.slice(-40).reverse().map(e=>({
+        seq:e.seq, ts:"", actor: e.decision&&e.decision.startsWith("human")?"human":"system",
+        kind:(e.decision||"")+(e.withheld?" (withheld)":""), ref:e.reason||"", action:(e.action_id||"").slice(0,8),
+        hash:(e.hash||"").slice(0,4)+"…"+(e.hash||"").slice(-4), prev:(e.prev_hash||"").slice(0,4)+"…"+(e.prev_hash||"").slice(-4)}));
+      if(liveState.ledger.length){
+        LEDGER.length=0; LEDGER.push(...liveState.ledger);
+        const chip=$("#chainSeq"); if(chip) chip.textContent=String(liveState.ledger[0].seq);
+      }
+    }
+  }catch(e){ /* ledger stays fixture-labeled */ }
+
+  // live alerts (REQ-510) — the accepted-envelope window
+  try{
+    const page = await liveGet("/v1/alerts?limit=50");
+    liveState.alerts = page.alerts||[];
+  }catch(e){ liveState.alerts = null; }
+
+  // live governance posture (REQ-511), secret references (REQ-512), module capabilities
+  try{ liveState.governance = await liveGet("/v1/governance"); }catch(e){ liveState.governance=null; }
+  try{ const p=await liveGet("/v1/secrets"); liveState.secretRefs=p.refs||[]; liveState.sealed=p.sealed||[]; }catch(e){ liveState.secretRefs=null; liveState.sealed=null; }
+  // refresh the nav badge from the REAL missing count (retiring the fixture SEC_REFS count).
+  try{ const m=(liveState.secretRefs||[]).filter(r=>!r.resolved).length; $$('[data-badge="secretsMissing"]').forEach(el=>{ el.textContent=String(m); el.style.display=m?"":"none"; }); }catch(e){}
+  try{ liveState.caps = await liveGet("/v1/capabilities"); }catch(e){ liveState.caps=null; }
+
+  // live estate graph (REQ-516) — the worker's published causal graph
+  try{ liveState.estate = await liveGet("/v1/estate"); }catch(e){ liveState.estate=null; }
+
+  // live grounding scorecard (REQ-517) — the verifier's aggregate report card
+  try{ liveState.grounding = await liveGet("/v1/grounding"); }catch(e){ liveState.grounding=null; }
+  if(liveState.grounding){
+    const g=liveState.grounding, b=$('[data-badge="grounding"]');
+    if(b) b.textContent = (g.match_rate!=null) ? Math.round(g.match_rate*100)+"%" : "—";
+  }
+
+  // API contract (REQ-515) — the generated endpoint map, fetched as raw YAML text
+  try{
+    const r = await fetch("/api/v1/contract", { credentials:"same-origin" });
+    liveState.contract = r.ok ? await r.text() : null;
+  }catch(e){ liveState.contract = null; }
+
+  // live model fleet (REQ-514) — the gateway's verbatim inventory
+  try{ liveState.modelsGw = await liveGet("/v1/models"); }catch(e){ liveState.modelsGw=null; }
+
+  // live sessions (REQ-509) — adopted into a LIVE strip on Command
+  try{
+    const page = await liveGet("/v1/sessions?limit=50");
+    liveState.sessions = page.sessions||[]; liveState.sessionsErr = null;
+  }catch(e){ liveState.sessions = null; liveState.sessionsErr = (e&&e.status)||0; }
+
+  // live pending decisions (REQ-519) — the POLL_PAUSE approvals queue the Runner is waiting on
+  try{
+    const page = await liveGet("/v1/decisions");
+    liveState.decisions = page.decisions||[];
+  }catch(e){ liveState.decisions = null; }
+
+  // live control-plane configuration (REQ-520) — the resolved knobs + their source (law/env/console)
+  try{
+    const page = await liveGet("/v1/config");
+    liveState.config = page.config||[];
+  }catch(e){ liveState.config = null; }
+
+  // live credential engine (REQ-526, epic TG-107) — sync sources + drift, reach coverage, and the
+  // per-target resolution audit. All non-secret metadata (INV-13); an unwired endpoint 503s to null.
+  try{ const p = await liveGet("/v1/credentials/sources"); liveState.credSources = p.sources||[]; }catch(e){ liveState.credSources = null; }
+  try{ liveState.credCoverage = await liveGet("/v1/credentials/coverage"); }catch(e){ liveState.credCoverage = null; }
+  try{ const p = await liveGet("/v1/credentials/resolutions?limit=50"); liveState.credResolutions = p.resolutions||[]; }catch(e){ liveState.credResolutions = null; }
+
+  // live policy engine (spec/015 T-015-12, epic TG-94) — the active autonomy mode + honest posture, the
+  // rules-as-data ASA policy, the per-op-class graduation ladder, and the recent decision log. All
+  // non-secret metadata (INV-13); an unwired endpoint 503s to null so the surface stays honest.
+  try{ liveState.policyMode = await liveGet("/v1/policy/mode"); }catch(e){ liveState.policyMode = null; }
+  try{ liveState.policyRules = await liveGet("/v1/policy/rules"); }catch(e){ liveState.policyRules = null; }
+  try{ const p = await liveGet("/v1/policy/graduation"); liveState.policyGraduation = p.classes||[]; }catch(e){ liveState.policyGraduation = null; }
+  try{ const p = await liveGet("/v1/policy/decisions?limit=50"); liveState.policyDecisions = p.decisions||[]; }catch(e){ liveState.policyDecisions = null; }
+
+  // live actuation regime engine (spec/017 T-017-7, REQ-1716) — the append-only regime_resolution /
+  // regime_actuation / deferred_verdict audit tails + the per-lane coverage roll-up. NON-SECRET (INV-13):
+  // the AWX token appears only as a SecretRef reference. An unwired reader 503s to null (fail-closed).
+  try{ liveState.regime = await liveGet("/v1/regime?limit=50"); }catch(e){ liveState.regime = null; }
+
+  // left-nav badge counts: overridden here only where a live value was actually fetched above
+  // (the same adopt-time pattern the grounding badge already used); anything without one keeps
+  // its boot-time fixture count until a live read surface exists for it.
+  (function(){
+    const set=(k,v)=>{ $$('[data-badge="'+k+'"]').forEach(el=>el.textContent=String(v)); };
+    if(Array.isArray(liveState.decisions)) set("awaiting", liveState.decisions.length);
+    if(Array.isArray(liveState.credSources)) set("credentials", liveState.credSources.length);
+    if(liveState.policyMode && liveState.policyMode.mode) set("policy", liveState.policyMode.mode);
+    if(liveState.regime && Array.isArray(liveState.regime.lane_coverage)) set("regime", liveState.regime.lane_coverage.length);
+    if(liveState.estate && liveState.estate.available) set("estate", liveState.estate.node_count||0);
+    if(Array.isArray(liveState.alerts)) set("alerts", liveState.alerts.length);
+    if(Array.isArray(liveState.ledger) && Array.isArray(liveState.alerts)) set("logs", liveState.ledger.length + liveState.alerts.length);
+    if(liveState.estate || Array.isArray(liveState.sessions)){
+      // same adoption guard views.knowledge itself uses, so the badge always agrees with the view
+      const km = knowLiveModel();
+      set("knowledge", km.hosts.length + km.incidents.length + km.rules.length);
+    }
+  })();
+
+  // autonomy annunciator: never invented from the SESSIONS fixture (mutation is OFF, so a live
+  // estate cannot show AUTO/AUTO_NOTICE) — recomputed from live governance.bands (authoritative),
+  // falling back to live sessions; the markup's own "—" placeholders stand until one of those lands.
+  (function(){
+    const el=$("#annun"); if(!el) return;
+    let counts=null;
+    if(liveState.governance && liveState.governance.bands){
+      const b=liveState.governance.bands;
+      counts={auto:b.AUTO||0, notice:b.AUTO_NOTICE||0, pause:b.POLL_PAUSE||0};
+    } else if(Array.isArray(liveState.sessions)){
+      counts={auto:0, notice:0, pause:0};
+      liveState.sessions.forEach(s=>{ const k=s.band==="AUTO"?"auto":s.band==="AUTO_NOTICE"?"notice":"pause"; counts[k]++; });
+    }
+    if(counts){
+      const a=el.children;
+      a[0].querySelector("b").textContent=counts.auto;
+      a[1].querySelector("b").textContent=counts.notice;
+      a[2].querySelector("b").textContent=counts.pause;
+    }
+  })();
+
+  // Wire the Estate Depth inspector's fixture globals to the live estate graph + alerts before the render.
+  // DEFENSIVE: revealConsole() already ran far above, so a data-shape surprise in the live-inject must NEVER
+  // break the boot — degrade to the fixture globals and keep going (nav, stream, other views stay alive).
+  try { liveInjectEstateDepth(); } catch(e){ try{ console.warn("live estate-depth inject skipped:", e); }catch(_){} }
+
+  // Re-render whatever view the operator LANDED on — not only #command — now that the live spine (sessions,
+  // estate, ledger, …) is adopted. Landing DIRECTLY on #workflows (or any deep view) rendered once during
+  // boot in the on=true/sessions-still-loading window; without this re-render it would stay stuck on that
+  // mid-boot state instead of the real walk. Wrapped so a single view's render error can't strand the shell.
+  try { route((location.hash || "#command").replace(/^#/, "") || "command"); }
+  catch(e){ try{ console.warn("post-adopt render error:", e); }catch(_){} }
+
+  // the live dot becomes a REAL stream (REQ-513): posture events over SSE, never a simulation
+  liveStream();
+}
+
+let liveES=null;
+function liveStream(){
+  if(liveES || typeof EventSource==="undefined") return;
+  try{ liveES = new EventSource("/api/v1/events"); }catch(e){ return; }
+  const conn=$("#connTxt");
+  liveES.addEventListener("posture",ev=>{
+    if(conn) conn.textContent="SSE LIVE";
+    try{
+      const g=JSON.parse(ev.data);
+      liveState.governance=g;
+      liveState.mutation=!!g.mutation_enabled;
+      liveState.postureStale=!!g.posture_stale;
+      const chip=$("#chainSeq"); if(chip && g.chain) chip.textContent=String(g.chain.seq);
+      setBreaker(!!g.mutation_enabled, !!g.posture_stale, g.posture_source);
+    }catch(e){}
+  });
+  liveES.onerror=()=>{ if(conn) conn.textContent="API · STREAM DOWN"; };
+}
+
+/* Command gains a LIVE strip when the spine serves sessions; the rich fixture queue stays beneath,
+   relabeled DEMO, until every field it renders is live-served. */
+const liveOrigCommand = views.command;
+views.command = function(){
+  const wrap = liveOrigCommand();
+  if(!liveState.on) return wrap;
+  const strip = h("div",{style:"margin-bottom:16px"});
+  strip.append(h("div",{class:"sec"},
+    h("span",{class:"lbl",style:"color:var(--match)"},"LIVE · audit spine"),
+    h("h3",{},"Sessions the control plane has recorded"),
+    h("span",{class:"rule"})));
+  const s = liveState.sessions;
+  if(s===null){
+    strip.append(h("div",{class:"empty",style:"padding:18px"},
+      h("div",{class:"desc"},liveSessionsUnavailable())));
+  } else if(!s.length){
+    strip.append(h("div",{class:"empty",style:"padding:18px"},
+      h("div",{class:"big"},"The spine is empty"),
+      h("div",{class:"desc"},"No triage sessions recorded yet — a quiet estate is a healthy estate.")));
+  } else {
+    const card=h("div",{class:"wrapcard"}); const t=h("table",{class:"tbl"});
+    t.append(h("thead",{},h("tr",{},...["Ref","Band","Risk","Action","Verdict","Classified"].map(x=>h("th",{},x)))));
+    const tb=h("tbody");
+    s.forEach(r=>tb.append(h("tr",{},
+      h("td",{class:"m",style:"color:var(--territory)"},r.external_ref),
+      h("td",{},h("span",{class:"bandtag "+(r.band==="AUTO"?"auto":r.band==="AUTO_NOTICE"?"notice":"pause")},r.band)),
+      h("td",{class:"m"},r.risk_level),
+      h("td",{class:"m",style:"color:var(--map)"},String(r.action_id||"").slice(0,8)),
+      h("td",{class:"m",style:r.verdict==="deviation"?"color:var(--deviation)":r.verdict==="match"?"color:var(--match)":r.verdict==="partial"?"color:var(--partial)":"color:var(--ink4)"},r.verdict||"pending"),
+      h("td",{class:"m",style:"color:var(--ink3)"},String(r.classified_at||"").slice(0,19).replace("T"," ")))));
+    t.append(tb); card.append(t); strip.append(card);
+  }
+  strip.append(h("div",{class:"sec",style:"margin-top:18px"},
+    h("span",{class:"lbl"},"demo"),
+    h("h3",{},"Representative fixtures (design preview)"),
+    h("span",{class:"rule"})));
+  wrap.prepend(strip);
+  return wrap;
+};
+
+/* Alerts view gains a LIVE strip (the accepted-envelope window since boot). */
+const liveOrigAlerts = views.alerts;
+views.alerts = function(){
+  if(!liveState.on) return liveOrigAlerts();
+  const a = liveState.alerts;
+  const strip = h("div",{style:"margin-bottom:16px"});
+  strip.append(h("div",{class:"sec"},
+    h("span",{class:"lbl",style:"color:var(--match)"},"LIVE · ingest front door"),
+    h("h3",{},"Accepted alerts (recent window)"),
+    h("span",{class:"rule"})));
+  if(a===null){
+    strip.append(h("div",{class:"empty",style:"padding:16px"},h("div",{class:"desc"},"/v1/alerts not served by this control plane yet.")));
+  } else if(!a.length){
+    strip.append(h("div",{class:"empty",style:"padding:16px"},
+      h("div",{class:"big"},"No alerts accepted in this window"),
+      h("div",{class:"desc"},"The front door is up; nothing has fired since boot.")));
+  } else {
+    const card=h("div",{class:"wrapcard"}); const t=h("table",{class:"tbl"});
+    t.append(h("thead",{},h("tr",{},...["Ref","Source","Rule","Sev","Host","Received","Workflow"].map(x=>h("th",{},x)))));
+    const tb=h("tbody");
+    a.forEach(r=>tb.append(h("tr",{},
+      h("td",{class:"m",style:"color:var(--territory)"},r.external_ref),
+      h("td",{class:"m"},r.source_type),
+      h("td",{class:"m"},r.alert_rule),
+      h("td",{class:"m "+(r.severity==="critical"?"sev-crit":r.severity==="warning"?"sev-warn":"sev-info")},String(r.severity||"").toUpperCase()),
+      h("td",{class:"m terr"},r.host||"—"),
+      h("td",{class:"m",style:"color:var(--ink3)"},String(r.received_at||"").slice(11,19)),
+      h("td",{class:"m",style:"color:var(--map)"},r.workflow_id||"—"))));
+    t.append(tb); card.append(t); strip.append(card);
+  }
+  // When the live front door has real accepted alerts, that IS the page — no fixture clutter beneath.
+  if(a && a.length) return strip;
+  // Otherwise keep the labeled design-preview fixtures as an illustrative preview.
+  strip.append(h("div",{class:"sec",style:"margin-top:14px"},h("span",{class:"lbl"},"demo"),
+    h("h3",{},"Representative fixtures (design preview)"),h("span",{class:"rule"})));
+  const wrap = liveOrigAlerts();
+  wrap.prepend(strip);
+  return wrap;
+};
+
+/* Governance view: a LIVE posture strip from /v1/governance. */
+const liveOrigGov = views.governance;
+views.governance = function(){
+  const wrap = liveOrigGov();
+  if(!liveState.on || !liveState.governance) return wrap;
+  const g = liveState.governance;
+  const bands=g.bands||{};
+  const strip=h("div",{style:"margin-bottom:16px"},
+    h("div",{class:"sec"},h("span",{class:"lbl",style:"color:var(--match)"},"LIVE · control plane"),
+      h("h3",{},"Safety posture as the components hold it"),h("span",{class:"rule"})),
+    h("div",{class:"tiles"},
+      h("div",{class:"tile stripe "+(g.posture_stale?"pause":(g.mutation_enabled?"dev":"ok"))},h("div",{class:"lbl"},"Mutation"),
+        h("div",{class:"big "+(g.posture_stale?"pause":(g.mutation_enabled?"dev":"ok"))},g.posture_stale?"UNKNOWN":(g.mutation_enabled?"ON":"OFF")),
+        h("div",{class:"sub"},g.posture_stale
+          ? ("worker posture stale/unpublished ("+(g.posture_source||"?")+") — last known "+(g.mutation_enabled?"ON":"OFF"))
+          : (g.mutation_enabled?("worker effect leaf: "+(g.effect_capability||"—")):(g.preflight_green?"mutation preflight PROVEN":"mutation preflight unproven · expected while OFF")))),
+      h("div",{class:"tile"},h("div",{class:"lbl"},"Band distribution · spine"),
+        h("div",{class:"big"},String((bands.AUTO||0)+(bands.AUTO_NOTICE||0)+(bands.POLL_PAUSE||0))),
+        h("div",{class:"sub"},(bands.AUTO||0)+" auto · "+(bands.AUTO_NOTICE||0)+" notice · "+(bands.POLL_PAUSE||0)+" pause")),
+      h("div",{class:"tile stripe map"},h("div",{class:"lbl"},"Chain head"),
+        h("div",{class:"big"},String(g.chain&&g.chain.seq||0)),
+        h("div",{class:"sub mono"},String(g.chain&&g.chain.hash||"—").slice(0,16)))));
+  wrap.prepend(strip);
+  return wrap;
+};
+
+/* Workflows view gains a LIVE approvals strip: the POLL_PAUSE decisions the Runner is waiting on
+   (REQ-519), each with Approve/Deny that POSTs the operator vote (REQ-518/INV-12). The vote binds the
+   sealed action_id the poll presented — the Runner accepts it ONLY for that action. Mutation stays OFF:
+   an approved action is recorded on the ledger and still refused at the mutation gate until the Phase-2
+   flip, so the console can never itself cause an estate change. */
+async function liveRefreshDecisions(){
+  try{ const p = await liveGet("/v1/decisions"); liveState.decisions = p.decisions||[]; }
+  catch(e){ liveState.decisions = null; }
+}
+async function liveVote(ref, actionID, approve, btn){
+  const row = btn && btn.closest(".appr-row");
+  const msg = row && row.querySelector(".appr-msg");
+  if(row) row.querySelectorAll("button").forEach(b=>{ b.disabled = true; });
+  const reenable = ()=>{ if(row) row.querySelectorAll("button").forEach(b=>{ b.disabled = false; }); };
+  try{
+    const r = await fetch("/api/v1/vote", { method:"POST", credentials:"same-origin",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ external_ref:ref, action_id:actionID, approve:!!approve }) });
+    if(r.status===202){
+      if(msg) msg.textContent = approve ? "approved — recorded on the ledger (mutation OFF: still refused at the gate)" : "denied — session stood down";
+      await liveRefreshDecisions(); route("workflows");
+    } else if(r.status===409){
+      if(msg) msg.textContent = "this decision window is already closed";
+      await liveRefreshDecisions();
+    } else if(r.status===403){
+      if(msg) msg.textContent = "cross-origin vote rejected"; reenable();
+    } else if(r.status===429){
+      if(msg) msg.textContent = "rate limited — retry in a moment"; reenable();
+    } else {
+      if(msg) msg.textContent = "vote delivery unavailable — retry"; reenable();
+    }
+  }catch(e){ if(msg) msg.textContent = "network error — retry"; reenable(); }
+}
+
+/* The pending-approvals strip: the POLL_PAUSE decisions the Runner is waiting on (REQ-519), each with
+   Approve/Deny that POSTs the operator vote. Extracted so the Workflows view can compose it beneath the
+   decision-tracer inspector below. */
+function liveApprovalsStrip(){
+  const d = liveState.decisions;
+  const strip = h("div",{style:"margin-bottom:16px"});
+  strip.append(h("div",{class:"sec"},
+    h("span",{class:"lbl",style:"color:var(--pause,#e0a030)"},"LIVE · human circuit-breaker"),
+    h("h3",{},"Pending approvals — POLL_PAUSE decisions awaiting your vote"),
+    h("span",{class:"rule"})));
+  if(d===null){
+    strip.append(h("div",{class:"empty",style:"padding:16px"},
+      h("div",{class:"desc"},"/v1/decisions is not served by this control plane yet.")));
+  } else if(!d.length){
+    strip.append(h("div",{class:"empty",style:"padding:18px"},
+      h("div",{class:"big"},"No decisions awaiting a vote"),
+      h("div",{class:"desc"},"Nothing is paused for a human — the governed loop is idle or acting within band.")));
+  } else {
+    const card=h("div",{class:"wrapcard"});
+    d.forEach(x=>{
+      const approaches = (x.plan && x.plan.approaches) || [];
+      const rowEl = h("div",{class:"appr-row",style:"padding:13px 15px;border-bottom:1px solid var(--line2)"},
+        h("div",{style:"display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"},
+          h("span",{class:"bandtag pause"},x.band||"POLL_PAUSE"),
+          h("span",{class:"m",style:"color:var(--territory)"},x.external_ref),
+          h("span",{class:"m",style:"color:var(--map)"},String(x.action_id||"").slice(0,10)),
+          h("span",{class:"m",style:"color:"+(x.reversible?"var(--ink3)":"var(--deviation)")},x.reversible?"reversible":"IRREVERSIBLE")),
+        h("ol",{style:"margin:8px 0 6px;padding-left:18px"},...approaches.map(a=>h("li",{style:"font-size:12px"},a))),
+        h("p",{class:"desc",style:"font-size:11.5px;margin:4px 0"},x.prediction||""),
+        h("div",{class:"appr-msg m",style:"font-size:10.5px;color:var(--ink3);min-height:13px"},""));
+      if(x.caller_can_act){
+        rowEl.append(h("div",{style:"display:flex;gap:8px;margin-top:6px"},
+          h("button",{class:"btn primary",type:"button",onclick:(e)=>liveVote(x.external_ref,x.action_id,true,e.currentTarget)},"Approve"),
+          h("button",{class:"btn",type:"button",onclick:(e)=>liveVote(x.external_ref,x.action_id,false,e.currentTarget)},"Deny")));
+      } else {
+        rowEl.append(h("div",{class:"m",style:"font-size:10.5px;color:var(--ink4);margin-top:5px"},
+          "read-only session — voting needs an operator with authority on this decision"));
+      }
+      card.append(rowEl);
+    });
+    strip.append(card);
+  }
+  return strip;
+}
+
+/* The decision-tracer inspector (spec/020 REQ-2011/2012): the console's face on GET /v1/sessions/{ref}.
+   The audit-spine session list (/v1/sessions) drives a selectable index; picking one fetches the per-session
+   detail endpoint and renders the REAL governed walk — classify -> propose -> predict -> verify — from the
+   endpoint, in place of the WF_RUNS design fixtures. Observe-only: every field shown is a committed spine
+   value (INV-15 — a step with no verdict reads "pending", never a fabricated one), no secret ever (INV-13). */
+/* ===================== decision tracer, wired into the BEAUTIFUL wfView =====================
+   Owner directive: keep the WF_RUNS 10-node design (modules/workflows/js.txt — wfView/wfNodeEl/wfPayEl/
+   wfCmpEl/wfKidEls consumed UNCHANGED) and feed it REAL /v1/sessions data. dtoToWfRun() is the sole pure
+   mapper: it projects one SessionDetailDTO (+ its list row) onto the exact WF_RUNS run/node contract, so
+   nothing wfHead/wfNodeEl read is ever undefined. Observe-only: every field is a committed spine value; the
+   five stages the spine does not yet persist (ingest/correlate/rag/screen/execute) render as MUTED, HONEST
+   "no data yet" scaffolds — never a fabricated verdict/gate (INV-15). As the write-side MRs land, those
+   scaffolds light up with real data and this frontend contract does not change. */
+
+/* vocab remap: server enums -> the wfView render vocabulary */
+const WF_BAND = { AUTO:"auto", AUTO_NOTICE:"notice", POLL_PAUSE:"pause" };
+const WF_RISK_SCORE = { low:0.2, medium:0.5, high:0.8, critical:0.95 };
+const WF_NODE_ST = { ok:"done", pending:"pending", deviation:"deviation", partial:"partial", refuse:"floored", deny:"floored", failure:"failed" };
+function wfBandOf(b){ return WF_BAND[b] || "pause"; }
+function wfNodeStOf(st){ return WF_NODE_ST[st] || (st ? "done" : "pending"); }
+function wfKidStOf(st){ return (st==="failure"||st==="failed") ? "failed" : "done"; }
+/* the payload lane colour is assigned by the WF STAGE, not by the spine kind */
+function wfSrcOf(t){ return ({ ingest:"terr", correlate:"terr", rag:"terr", verify:"terr", execute:"haz" })[t] || "map"; }
+
+/* the ten canonical stages, in timeline order, and the source each scaffold awaits */
+const WF_STAGES = ["ingest","correlate","rag","classify","commit","agent","screen","gate","execute","verify"];
+const WF_SCAFFOLD_SRC = { ingest:"the durable alert-log", correlate:"correlation evidence", rag:"retrieval evidence",
+  screen:"the signal screen", execute:"the dry-run trail", classify:"the risk classifier", commit:"the prediction",
+  agent:"the agent loop", gate:"the interceptor gate chain", verify:"the mechanical verdict" };
+/* execute + verify are absent for a DIFFERENT reason than the other scaffolds: under mutation-OFF (Shadow)
+   nothing actuates, so there is no execution to record and no post-execution verdict to compute. That is the
+   GOVERNED SAFETY POSTURE, not a missing-data gap — label it as such so the walk reads "held by Shadow", never
+   "broken". (verify only scaffolds when a session has no verdict; a completed one shows the real verdict.) */
+const WF_SHADOW_STEPS = { execute:1, verify:1 };
+function wfScaffold(t){
+  // The honest note rides in the LABEL so a muted, un-instrumented stage reads at a glance (the collapsed
+  // header shows it) — never a fabricated verdict/gate/pay (INV-15). The fuller note expands on click.
+  if(WF_SHADOW_STEPS[t]){
+    return { t, st:"pending", src:wfSrcOf(t), _synth:true, _shadow:true,
+      lb: t==="execute" ? "execute · not run (Shadow)" : "verify · awaiting execution",
+      pay: t==="execute"
+        ? "Nothing actuates while mutation is OFF (Shadow mode) — there is no execution to record. The real effect and its dry-run trail populate only when the mode is flipped owner-present."
+        : "The mechanical verdict is computed only AFTER a governed action executes. Under Shadow mode nothing executed, so there is no verdict yet — this populates once an action runs and is verified." };
+  }
+  return { t, lb:t+" · no data yet", st:"pending", src:wfSrcOf(t), _synth:true,
+    pay:(WF_SCAFFOLD_SRC[t]||"this stage")+" is not recorded to the spine yet — it lights up as the write-side lands" }; }
+
+/* dtoToWfRun — the pure real->WF_RUNS projection. detail may be null (a list-only summary before the walk is
+   fetched); every unconditional field still gets a safe, honest default so the beautiful header never throws. */
+function dtoToWfRun(detail, row){
+  const d = detail || {};
+  const band = wfBandOf(d.band || (row && row.band));
+  const nodes = Array.isArray(d.nodes) ? d.nodes : [];
+  const first = k => nodes.find(n => n.t===k);
+
+  const cl = first("classify");
+  const classifyNode = cl
+    ? { t:"classify", lb:cl.lb||"classify", src:"map", st:wfNodeStOf(cl.st), ts:cl.ts, band:wfBandOf(cl.band)||band, pay:cl.pay }
+    : wfScaffold("classify");
+
+  // commit = the sealed-action / prediction commit boundary. Sourced ONLY from a REAL committed artifact —
+  // the assembler emits a predict step whenever a manifest was sealed (plan_ops) OR a consequence prediction
+  // was committed. NEVER keyed on d.action alone (the classification's content hash exists for every classified
+  // session — rendering a commit from it fabricates a prediction that was never committed, INV-15). The action
+  // hash is shown only when a real commit boundary exists.
+  const pr = first("predict");
+  const prSealed = !!(pr && pr.lb==="Sealed action");   // a manifest was sealed but no consequence prediction committed
+  const commitNode = pr
+    ? { t:"commit", lb: prSealed ? "sealed action" : "prediction.commit", src:"map",
+        // a sealed end-state is COMMITTED (done); only an unscored prediction awaiting the verify window is pending.
+        st: prSealed ? "done" : wfNodeStOf(pr.st), ts:pr.ts, hash:d.action||"", pay: pr.pay,
+        // the sealed action's structured end-state ops [{op,t}] — wfPayEl renders these as add/change/destroy
+        plan: (Array.isArray(pr.plan_ops) && pr.plan_ops.length) ? pr.plan_ops : undefined }
+    : wfScaffold("commit");
+
+  // agent = fold the flat agent-cycle (+credential) steps into ONE node with nested tool-call kids.
+  // Prefer a real detail.agent_kids[] when a future backend MR ships one (the fold is the fallback).
+  const propose = first("propose");
+  const cycles = nodes.filter(n => n.t==="agent-cycle" || n.t==="credential");
+  let agentNode;
+  if(Array.isArray(d.agent_kids) && d.agent_kids.length){
+    agentNode = { t:"agent", lb:"agent-loop", src:"map", st:"done", ts:cycles[0]&&cycles[0].ts,
+      pay: propose ? propose.pay : (d.agent_kids.length+" tool call(s)"), kids:d.agent_kids };
+  } else if(cycles.length || propose){
+    agentNode = { t:"agent", lb:"agent-loop", src:"map", st:"done", ts:(cycles[0]&&cycles[0].ts)||(propose&&propose.ts),
+      pay: propose ? propose.pay : (cycles.length+" reasoning cycle(s)"),
+      kids: cycles.map(c => ({ tool:(c.plan&&c.plan[0]) || (c.t==="credential"?"credential":"agent"),
+        q:c.lb||"", res:c.pay||"", dur:null, retry:0, st:wfKidStOf(c.st) })) };
+  } else agentNode = wfScaffold("agent");
+
+  // gate = the WHOLE ordered AUTHORIZATION gate chain (interceptor_gate_verdict) + policy decision. Fold every
+  // gate row, not just the first, so a LATE floor (e.g. the mode chokepoint) is never masked by an earlier
+  // admission pass. The interceptor's trailing 'verify' gate carries the MECHANICAL VERDICT (match/partial/
+  // deviation), not an authorization outcome — it is rendered at the verify slot and EXCLUDED here so a clean
+  // deviation is never miscast as a governance floor. A gate floors the chain only on an explicit refusal.
+  const gateNodes = nodes.filter(n => n.t==="gate" && (n.gate||"").toLowerCase() !== "verify" && !/verify/i.test(n.lb||""));
+  const policy = first("policy");
+  let gateNode;
+  if(gateNodes.length || policy){
+    const floored = gateNodes.filter(g => /refuse|deny|block/i.test(g.verdict||""));
+    const anyFloored = floored.length > 0 || (policy && policy.verdict==="deny");
+    // passed = no floor AND either an authorization gate resolved or the policy allowed; an unknown policy
+    // verdict with no gates is NEITHER passed nor floored (neutral — never a fabricated floor, MINOR-3).
+    const decided = gateNodes.length > 0 || (policy && (policy.verdict==="auto"||policy.verdict==="approve"));
+    const passed = !anyFloored && decided;
+    const g0 = gateNodes[0] || policy;
+    const chainPay = gateNodes.length
+      ? gateNodes.map(g => "· "+(g.gate||g.lb||"gate")+": "+(g.verdict||"?")).join("\n")
+      : (policy && policy.pay);
+    gateNode = { t:"gate", lb: gateNodes.length>1 ? (gateNodes.length+"-gate chain") : ((g0&&g0.lb)||"gate"),
+      src:"map", st: anyFloored?"floored":wfNodeStOf(g0&&g0.st), ts:(g0&&g0.ts),
+      // pass | floored | (neutral, when a decision boundary exists but neither passed nor refused)
+      gate: anyFloored ? "floored" : (passed ? "pass" : undefined), pay:chainPay, hash:(g0&&g0.hash) };
+  } else gateNode = wfScaffold("gate");
+
+  // verify = the mechanical verdict
+  const vf = first("verify");
+  const verifyVerdict = (vf && vf.verdict) || d.verdict || "";
+  const verifyNode = vf
+    ? { t:"verify", lb:vf.lb||"verify", src:"terr", st:wfNodeStOf(vf.st), ts:vf.ts, verdict:verifyVerdict, pay:vf.pay }
+    : wfScaffold("verify");
+
+  // screen = the admission-time signal screen (session_risk_audit.signals_json): the never-auto floor / blast-radius
+  // / poll_reason signals that drove the band. Real when the classifier recorded any; else the honest scaffold.
+  const sc = first("screen");
+  const screenNode = sc
+    ? { t:"screen", lb:sc.lb||"admission screen", src:"map", st:wfNodeStOf(sc.st), ts:sc.ts, pay:sc.pay }
+    : wfScaffold("screen");
+
+  // rag = the retrieval context (session_triage.skill_loads): the composed-seed provenance the proposal was
+  // built from. The skill/precedent loads ride in node.plan (the DTO's plan lane); render them as the pay so
+  // the muted stage lights up with real retrieval evidence. Real when loads exist; else the honest scaffold.
+  const rg = first("rag");
+  const ragLoads = rg && Array.isArray(rg.plan) ? rg.plan : [];
+  const ragNode = (rg && ragLoads.length)
+    ? { t:"rag", lb:rg.lb||"rag-context", src:"terr", st:wfNodeStOf(rg.st), ts:rg.ts,
+        pay:(rg.pay?rg.pay+"\n":"")+"composed seed:\n· "+ragLoads.join("\n· ") }
+    : wfScaffold("rag");
+
+  // execute = the actual actuation. Lit from the execute-named interceptor gate verdict when a governed
+  // actuation traversed it (mutation ON): pass ⇒ the effect ran. Under Shadow (mutation OFF) nothing actuates,
+  // so there is no execute gate row and the honest "not run (Shadow)" scaffold shows — never a false Shadow
+  // label over a real actuation.
+  const execGate = nodes.find(n => n.t==="gate" && /execute/i.test(n.gate||n.lb||""));
+  const executeNode = execGate
+    ? { t:"execute", lb: execGate.verdict==="pass" ? "execute · ran" : ("execute · "+(execGate.verdict||"?")),
+        src:"haz", st:wfNodeStOf(execGate.st), ts:execGate.ts,
+        pay: execGate.verdict==="pass" ? "action executed — execute gate passed" : ("execute gate: "+(execGate.verdict||"?")) }
+    : wfScaffold("execute");
+
+  // ingest = the durable front-door alert (ingest_alert): the source · rule · severity · host + summary the
+  // ingest tier admitted. Real when a durable record exists; else a light honest scaffold carrying only the
+  // front-door identity we DO have (a pull-minted session bypassed the front door — no durable record).
+  const ig = first("ingest");
+  const ingestNode = ig
+    ? { t:"ingest", lb: ig.lb||"ingested", src:"terr", st:wfNodeStOf(ig.st), ts:ig.ts, pay: ig.pay }
+    : { t:"ingest", lb:"ingested", src:"terr", st:"done", _synth:true,
+        pay:"alert "+(d.ref||(row&&row.external_ref)||"")+(d.host?(" · "+d.host):"")+"\n(front-door detail not persisted — pull-minted or pre-durable-log session)" };
+
+  // correlate = the deterministic dedup/suppression decision (governance_ledger "suppress:"+ref). Real when
+  // the run recorded one; else the honest scaffold (a session predating the suppression-ledger wiring).
+  const co = first("correlate");
+  const correlateNode = co
+    ? { t:"correlate", lb: co.lb||"correlate", src:"terr", st:wfNodeStOf(co.st), ts:co.ts,
+        pay:(co.verdict==="clean"?"escalated — proceeded to investigation (not suppressed)\n":"")+(co.pay||"") }
+    : wfScaffold("correlate");
+
+  const slots = { ingest:ingestNode, correlate:correlateNode, rag:ragNode,
+    classify:classifyNode, commit:commitNode, agent:agentNode, screen:screenNode,
+    gate:gateNode, execute:executeNode, verify:verifyNode };
+
+  const verdict = (verifyVerdict==="match"||verifyVerdict==="partial"||verifyVerdict==="deviation") ? verifyVerdict : null;
+  const riskLabel = String(d.risk || (row && row.risk_level) || "").toLowerCase();
+  const terminal = d.status==="executed" || d.status==="stopped";
+  let status = ({ received:"running", classified:"running", proposed:"running", executed:"done", stopped:"failed" })[d.status] || "done";
+  if(band==="pause" && !verdict) status = "waiting";      // POLL_PAUSE awaiting a human vote
+  if(gateNode.gate==="floored") status = "floored";
+
+  return {
+    id: d.id || d.ref || (row && row.external_ref) || "",
+    ref: d.ref || d.id || (row && row.external_ref) || "",
+    title: d.title || d.ref || (row && row.external_ref) || "",
+    host: d.host || "", band, status,
+    live: !terminal && !!detail,          // only a loaded, non-terminal walk streams
+    elapsed: 0,
+    risk: (riskLabel in WF_RISK_SCORE) ? WF_RISK_SCORE[riskLabel] : 0.4,
+    conf: Number(d.conf) || 0,
+    exec_class: d.exec_class || "—",
+    reversible: d.reversible!==undefined ? d.reversible : true,
+    blast: d.blast || 0,
+    action: d.action || "",
+    verdict,
+    nodes: detail ? WF_STAGES.map(s => slots[s]) : WF_STAGES.map(wfScaffold),
+    _loaded: !!detail,
+  };
+}
+
+/* liveWfRuns builds the run list from the adopted /v1/sessions rows ONCE and caches it (stable object
+   references so a fetched walk merges in place across re-renders). It is the array wfView renders when live. */
+function liveWfRuns(){
+  if(liveState._wfRuns) return liveState._wfRuns;
+  liveState._wfRuns = (liveState.sessions || []).map(row => { const r = dtoToWfRun(null, row); r._row = row; return r; });
+  return liveState._wfRuns;
+}
+
+/* wfOnSelect — the wfView select hook (workflows/js.txt wfSelect): lazy-load the chosen run's walk from the
+   detail endpoint, map it in place, re-render, and stream if the run is still live. */
+async function wfOnSelect(ref){
+  const run = liveWfRuns().find(r => r.id===ref);
+  if(!run || run._loaded || run._loading) return;
+  run._loading = true;
+  let dto;
+  try{ dto = await liveGet("/v1/sessions/"+encodeURIComponent(ref)); }
+  catch(e){ run._loading = false; run._err = (e&&e.status)||"err"; route("workflows"); return; }
+  Object.assign(run, dtoToWfRun(dto, run._row), { _loading:false, _err:undefined, _row:run._row });
+  route("workflows");
+  if(run.live && window.EventSource) liveOpenWfStream(ref);
+}
+/* liveOpenWfStream subscribes to GET /api/v1/sessions/{ref}/stream (same-origin cookie auth, the elevated
+   trace-read role). The server re-assembles the walk from the durable spine and pushes the FULL current walk
+   as a `snapshot` event whenever it changed — a new boundary committed OR a step enriched in place — so the
+   client re-maps it into the run and re-renders. Real boundary rows only, never a client-side clock; it closes
+   on the server's `done` event. */
+let liveWfES = null;
+function liveCloseWfStream(){ if(liveWfES){ try{ liveWfES.close(); }catch(e){} liveWfES = null; } }
+function liveOpenWfStream(ref){
+  liveCloseWfStream();
+  let es; try{ es = new EventSource("/api/v1/sessions/"+encodeURIComponent(ref)+"/stream"); }catch(e){ return; }
+  liveWfES = es;
+  es.addEventListener("snapshot", ev=>{
+    let dto; try{ dto = JSON.parse(ev.data); }catch(e){ return; }
+    const run = liveWfRuns().find(r => r.id===ref); if(!run) return;
+    Object.assign(run, dtoToWfRun(dto, run._row), { _loaded:true, _err:undefined, _row:run._row });
+    if(wfSelId===ref) route("workflows");
+  });
+  es.addEventListener("done", ev=>{
+    let d; try{ d = JSON.parse(ev.data); }catch(e){ d = {}; }
+    const run = liveWfRuns().find(r => r.id===ref);
+    if(run && d.status){ run.status = d.status==="executed"?"done":d.status==="stopped"?"failed":run.status; run.live = false; }
+    liveCloseWfStream();
+    if(wfSelId===ref) route("workflows");
+  });
+  es.onerror = ()=>{ liveCloseWfStream(); }; /* server closed / session gone — stop, no client clock */
+}
+/* (The former flat liveTraceStepEl / liveTraceInspector renders are retired — the beautiful wfView IS the
+   live tracer now, fed by dtoToWfRun above. See the views.workflows override below.) */
+
+const liveOrigWorkflows = views.workflows;
+views.workflows = function(){
+  if(!liveState.on){ wfRunsSrc = null; return liveOrigWorkflows ? liveOrigWorkflows() : h("div",{}); }
+  const s = liveState.sessions;
+  if(Array.isArray(s) && s.length){
+    // Feed REAL sessions into the beautiful wfView — the fixture render IS the live page now. Returned
+    // UNWRAPPED so the .wf-wrap full-height two-pane grid layout is preserved exactly.
+    wfRunsSrc = liveWfRuns();
+    // mirror wfView's own faceted auto-selection so the run it opens is the one we pre-load
+    const vis = wfRunsSrc.filter(r => wfFacetPass(r, wfFacet()));
+    const sel = (wfSelId && vis.some(r => r.id===wfSelId)) ? wfSelId : (vis[0] && vis[0].id);
+    if(sel) wfOnSelect(sel); // lazy-load the effective selection (no-op once loaded)
+    return liveOrigWorkflows();
+  }
+  // No spine data yet. sessionsErr===null means the adopt fetch simply has not resolved yet (a transient
+  // boot state — the post-adopt re-render will replace this the moment sessions land); a SET sessionsErr
+  // means the fetch actually failed (auth or genuinely unreachable). Only the real failure shows the
+  // availability banner + the fixture design-preview; the loading state shows a quiet "loading", never the
+  // alarming "not reachable".
+  wfRunsSrc = null;
+  if(s===null){
+    const loading = liveState.sessionsErr === null;
+    const wrap = h("div",{class:"pad"});
+    wrap.append(h("div",{class:"empty",style:"padding:18px"},
+      h("div",{class:"desc"}, loading ? "Loading the recorded sessions…" : liveSessionsUnavailable())));
+    if(!loading && liveOrigWorkflows) wrap.append(liveOrigWorkflows());
+    return wrap;
+  }
+  return liveOrigWorkflows ? liveOrigWorkflows() : h("div",{});
+};
+
+/* Config · Secrets view (task #27 Phases B–E): the LIVE control-plane configuration (REQ-520) with
+   the ADMIN WRITE LANE (REQ-522/523/524). Console-writable non-LAW knobs are editable — rationale
+   required, hash-chain-ledgered in the WORKER before the row commits; LAW rows stay visibly pinned
+   (a write refuses with 422 — the clamp is the law). Sealed secrets are WRITE-ONLY: the value is
+   sealed server-side (envelope encryption) and never echoed; the list carries names + store:<name>
+   references only. Writes need an admin-ELEVATED session (step-up re-auth, short TTL). No secret
+   VALUE ever appears here (INV-13). */
+const cfgUI = { edit:null };
+
+async function liveRefreshConfigSecrets(){
+  try{ const p = await liveGet("/v1/config"); liveState.config = p.config||[]; }catch(e){ liveState.config = null; }
+  try{ const p = await liveGet("/v1/secrets"); liveState.secretRefs = p.refs||[]; liveState.sealed = p.sealed||[]; }catch(e){}
+  route("secrets");
+}
+
+/* admin step-up modal (REQ-522): a valid session + the SEPARATE admin credential mint a short-lived
+   server-side elevation. Nothing new is stored in the browser — the same session cookie carries on. */
+function cfgElevateOverlay(afterMsg){
+  if($("#cfgElevate")) return;
+  const form = h("form",{id:"cfgElevForm",autocomplete:"off",
+    style:"display:flex;flex-direction:column;gap:9px;padding:14px 18px 18px",
+    onsubmit:async (e)=>{
+      e.preventDefault();
+      const name=$("#cfgAdmName").value.trim(), tok=$("#cfgAdmTok").value;
+      const err=$("#cfgAdmErr"); err.textContent="";
+      if(!name||!tok){ err.textContent="admin name and token are required"; return; }
+      let r=null;
+      try{
+        r = await fetch("/api/v1/session/elevate",{ method:"POST", credentials:"same-origin",
+          headers:{ "X-TG-Admin":name, "Authorization":"Bearer "+tok } });
+      }catch(ex){ err.textContent="network error — retry"; return; }
+      if(r.status===429){ err.textContent="rate limited — wait a minute and retry"; return; }
+      if(r.status===404||r.status===405){ err.textContent="admin tier not configured on this control plane (TG_ADMIN_TOKEN unset)"; return; }
+      if(!r.ok){ err.textContent="step-up refused — check the admin name and token"; return; }
+      const g = await r.json().catch(()=>({}));
+      liveState.adminUntil = g.admin_until||null;
+      const el=$("#cfgElevate"); el&&el.remove();
+      route("secrets");
+    }},
+    h("input",{id:"cfgAdmName",name:"tg-admin-name",class:"mono",placeholder:"admin name",
+      autocomplete:"off",autocapitalize:"none",spellcheck:"false",
+      style:"background:var(--g3s);border:1px solid var(--line2);border-radius:var(--radius);padding:9px 11px;color:var(--ink);font-size:12.5px"}),
+    h("input",{id:"cfgAdmTok",name:"tg-admin-token",class:"mono",type:"password",placeholder:"admin token",
+      autocomplete:"off",
+      style:"background:var(--g3s);border:1px solid var(--line2);border-radius:var(--radius);padding:9px 11px;color:var(--ink);font-size:12.5px"}),
+    h("div",{id:"cfgAdmErr",class:"mono",style:"font-size:10.5px;color:var(--deviation);min-height:14px"}),
+    h("div",{style:"display:flex;gap:8px"},
+      h("button",{class:"btn primary",type:"submit"},"Elevate"),
+      h("button",{class:"btn",type:"button",onclick:()=>{const el=$("#cfgElevate");el&&el.remove();}},"Cancel")));
+  const scrim = h("div",{class:"pal-scrim open",id:"cfgElevate",style:"align-items:center;padding-top:0"},
+    h("div",{class:"pal",role:"dialog","aria-label":"Admin step-up",style:"max-width:430px"},
+      h("div",{style:"padding:18px 18px 4px"},
+        h("div",{class:"lbl"},"Admin step-up"),
+        h("h3",{style:"margin-top:6px;font-size:16px"},"Elevate this session"),
+        h("p",{class:"desc",style:"font-size:11.5px;margin:8px 0 0"},
+          (afterMsg||"Control-plane writes need the SEPARATE admin credential on top of your session.")+
+          " The elevation is server-side with a short TTL; reads and votes stay untouched.")),
+      form));
+  document.body.append(scrim);
+  const el=$("#cfgAdmName"); if(el) el.focus();
+}
+
+async function cfgWriteFail(r){
+  let server=""; try{ server=(await r.text()).trim().slice(0,200); }catch(e){}
+  if(r.status===401) return { elevate:true, msg:"admin elevation required — step up to write" };
+  if(r.status===403) return { msg:"cross-origin write rejected" };
+  if(r.status===404&&/unknown configuration key/.test(server)) return { msg:"refused: "+server };
+  if(r.status===404||r.status===405||r.status===503) return { msg:"write path not deployed on this control plane yet" };
+  if(r.status===422) return { msg:"refused: "+(server||"pinned by law — the clamp is the law") };
+  if(r.status===429) return { msg:"rate limited — retry in a moment" };
+  if(r.status===400) return { msg:"refused: "+(server||"a rationale is required") };
+  return { msg:"write failed ("+r.status+")"+(server?" — "+server:"") };
+}
+
+async function cfgSaveKnob(name, value, rationale, msgEl){
+  msgEl.style.color="var(--ink3)"; msgEl.textContent="recording…";
+  let r=null;
+  try{
+    r = await fetch("/api/v1/config/"+encodeURIComponent(name),{ method:"POST", credentials:"same-origin",
+      headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ value:value, rationale:rationale }) });
+  }catch(e){}
+  if(r && r.ok){
+    const out = await r.json().catch(()=>({}));
+    msgEl.style.color="var(--match)";
+    msgEl.textContent="recorded — ledger seq "+(out.ledger_seq!=null?out.ledger_seq:"?")+" · source=console";
+    cfgUI.edit=null;
+    await liveRefreshConfigSecrets();
+    return;
+  }
+  const f = r ? await cfgWriteFail(r) : { msg:"network error — retry" };
+  msgEl.style.color="var(--deviation)"; msgEl.textContent=f.msg;
+  if(f.elevate) cfgElevateOverlay("That write needs an elevated session.");
+}
+
+function cfgEditor(k){
+  const box = h("div",{style:"padding:10px 12px;border:1px solid var(--line2);border-radius:var(--radius);margin:4px 0;background:var(--g1)"});
+  const vi = h("input",{class:"mono",value:k.value||"",placeholder:"value",
+    style:"width:100%;background:var(--g3s);border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;color:var(--ink);font-size:12px"});
+  const ra = h("textarea",{class:"mono",placeholder:"rationale — required; appended to the governance ledger BEFORE the row commits",
+    style:"width:100%;min-height:46px;resize:vertical;background:var(--g3s);border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;color:var(--ink);font-size:11.5px;margin-top:6px"});
+  const msg = h("div",{class:"mono",style:"font-size:10.5px;min-height:14px;margin-top:5px;color:var(--ink3)"});
+  const save = h("button",{class:"btn primary",type:"button",disabled:true},"Save override");
+  const gate = ()=>{ save.disabled = !(ra.value.trim() && vi.value.trim()); };
+  vi.addEventListener("input",gate); ra.addEventListener("input",gate);
+  save.addEventListener("click",()=>cfgSaveKnob(k.name, vi.value.trim(), ra.value.trim(), msg));
+  box.append(
+    h("div",{class:"lbl",style:"margin-bottom:6px"},"override "+k.name),
+    vi, ra,
+    h("div",{style:"display:flex;gap:8px;align-items:center;margin-top:7px;flex-wrap:wrap"},
+      save,
+      h("button",{class:"btn",type:"button",onclick:()=>{cfgUI.edit=null;route("secrets");}},"Cancel"),
+      msg));
+  return box;
+}
+
+/* sealed-secret create form (REQ-524): write-only — the value field is cleared the moment the request
+   completes, success or not, and the response never carries it back. */
+function cfgSealForm(){
+  const nameRe=/^[a-z0-9][a-z0-9._-]{0,62}$/;
+  const box=h("div",{style:"padding:12px 14px;border:1px solid var(--line2);border-radius:var(--radius);background:var(--g1);margin-top:10px"});
+  const ni=h("input",{class:"mono",placeholder:"name — [a-z0-9._-], e.g. librenms.token",autocapitalize:"none",spellcheck:"false",
+    style:"width:100%;background:var(--g3s);border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;color:var(--ink);font-size:12px"});
+  const vi=h("input",{class:"mono",type:"password",placeholder:"secret value — write-only; sealed at rest, never echoed",autocomplete:"new-password",
+    style:"width:100%;background:var(--g3s);border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;color:var(--ink);font-size:12px;margin-top:6px"});
+  const pi=h("input",{class:"mono",placeholder:"purpose (shown on the value-less list)",
+    style:"width:100%;background:var(--g3s);border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;color:var(--ink);font-size:12px;margin-top:6px"});
+  const ra=h("textarea",{class:"mono",placeholder:"rationale — required; the ledger records name + ciphertext digest, never material",
+    style:"width:100%;min-height:44px;resize:vertical;background:var(--g3s);border:1px solid var(--line2);border-radius:var(--radius);padding:8px 10px;color:var(--ink);font-size:11.5px;margin-top:6px"});
+  const msg=h("div",{class:"mono",style:"font-size:10.5px;min-height:14px;margin-top:6px;color:var(--ink3)"});
+  const go=h("button",{class:"btn primary",type:"button",disabled:true},"Seal secret");
+  const gate=()=>{ go.disabled = !(nameRe.test(ni.value.trim()) && vi.value && ra.value.trim()); };
+  [ni,vi,ra].forEach(el=>el.addEventListener("input",gate));
+  go.addEventListener("click",async ()=>{
+    const name=ni.value.trim();
+    msg.style.color="var(--ink3)"; msg.textContent="sealing…"; go.disabled=true;
+    let r=null;
+    try{
+      r = await fetch("/api/v1/secrets/"+encodeURIComponent(name),{ method:"POST", credentials:"same-origin",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ value:vi.value, purpose:pi.value.trim(), rationale:ra.value.trim() }) });
+    }catch(e){}
+    vi.value=""; // write-only: the material leaves the page the moment the request completes
+    if(r && r.ok){
+      const out = await r.json().catch(()=>({}));
+      msg.style.color="var(--match)";
+      msg.textContent="sealed — "+(out.ref||("store:"+name))+" · ledger seq "+(out.ledger_seq!=null?out.ledger_seq:"?")+" · the value is not retrievable";
+      ni.value=""; pi.value=""; ra.value="";
+      await liveRefreshConfigSecrets();
+      return;
+    }
+    const f = r ? await cfgWriteFail(r) : { msg:"network error — the value was NOT stored; retry" };
+    msg.style.color="var(--deviation)"; msg.textContent=f.msg;
+    if(f.elevate) cfgElevateOverlay("Sealing a secret needs an elevated session.");
+    gate();
+  });
+  box.append(
+    h("div",{class:"lbl",style:"margin-bottom:6px"},"seal a new secret"),
+    ni, vi, pi, ra,
+    h("div",{style:"display:flex;gap:8px;align-items:center;margin-top:7px;flex-wrap:wrap"}, go, msg),
+    h("p",{class:"desc",style:"font-size:10.5px;margin:8px 0 0;color:var(--ink4)"},
+      "Envelope-encrypted at rest (per-secret DEK wrapped by the TG_SEAL_KEY_REF master key, name-bound AEAD). Consumable ONLY as the reference store:<name> inside the control plane — no surface ever returns the value."));
+  return box;
+}
+
+const liveOrigSecrets = views.secrets; // fixture view — RETIRED. It invented rotation ages, a rotation-horizon
+// chart, fingerprints, per-secret consumers, a ledger trail, and rotate/verify actions that the VALUE-LESS
+// /v1/secrets surface never provides (schema: ref · purpose · resolved). Rendering that alongside the real,
+// often-empty sections showed a fabricated 13-reference registry over an empty live table — confusing and, on
+// a secrets page, dishonest. The view is now rendered ONLY from real data with honest empty states — the same
+// discipline the models view adopted (INV-13; fabricated placeholders have no place in an auth-gated console).
+const SEC_LOCK = '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="3.4" y="7.1" width="9.2" height="6.4" rx="1.3"/><path d="M5.2 7.1V5.3a2.8 2.8 0 0 1 5.6 0v1.8"/></svg>';
+// The view is live-only now, so its metadata + facets drop the retired fixture concepts (consumers, rotation).
+try { if(typeof VIEW_META!=="undefined") VIEW_META.secrets = ["Secrets", "Secret references (env: / file: / bao:) — what the control plane resolves, and whether each reference is reachable now. Values never enter TG."]; } catch(e){}
+try { if(typeof FACETS!=="undefined") FACETS.secrets = [["all","All"],["missing","Missing"],["env","env:"],["file","file:"],["bao","bao:"]]; } catch(e){}
+const secScheme = r => (String(r||"").split(":")[0] || "?").toLowerCase();
+function secKindChip(scheme){
+  const col = scheme==="bao" ? "var(--match)" : scheme==="env" ? "var(--map)" : scheme==="file" ? "var(--territory)" : scheme==="store" ? "var(--notice)" : "var(--ink4)";
+  const label = scheme==="bao" ? "bao:" : scheme==="env" ? "env:" : scheme==="file" ? "file:" : scheme==="store" ? "store:" : scheme+":";
+  const title = scheme==="bao" ? "resolved from the OpenBao substrate at runtime" : scheme==="env" ? "resolved from a process environment variable" : scheme==="file" ? "read from a mounted file at runtime" : scheme==="store" ? "sealed secret, consumed by name" : "reference";
+  return h("span",{class:"m",title:title,style:"display:inline-block;padding:1px 7px;border-radius:999px;border:1px solid "+col+";color:"+col+";font-size:10px;letter-spacing:.02em"},label);
+}
+views.secrets = function(){
+  const wrap = h("div");
+  const refs = liveState.secretRefs;   // [] real, or null/undefined = endpoint unavailable
+  const sealed = liveState.sealed;
+  const cfg = liveState.config;
+
+  // header + admin step-up
+  wrap.append(h("div",{class:"sec"},
+    h("span",{class:"lbl",style:"color:var(--match)"}, liveState.on ? "LIVE · control plane" : "design preview"),
+    h("h3",{},"Secrets — references, never values"),
+    h("span",{class:"rule"}),
+    h("button",{class:"btn",type:"button",style:"font-size:10.5px;padding:3px 12px",
+      title:"step-up re-auth: sealing a secret or writing a config knob needs the separate admin credential (short server-side TTL)",
+      onclick:()=>cfgElevateOverlay()},"Elevate (admin)")));
+
+  // invariant banner — the trust anchor (hazard)
+  wrap.append(h("div",{role:"note",style:"display:flex;gap:11px;align-items:flex-start;border:1px solid var(--hazard);background:color-mix(in srgb,var(--hazard) 7%,transparent);border-radius:var(--radius);padding:11px 14px;margin-bottom:16px"},
+    h("span",{html:SEC_LOCK,style:"color:var(--hazard);flex:none;line-height:0;margin-top:1px"}),
+    h("div",{class:"desc",style:"color:var(--ink2);line-height:1.5"},
+      h("b",{style:"color:var(--hazard)"},"INVARIANT — "),
+      "every secret is a ", h("b",{},"reference"), " (", h("span",{class:"m"},"env:"), " / ", h("span",{class:"m"},"file:"), " / ", h("span",{class:"m"},"bao:"),
+      "). A secret ", h("b",{},"value"), " is never stored, displayed, logged, or entered anywhere in TG — this surface is value-less by construction.")));
+
+  if(!liveState.on){
+    wrap.append(h("div",{class:"empty",style:"padding:26px"},
+      h("div",{class:"big"},"Sign in to load the live secret registry"),
+      h("div",{class:"desc"},"References, sealed secrets, and control-plane knobs are read live — no placeholder rows are ever shown.")));
+    return wrap;
+  }
+
+  // ---- real stat tiles (derived from the value-less reference list) ----
+  if(Array.isArray(refs)){
+    const missing = refs.filter(r=>!r.resolved).length;
+    const kinds = {}; refs.forEach(r=>{ const s=secScheme(r.ref); kinds[s]=(kinds[s]||0)+1; });
+    const kindStr = Object.keys(kinds).sort().map(k=>kinds[k]+" "+k).join(" · ") || "—";
+    const nSealed = Array.isArray(sealed) ? sealed.length : 0;
+    const mk = (big, lbl, sub, col) => {
+      const t = h("div",{class:"tile"},
+        h("div",{class:"lbl"},lbl),
+        h("div",{class:"big",style:col?"color:"+col:""},String(big)),
+        sub?h("div",{class:"sub"},sub):null);
+      if(col) t.prepend(h("span",{style:"position:absolute;left:0;top:0;bottom:0;width:3px;background:"+col}));
+      return t;
+    };
+    wrap.append(h("div",{class:"tiles"},
+      mk(refs.length, "references", "value-less"),
+      mk(refs.length-missing, "resolved", "reachable now", refs.length-missing?"var(--match)":null),
+      mk(missing, "missing", missing?"blocking consumers":"all resolve", missing?"var(--deviation)":null),
+      mk(kindStr, "by scheme", "env · file · bao · store"),
+      mk(nSealed, "sealed", "write-only")));
+  }
+
+  // ---- configured secret references (REQ-512), value-less ----
+  wrap.append(h("div",{class:"sec"},h("span",{class:"lbl",style:"color:var(--match)"},"LIVE · control plane"),
+    h("h3",{},"Configured secret references"),h("span",{class:"rule"}),
+    h("span",{class:"lbl",style:"font-size:9px"},"resolution checked live")));
+  const facet = (typeof facetState!=="undefined" && facetState.secrets) || "all";
+  const shown = Array.isArray(refs) ? refs.filter(r => facet==="all" ? true : facet==="missing" ? !r.resolved : secScheme(r.ref)===facet) : refs;
+  if(refs===null || refs===undefined){
+    wrap.append(h("div",{class:"empty",style:"padding:16px"},h("div",{class:"desc"},"/v1/secrets is not served by this control plane yet.")));
+  } else if(!refs.length){
+    wrap.append(h("div",{class:"empty",style:"padding:16px"},h("div",{class:"desc"},"No secret references configured.")));
+  } else if(!shown.length){
+    wrap.append(h("div",{class:"empty",style:"padding:16px"},h("div",{class:"desc"},"No references match the “"+facet+"” filter. "+refs.length+" total.")));
+  } else {
+    const card=h("div",{class:"wrapcard"}); const t=h("table",{class:"tbl"});
+    t.append(h("thead",{},h("tr",{},...["Reference","Scheme","Purpose","Status"].map(x=>h("th",{},x)))));
+    const tb=h("tbody");
+    shown.slice().sort((a,b)=>(a.resolved-b.resolved)||String(a.ref).localeCompare(String(b.ref))).forEach(r=>{
+      const scheme=secScheme(r.ref);
+      const first=h("td",{class:"m",style:"color:var(--territory)"+(!r.resolved?";box-shadow:inset 3px 0 0 var(--deviation)":"")},r.ref);
+      tb.append(h("tr",{},
+        first,
+        h("td",{},secKindChip(scheme)),
+        h("td",{},r.purpose||h("span",{style:"color:var(--ink4)"},"—")),
+        h("td",{},h("span",{class:r.resolved?"chip-ok":"chip-bad"},r.resolved?"● RESOLVED":"✕ MISSING"))));
+    });
+    t.append(tb); card.append(t); wrap.append(card);
+    wrap.append(h("p",{class:"desc",style:"font-size:10.5px;margin:8px 2px 16px;color:var(--ink4)"},
+      "Each reference is resolved in memory at the point of use; MISSING means the reference does not currently resolve (an unset env var, an absent file, or an unreachable substrate) and its consumers fail closed — never with a fabricated value."));
+  }
+
+  // ---- sealed secrets (REQ-524): write-only material; the list is value-less ----
+  wrap.append(h("div",{class:"sec"},
+    h("span",{class:"lbl",style:"color:var(--match)"},"LIVE · sealed store"),
+    h("h3",{},"Sealed secrets — write-only, envelope-encrypted"),h("span",{class:"rule"})));
+  if(Array.isArray(sealed) && sealed.length){
+    const card=h("div",{class:"wrapcard"}); const t=h("table",{class:"tbl"});
+    t.append(h("thead",{},h("tr",{},...["Name","Reference","Purpose","Created","Updated"].map(x=>h("th",{},x)))));
+    const tb=h("tbody");
+    sealed.forEach(s=>tb.append(h("tr",{},
+      h("td",{class:"m",style:"color:var(--territory)"},s.name),
+      h("td",{class:"m",style:"color:var(--notice)"},s.ref||("store:"+s.name)),
+      h("td",{},s.purpose||h("span",{style:"color:var(--ink4)"},"—")),
+      h("td",{class:"m",style:"color:var(--ink3)"},String(s.created_at||"").slice(0,19).replace("T"," ")),
+      h("td",{class:"m",style:"color:var(--ink3)"},String(s.updated_at||"").slice(0,19).replace("T"," ")))));
+    t.append(tb); card.append(t); wrap.append(card);
+  } else {
+    wrap.append(h("div",{class:"empty",style:"padding:14px"},
+      h("div",{class:"desc"},"No sealed secrets yet — seal one below; it becomes consumable as store:<name>. Values are never listed, here or anywhere.")));
+  }
+  wrap.append(cfgSealForm());
+
+  // ---- control-plane configuration (REQ-520 read · REQ-522/523 admin write lane) ----
+  wrap.append(h("div",{class:"sec",style:"margin-top:18px"},
+    h("span",{class:"lbl",style:"color:var(--match)"},"LIVE · control-plane configuration"),
+    h("h3",{},"Configuration knobs — resolved values and their source"),h("span",{class:"rule"})));
+  if(cfg===null || cfg===undefined){
+    wrap.append(h("div",{class:"empty",style:"padding:14px"},h("div",{class:"desc"},"/v1/config is not served by this control plane yet.")));
+  } else if(!cfg.length){
+    wrap.append(h("div",{class:"empty",style:"padding:14px"},h("div",{class:"desc"},"No configuration knobs registered.")));
+  } else {
+    const card=h("div",{class:"wrapcard"}); const t=h("table",{class:"tbl"});
+    t.append(h("thead",{},h("tr",{},...["Knob","Value","Source","Control"].map(x=>h("th",{},x)))));
+    const tb=h("tbody");
+    cfg.forEach(k=>{
+      const badge = k.source==="law" ? h("span",{class:"bandtag pause"},"LAW · pinned")
+        : k.source==="console" ? h("span",{class:"chip-ok"},"console")
+        : k.source==="env" ? h("span",{class:"m",style:"color:var(--map)"},"env")
+        : h("span",{class:"m",style:"color:var(--ink4)"},"default");
+      let ctl;
+      if(k.law){
+        ctl = h("span",{class:"m",style:"color:var(--deviation)",
+          title:"pinned by law — a write refuses with 422; the clamp is the law"},"pinned by law");
+      } else if(k.console_writable){
+        ctl = h("button",{class:"btn",type:"button",style:"font-size:10.5px;padding:2px 10px",
+          title:"admin-session write: rationale required, ledgered in the worker before the row commits",
+          onclick:()=>{ cfgUI.edit=(cfgUI.edit===k.name?null:k.name); route("secrets"); }},
+          cfgUI.edit===k.name?"close":"edit");
+      } else {
+        ctl = h("span",{class:"m",style:"color:var(--ink4)"},"boot only");
+      }
+      tb.append(h("tr",{},
+        h("td",{class:"m",style:"color:var(--territory)"},k.name,
+          h("div",{class:"desc",style:"font-size:10px;color:var(--ink4);font-weight:400"},k.description||"")),
+        h("td",{class:"m"},k.value||"—"),
+        h("td",{},badge),
+        h("td",{},ctl)));
+      if(cfgUI.edit===k.name && k.console_writable && !k.law){
+        tb.append(h("tr",{},h("td",{colspan:"4",style:"padding:4px 8px"},cfgEditor(k))));
+      }
+    });
+    t.append(tb); card.append(t); wrap.append(card);
+    wrap.append(h("p",{class:"desc",style:"font-size:10.5px;margin:8px 2px 0;color:var(--ink4)"},
+      "Writes are admin-session-only (step-up), rationale-required, and executed by the worker — the governance ledger records the decision BEFORE the override commits. LAW keys have no write path: the resolver clamp refuses them structurally."));
+  }
+  return wrap;
+};
+
+/* Modules view: LIVE capability rollup from /v1/capabilities. */
+const liveOrigModules = views.modules;
+views.modules = function(){
+  const wrap = liveOrigModules();
+  if(!liveState.on || !liveState.caps) return wrap;
+  const c=liveState.caps, list=c.capabilities||c.modules||c.members||[];
+  const strip=h("div",{style:"margin-bottom:16px"},
+    h("div",{class:"sec"},h("span",{class:"lbl",style:"color:var(--match)"},"LIVE · module registry"),
+      h("h3",{},"Declared connector capabilities"),h("span",{class:"rule"})),
+    h("div",{class:"empty",style:"padding:12px"},h("div",{class:"desc mono",style:"font-size:11px;white-space:pre-wrap;text-align:left;max-height:220px;overflow:auto"},
+      JSON.stringify(c,null,1).slice(0,4000))));
+  wrap.prepend(strip);
+  return wrap;
+};
+
+/* Models view: a LIVE strip listing the gateway's own model inventory. */
+const liveOrigModels = views.models;
+views.models = function(){
+  // Live: ONLY the real gateway ladder from /v1/models. When no live data is available we render an
+  // HONEST empty state — never the design fixtures, which invented model names (claude-opus-4-8,
+  // claude-sonnet-5, gpt-5) that exist in no config and confused operators into thinking the gateway
+  // routed to them. The console is auth-gated + live; fabricated placeholders have no place in it.
+  if(!liveState.on || !liveState.modelsGw){
+    const w=h("div");
+    w.append(h("div",{class:"sec"},h("span",{class:"lbl"},"model gateway"),
+      h("h3",{},"Configured models — the real fallback ladder"),h("span",{class:"rule"}),
+      h("span",{class:"lbl",style:"font-size:9px"},"litellm-gw · primary → fallbacks")));
+    w.append(h("div",{class:"empty",style:"padding:24px"},
+      h("div",{class:"big"},liveState.on?"Gateway inventory not reported yet":"Sign in to load the live gateway"),
+      h("div",{class:"desc"},"The ladder is read live from /v1/models — no placeholder models are ever shown.")));
+    return w;
+  }
+  const rows = (liveState.modelsGw.data||[]);
+  const wrap = h("div");
+  wrap.append(h("div",{class:"sec"},
+    h("span",{class:"lbl",style:"color:var(--match)"},"LIVE · model gateway"),
+    h("h3",{},"Configured models — the real fallback ladder"),h("span",{class:"rule"}),
+    h("span",{class:"lbl",style:"font-size:9px"},"litellm-gw · primary → fallbacks")));
+  if(!rows.length){
+    wrap.append(h("div",{class:"empty",style:"padding:18px"},
+      h("div",{class:"big"},"No models reported"),
+      h("div",{class:"desc"},"The gateway answered but its model list is empty.")));
+    return wrap;
+  }
+  const card=h("div",{class:"wrapcard"}); const t=h("table",{class:"tbl"});
+  t.append(h("thead",{},h("tr",{},...["Priority","Name","Provider","Underlying model"].map(x=>h("th",{},x)))));
+  const tb=h("tbody");
+  rows.forEach((r,i)=>{
+    const lp=r.litellm_params||{};
+    const isPrimary=(r.model_name==="primary");
+    const prov=lp.custom_llm_provider||(r.model_info&&r.model_info.litellm_provider)||(String(lp.model||"").split("/")[0])||"—";
+    tb.append(h("tr",{},
+      h("td",{},h("span",{class:isPrimary?"bandtag auto":"tag",style:isPrimary?"":"color:var(--ink3)"},isPrimary?"PRIMARY":("fallback "+i))),
+      h("td",{class:"m",style:"color:var(--map)"},r.model_name||"?"),
+      h("td",{class:"m"},prov),
+      h("td",{class:"m",style:"color:var(--ink3)"},String(lp.model||"—"))));
+  });
+  t.append(tb); card.append(t); wrap.append(card);
+  wrap.append(h("p",{class:"desc",style:"font-size:11px;margin:10px 2px 0"},
+    "This is the live gateway config from /v1/models. A call to \u201cprimary\u201d fails over down the ladder on error, rate-limit, or outage."));
+  return wrap;
+};
+
+/* The "API" view (REQ-515): the control plane's own endpoint map, rendered natively.
+   Auth class is derived from the path — machine-only (ingest/replay) vs session-ok reads. */
+function apiAuthClass(path){
+  if(/\/v1\/ingest\//.test(path) || /\/replay$/.test(path)) return ["machine-only","var(--notice)"];
+  if(/\/v1\/session(\/logout)?$/.test(path)) return ["operator-login","var(--map)"];
+  return ["session-ok · GET","var(--match)"];
+}
+/* Parse the OpenAPI `paths:` block from the raw YAML into {path:[methods]}. Deliberately minimal:
+   two indent levels under `paths:` — the path key, then the method keys. */
+function apiParsePaths(yaml){
+  const out={}; const lines=(yaml||"").split("\n");
+  let inPaths=false, cur=null;
+  for(const ln of lines){
+    if(/^paths:\s*$/.test(ln)){ inPaths=true; continue; }
+    if(inPaths && /^\S/.test(ln)){ break; } // dedent out of paths:
+    if(!inPaths) continue;
+    let m=ln.match(/^  (\/\S+):\s*$/);
+    if(m){ cur=m[1]; out[cur]=out[cur]||[]; continue; }
+    m=ln.match(/^    (get|post|put|delete|patch|head|options|connect|trace):\s*$/);
+    if(m && cur){ if(out[cur].indexOf(m[1])<0) out[cur].push(m[1]); }
+  }
+  return out;
+}
+function apiGroup(path){ const seg=path.split("/").filter(Boolean); return seg[1]||seg[0]||"/"; }
+function apiView(){
+  const wrap=h("div");
+  wrap.append(h("div",{class:"sec"},
+    h("span",{class:"lbl"},liveState.on?"LIVE · generated contract":"design preview"),
+    h("h3",{},"API — the control plane's endpoint map"),h("span",{class:"rule"}),
+    h("span",{class:"lbl",style:"font-size:9px"},"drift-gated · map == territory")));
+  if(!liveState.on || !liveState.contract){
+    wrap.append(h("div",{class:"empty",style:"padding:24px"},
+      h("div",{class:"big"},"Served from /v1/contract"),
+      h("div",{class:"desc"},liveState.on?"The contract endpoint is not served by this control plane yet.":"Sign in to load the live generated OpenAPI endpoint map.")));
+    return wrap;
+  }
+  const paths=apiParsePaths(liveState.contract);
+  const keys=Object.keys(paths).sort();
+  const groups={};
+  keys.forEach(k=>{ const g=apiGroup(k); (groups[g]=groups[g]||[]).push(k); });
+  wrap.append(h("p",{class:"desc",style:"font-size:11.5px;margin:0 2px 12px"},
+    keys.length+" routes across "+Object.keys(groups).length+" groups · every route authenticated (INV-01)."));
+  const mColor={get:"var(--match)",post:"var(--map)",put:"var(--notice)",delete:"var(--deviation)",patch:"var(--notice)"};
+  Object.keys(groups).sort().forEach(g=>{
+    const card=h("div",{class:"wrapcard"});
+    card.append(h("div",{class:"cap"},h("span",{class:"lbl"},"/"+g),
+      h("span",{class:"lbl",style:"font-size:9px;color:var(--ink4)"},groups[g].length+" routes")));
+    const t=h("table",{class:"tbl"});
+    t.append(h("thead",{},h("tr",{},...["Path","Methods","Access"].map(x=>h("th",{},x)))));
+    const tb=h("tbody");
+    groups[g].forEach(pth=>{
+      const [label,color]=apiAuthClass(pth);
+      const chips=h("div",{style:"display:flex;gap:4px;flex-wrap:wrap"});
+      (paths[pth]||[]).filter(m=>m!=="connect"&&m!=="head"&&m!=="options"&&m!=="trace").forEach(m=>
+        chips.append(h("span",{class:"tag",style:"color:"+(mColor[m]||"var(--ink2)")+";border-color:"+(mColor[m]||"var(--line2)")+"55"},m.toUpperCase())));
+      tb.append(h("tr",{},
+        h("td",{class:"m",style:"color:var(--territory)"},pth),
+        h("td",{},chips),
+        h("td",{},h("span",{class:"tag",style:"color:"+color+";border-color:"+color+"55"},label))));
+    });
+    t.append(tb); card.append(t); wrap.append(card);
+  });
+  return wrap;
+}
+views.api = apiView;
+VIEW_META.api = ["API","The control plane's generated, drift-gated endpoint map"];
+addNav("Configure","api","API",'<path d="M4 4h8v8H4z"/><path d="M2 7h2M2 9h2M12 7h2M12 9h2M7 2v2M9 2v2M7 12v2M9 12v2"/>');
+
+/* Landing entry point: a card on Command that routes to the API view — the endpoint map is one click
+   from the home screen, live or preview. */
+const apiOrigCommand2 = views.command;
+views.command = function(){
+  const wrap = apiOrigCommand2();
+  const card = h("a",{class:"api-entry-card",href:"#api",onclick:e=>{e.preventDefault();route("api");},
+    style:"display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:12px 14px;border:1px solid var(--line2);border-radius:var(--radius);background:var(--g1);text-decoration:none;color:var(--ink)"},
+    h("span",{style:"width:30px;height:30px;flex:none;border:1px solid var(--line3);border-radius:var(--radius-s);display:flex;align-items:center;justify-content:center",
+      html:'<svg viewBox="0 0 16 16" width="16" fill="none" stroke="var(--accent)" stroke-width="1.4"><path d="M4 4h8v8H4z"/><path d="M2 7h2M2 9h2M12 7h2M12 9h2M7 2v2M9 2v2M7 12v2M9 12v2"/></svg>'}),
+    h("div",{style:"flex:1"},
+      h("div",{style:"font-weight:600;font-size:13px"},"API contract"),
+      h("div",{class:"desc",style:"font-size:11px"},"Browse every endpoint of the control plane — grouped, method-tagged, auth-classed. Drift-gated: the map matches the territory.")),
+    h("span",{class:"lbl",style:"color:var(--accent)"},"open →"));
+  wrap.prepend(card);
+  return wrap;
+};
+
+/* Posture-bar affordance: a small always-visible API button left of the theme toggle. */
+(function(){
+  const bar=document.querySelector(".posture .grow");
+  if(!bar || document.getElementById("apiBtn")) return;
+  const btn=h("button",{class:"iconbtn",id:"apiBtn","aria-label":"API contract",title:"API contract — the endpoint map",
+    onclick:()=>route("api")},
+    h("span",{html:'<svg viewBox="0 0 16 16" width="15" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 4h8v8H4z"/><path d="M2 7h2M2 9h2M12 7h2M12 9h2M7 2v2M9 2v2M7 12v2M9 12v2"/></svg>'}));
+  const themeBtn=document.getElementById("themeBtn");
+  if(themeBtn && themeBtn.parentNode) themeBtn.parentNode.insertBefore(btn, themeBtn);
+})();
+
+
+/* Grounding view (REQ-517): on a live session the scorecard is rendered wholesale from the real
+   /v1/grounding aggregate — the fixture is a design preview only, so we never blend demo numbers
+   into a page whose entire purpose is to publish real, substantiated ones. */
+if(typeof grndRender === "function"){
+  views.grounding = function(){
+    if(liveState.on && liveState.grounding) return grndRender(liveState.grounding, true);
+    return grndRender(typeof GROUNDING!=="undefined"?GROUNDING:{}, false);
+  };
+}
+
+/* Knowledge (the living wiki, REQ-derived): on a live session the pages are COMPOSED from the real
+   estate graph, the incidents on the audit spine, and their verdicts — never the fixture. Each host
+   page joins the estate edges; each incident precedent is a recorded session; the operational rules
+   are the system's standing invariants. */
+function knowLiveModel(){
+  const est = liveState.estate || {};
+  const nodes = (est.available && Array.isArray(est.nodes)) ? est.nodes : [];
+  const edges = (est.available && Array.isArray(est.edges)) ? est.edges : [];
+  const sess = Array.isArray(liveState.sessions) ? liveState.sessions : [];
+  const hostOf = s => (s.signals && (s.signals.host||s.signals.target||s.signals.device||s.signals.hostname)) || "";
+  const incNote = s => {
+    const v=s.verdict, b=s.band;
+    if(v==="deviation") return "outcome deviated from the committed prediction — clamped never-auto";
+    if(v==="match") return "committed prediction matched the observed outcome";
+    if(v==="partial") return "partial match; remediation held human-gated until a clean match";
+    return b==="POLL_PAUSE" ? "held at the never-auto floor for a human" : "classified read-only";
+  };
+  const hosts = nodes.map(n=>({
+    name:n.name, type:n.type, role:n.type,
+    depends_on: edges.filter(e=>e.from===n.name).map(e=>({to:e.to,rel:e.rel,confidence:e.confidence,source:e.source})),
+    dependents: edges.filter(e=>e.to===n.name).map(e=>({from:e.from,rel:e.rel,confidence:e.confidence,source:e.source})),
+    incidents: sess.filter(s=>hostOf(s)===n.name).map(s=>({ref:s.external_ref,band:s.band,verdict:s.verdict,note:incNote(s)})),
+  }));
+  const incidents = sess.map(s=>({
+    ref:s.external_ref, band:s.band, risk:s.risk_level, verdict:s.verdict, host:hostOf(s),
+    classified: s.classified_at, learned: incNote(s) + (s.action_id?(" · action "+String(s.action_id).slice(0,8)):""),
+  }));
+  const rules = (typeof KNOW!=="undefined" && KNOW.rules) ? KNOW.rules : [];
+  return { hosts, incidents, rules };
+}
+if(typeof knowRender === "function"){
+  views.knowledge = function(){
+    if(liveState.on && (liveState.estate || liveState.sessions)) return knowRender(knowLiveModel(), true);
+    return knowRender(typeof KNOW!=="undefined"?KNOW:{hosts:[],incidents:[],rules:[]}, false);
+  };
+}
+
+/* Live estate graph: a MEANINGFUL hub-and-spoke topology built from the worker's published
+   /v1/estate edge list. There is NO nodes array — nodes are derived from the unique from/to of the
+   edges. Same visual language as the fixture estateGraph(): percent-coordinate SVG (so strokes stay
+   uniform), dashed site-region rectangles ("dc1" / "dc2"), absolutely-positioned HTML dots +
+   labels, edges as lines weighted by confidence. Hubs = high in-degree (the Proxmox hosts that
+   guests run_on); each hub's dependents fan around it. Layout is fully deterministic (index-based
+   angular placement — no Math.random / Date.now — so it never jitters on re-render). */
+function liveEstateGraph(e){
+  const NS="http://www.w3.org/2000/svg";
+  const g=h("div",{class:"graph",style:"height:540px;position:relative;border:1px solid var(--line2);border-radius:var(--radius);overflow:hidden;margin-bottom:16px"});
+  const svg=document.createElementNS(NS,"svg");
+  svg.setAttribute("width","100%"); svg.setAttribute("height","100%");
+  g.append(svg);
+
+  const edges=(Array.isArray(e.edges)?e.edges:[]).filter(ed=>ed&&ed.from&&ed.to);
+  // ---- derive nodes + in/out-degree from the edge list ----
+  const N=new Map();
+  const nodeOf=nm=>{ let n=N.get(nm); if(!n){ n={name:nm,inDeg:0,outDeg:0,out:[]}; N.set(nm,n); } return n; };
+  edges.forEach(ed=>{
+    const conf=(typeof ed.confidence==="number")?Math.max(0,Math.min(1,ed.confidence)):0.7;
+    const a=nodeOf(ed.from), b=nodeOf(ed.to);
+    a.outDeg++; b.inDeg++; a.out.push({to:ed.to,conf:conf});
+  });
+  const all=[...N.values()];
+  if(!all.length){
+    g.append(h("div",{class:"empty",style:"position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"},
+      h("div",{class:"big"},"Empty graph"),h("div",{class:"desc"},"The published snapshot carries no edges.")));
+    return g;
+  }
+  const siteOf=nm=>{ const p=String(nm).slice(0,5); return p==="nllei"?"dc1":p==="grskg"?"dc2":"other"; };
+
+  // ---- hubs = high in-degree (the pve hosts guests run_on) ----
+  const HUB_MIN=2, MAX_HUBS=16;
+  let hubs=all.filter(n=>n.inDeg>=HUB_MIN).sort((a,b)=>b.inDeg-a.inDeg);
+  if(!hubs.length){ // degenerate: no clear hub — promote the highest-in-degree nodes so it still reads
+    hubs=all.filter(n=>n.inDeg>0).sort((a,b)=>b.inDeg-a.inDeg).slice(0,6);
+  }
+  if(hubs.length>MAX_HUBS) hubs=hubs.slice(0,MAX_HUBS);
+  const hubSet=new Set(hubs.map(n=>n.name));
+
+  // ---- assign each non-hub node to the hub it runs_on (highest-confidence incident edge) ----
+  const depOf=new Map(); hubs.forEach(hb=>depOf.set(hb.name,[]));
+  const placed=new Set(hubSet);
+  all.forEach(n=>{
+    if(hubSet.has(n.name)) return;
+    let target=null,best=-1;
+    n.out.forEach(o=>{ if(hubSet.has(o.to)&&o.conf>best){ best=o.conf; target=o.to; } });
+    if(target){ depOf.get(target).push({node:n,conf:best}); placed.add(n.name); }
+  });
+  depOf.forEach(list=>list.sort((x,y)=>x.node.name<y.node.name?-1:x.node.name>y.node.name?1:0));
+  const loose=all.filter(n=>!placed.has(n.name)).sort((x,y)=>x.name<y.name?-1:x.name>y.name?1:0);
+
+  // ---- regions: one dashed rectangle per present site (unknown prefixes → a neutral zone) ----
+  const order=["dc1","dc2","other"], labelOf={"dc1":"dc1","dc2":"dc2","other":"UNZONED"};
+  const present=order.filter(st=> hubs.some(hb=>siteOf(hb.name)===st) || loose.some(n=>siteOf(n.name)===st));
+  const S=present.length||1, PAD=2.5, TOP=6, BOT=93, GH=BOT-TOP;
+  const colW=(100-PAD*(S+1))/S;
+  const region={};
+  present.forEach((st,i)=>{ region[st]={x:PAD+i*(colW+PAD), w:colW, y:TOP, h:GH}; });
+  const mkRect=(x,y,w,ht,label)=>{
+    const r=document.createElementNS(NS,"rect");
+    r.setAttribute("x",x+"%"); r.setAttribute("y",y+"%"); r.setAttribute("width",w+"%"); r.setAttribute("height",ht+"%");
+    r.setAttribute("rx","10"); r.setAttribute("fill","color-mix(in srgb, var(--g1) 40%, transparent)");
+    r.setAttribute("stroke","var(--line2)"); r.setAttribute("stroke-dasharray","4 5");
+    const t=document.createElementNS(NS,"text");
+    t.setAttribute("x",(x+1.4)+"%"); t.setAttribute("y",(y+3.4)+"%");
+    t.setAttribute("fill","var(--ink4)"); t.setAttribute("style","font:600 10px var(--mono);letter-spacing:.14em");
+    t.textContent=label;
+    svg.append(r,t);
+  };
+  present.forEach(st=>{ const R=region[st]; mkRect(R.x,R.y,R.w,R.h,labelOf[st]); });
+
+  // ---- placement: hubs on a grid inside their site region; dependents on an ellipse ring ----
+  const pos=new Map(); const nodeEls=[]; const CAP=14;
+  const maxIn=hubs.reduce((m,n)=>Math.max(m,n.inDeg),1);
+  const addNode=(name,x,y,opt)=>{
+    opt=opt||{};
+    pos.set(name,{x:x,y:y});
+    const hub=!!opt.hub, deg=opt.deg||0, label=opt.label||null;
+    const sz=hub?(15+Math.round(Math.min(1,Math.log2(deg+1)/Math.log2(maxIn+1))*17)):8;
+    const color=hub?"var(--territory)":"color-mix(in srgb,var(--territory) 48%,transparent)";
+    const ringShadow=hub?"0 0 0 2px var(--g0),0 0 0 3.5px color-mix(in srgb,var(--map) 40%,transparent)":"0 0 0 1.5px var(--g0)";
+    const node=h("div",{class:"en-node",style:`position:absolute;left:${x}%;top:${y}%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:4px;z-index:${hub?3:2}`});
+    node.append(h("div",{class:"en-dot",style:`width:${sz}px;height:${sz}px;border-radius:50%;background:${color};box-shadow:${ringShadow}`}));
+    if(label) node.append(h("div",{class:"mono",style:`font-size:${hub?9.5:8.5}px;color:var(--territory);white-space:nowrap;background:color-mix(in srgb,var(--g0) 78%,transparent);padding:0 3px;border-radius:2px`},label));
+    nodeEls.push(node);
+  };
+  present.forEach(st=>{
+    const R=region[st];
+    const shubs=hubs.filter(hb=>siteOf(hb.name)===st);
+    const k=shubs.length||1, cols=Math.ceil(Math.sqrt(k)), rows=Math.ceil(k/cols);
+    const cw=R.w/cols, ch=R.h/rows;
+    shubs.forEach((hb,j)=>{
+      const col=j%cols, row=Math.floor(j/cols);
+      const hx=R.x+(col+0.5)*cw, hy=R.y+(row+0.5)*ch;
+      addNode(hb.name,hx,hy,{hub:true,deg:hb.inDeg,label:hb.name});
+      const deps=depOf.get(hb.name)||[], drawn=Math.min(deps.length,CAP);
+      const rx=cw*0.36, ry=ch*0.30;
+      for(let i=0;i<drawn;i++){
+        const ang=-Math.PI/2 + i*(2*Math.PI/Math.max(drawn,1));
+        const dn=deps[i].node;
+        // label a dependent only if it is itself a host of something (a degree outlier) — else no label
+        addNode(dn.name, hx+rx*Math.cos(ang), hy+ry*Math.sin(ang), {hub:false,label:dn.inDeg>0?dn.name:null});
+      }
+      if(deps.length>drawn){ // capped: a "+N" chip instead of cramming 90 labels
+        nodeEls.push(h("div",{class:"en-chip",style:`position:absolute;left:${hx+rx*0.72}%;top:${hy+ry+3}%;transform:translate(-50%,-50%);font-family:var(--mono);font-size:8.5px;color:var(--map);border:1px solid color-mix(in srgb,var(--map) 40%,transparent);border-radius:9px;padding:0 5px;background:var(--g0);white-space:nowrap;z-index:3`},"+"+(deps.length-drawn)));
+      }
+    });
+  });
+  // loose nodes (whose run_on target is not a drawn hub): a small unlabeled row along the region floor
+  const looseBy={};
+  loose.forEach(n=>{ const st=present.indexOf(siteOf(n.name))>=0?siteOf(n.name):present[0]; (looseBy[st]=looseBy[st]||[]).push(n); });
+  Object.keys(looseBy).forEach(st=>{
+    const R=region[st]; if(!R) return;
+    const list=looseBy[st], cap=Math.min(list.length,18);
+    for(let i=0;i<cap;i++) addNode(list[i].name, R.x+R.w*(i+1)/(cap+1), R.y+R.h-3, {hub:false,label:null});
+  });
+
+  // ---- edges: any edge whose BOTH endpoints were drawn (hub↔hub + hub→dependent), confidence-weighted ----
+  edges.forEach(ed=>{
+    const pa=pos.get(ed.from), pb=pos.get(ed.to);
+    if(!pa||!pb) return;
+    const w=(typeof ed.confidence==="number")?Math.max(0,Math.min(1,ed.confidence)):0.7;
+    const l=document.createElementNS(NS,"line");
+    l.setAttribute("x1",pa.x+"%"); l.setAttribute("y1",pa.y+"%");
+    l.setAttribute("x2",pb.x+"%"); l.setAttribute("y2",pb.y+"%");
+    l.setAttribute("stroke","var(--line3)"); l.setAttribute("stroke-width",(0.6+w*1.3).toFixed(2));
+    l.setAttribute("stroke-dasharray",w<0.6?"3 4":"none"); l.setAttribute("opacity",(0.28+w*0.42).toFixed(2));
+    svg.append(l);
+  });
+  nodeEls.forEach(n=>g.append(n));
+
+  const shown=[...pos.keys()].length;
+  g.append(h("div",{class:"legend"},
+    h("div",{class:"lbl",style:"margin-bottom:2px"},"Live infragraph · "+shown+"/"+all.length+" drawn"),
+    h("div",{class:"r"},h("span",{class:"sw",style:"background:var(--territory);width:14px;height:14px"}),"hub — high in-degree (host)"),
+    h("div",{class:"r"},h("span",{class:"sw",style:"background:color-mix(in srgb,var(--territory) 48%,transparent)"}),"node — runs_on a hub"),
+    h("div",{class:"r"},h("span",{style:"width:16px;border-top:2px solid var(--line3)"}),"edge = dependency · confidence-weighted"),
+    h("div",{class:"r"},h("span",{style:"font-family:var(--mono);color:var(--map)"},"+N"),"dependents beyond "+CAP+"/hub"),
+  ));
+  return g;
+}
+
+/* Estate view: LIVE it renders the worker's real published topology (header + count tiles +
+   liveEstateGraph + full edge table). Signed out it keeps the fixture design-preview view. The live
+   path no longer falls through to the fixture estateGraph()/ESTATE two-column view. */
+const liveOrigEstate = views.estate;
+views.estate = function(){
+  // Not signed in (or /v1/estate never fetched): keep the fixture design-preview view unchanged.
+  if(!liveState.on || !liveState.estate) return liveOrigEstate();
+  const e = liveState.estate;
+  const wrap = h("div",{style:"padding:16px 20px 20px"});
+  wrap.append(h("div",{class:"sec"},
+    h("span",{class:"lbl",style:"color:var(--match)"},"LIVE · published estate"),
+    h("h3",{},"The worker's causal graph"),h("span",{class:"rule"}),
+    e.captured_at?h("span",{class:"lbl",style:"font-size:9px"},"captured "+String(e.captured_at).slice(0,19).replace("T"," ")):null));
+  if(!e.available){
+    wrap.append(h("div",{class:"empty",style:"padding:18px"},
+      h("div",{class:"big"},"No snapshot published yet"),
+      h("div",{class:"desc"},"The worker publishes its estate graph after each topology refresh; none has landed on this control plane yet.")));
+    return wrap;
+  }
+  wrap.append(h("div",{class:"tiles",style:"margin-bottom:14px"},
+    h("div",{class:"tile"},h("div",{class:"lbl"},"Nodes"),h("div",{class:"big"},String(e.node_count||0)),h("div",{class:"sub"},"entities in the graph")),
+    h("div",{class:"tile stripe map"},h("div",{class:"lbl"},"Edges"),h("div",{class:"big"},String(e.edge_count||0)),h("div",{class:"sub"},"confidence-weighted dependencies")),
+    h("div",{class:"tile"},h("div",{class:"lbl"},"Sources"),h("div",{class:"big"},String(e.source_count||0)),h("div",{class:"sub"},"live topology sources"))));
+  // the LIVE topology graph (derived from e.edges) — the fix: real hub-and-spoke, not the fixture
+  wrap.append(liveEstateGraph(e));
+  // full edge table below the graph
+  const edges=(e.edges||[]).slice().sort((x,y)=>(y.confidence||0)-(x.confidence||0));
+  if(edges.length){
+    wrap.append(h("div",{class:"sec",style:"margin-top:4px"},h("span",{class:"lbl"},"Edge list"),
+      h("h3",{},"Dependencies · highest-confidence first"),h("span",{class:"rule"})));
+    const card=h("div",{class:"wrapcard"}); const t=h("table",{class:"tbl"});
+    t.append(h("thead",{},h("tr",{},...["From","","To","Rel","Conf","Source"].map(x=>h("th",{},x)))));
+    const tb=h("tbody");
+    edges.slice(0,80).forEach(ed=>{
+      const c=Math.max(0,Math.min(1,ed.confidence||0));
+      tb.append(h("tr",{},
+        h("td",{class:"m",style:"color:var(--territory)"},ed.from),
+        h("td",{class:"m",style:"color:var(--ink4);text-align:center"},"→"),
+        h("td",{class:"m",style:"color:var(--territory)"},ed.to),
+        h("td",{class:"m",style:"color:var(--ink3)"},ed.rel),
+        h("td",{},h("div",{style:"display:flex;align-items:center;gap:6px"},
+          h("div",{style:"width:44px;height:4px;background:var(--g3s);border-radius:2px;overflow:hidden"},
+            h("div",{style:"height:100%;width:"+(c*100).toFixed(0)+"%;background:var(--map)"})),
+          h("span",{class:"m",style:"font-size:10px"},c.toFixed(2)))),
+        h("td",{class:"m",style:"color:var(--ink3)"},ed.source)));
+    });
+    t.append(tb); card.append(t); wrap.append(card);
+    if(edges.length>80) wrap.append(h("div",{class:"lbl",style:"padding:6px 2px;color:var(--ink4)"},"showing the 80 highest-confidence of "+edges.length+" edges"));
+  }
+  return wrap;
+};
+
+/* Logs view: a LIVE unified event stream merged from the ledger + accepted alerts — real TG events,
+   newest first. Infra metric signals (Prometheus) are a separate, not-yet-wired source. */
+const liveOrigLogs = views.logs;
+views.logs = function(){
+  const wrap = liveOrigLogs();
+  if(!liveState.on) return wrap;
+  const events = [];
+  (liveState.ledger||[]).forEach(e=>events.push({
+    actor: e.actor||"system", src:"governance", kind:e.kind||"", ref:e.ref||"", tag:"seq "+(e.seq||"?"), sev:"info"}));
+  (liveState.alerts||[]).forEach(a=>events.push({
+    actor:"system", src:a.source_type||a.src||"ingest", kind:"alert "+(a.alert_rule||""), ref:a.external_ref||"",
+    tag:a.host||"", sev:a.severity||"info", ts:a.received_at||""}));
+  const strip = h("div",{style:"margin-bottom:16px"});
+  strip.append(h("div",{class:"sec"},
+    h("span",{class:"lbl",style:"color:var(--match)"},"LIVE · event stream"),
+    h("h3",{},"Ledger + accepted alerts"),h("span",{class:"rule"}),
+    h("span",{class:"lbl",style:"font-size:9px"},events.length+" events")));
+  if(!events.length){
+    strip.append(h("div",{class:"empty",style:"padding:18px"},
+      h("div",{class:"big"},"No events yet"),
+      h("div",{class:"desc"},"The ledger and the alert front door are live; nothing has flowed through this control plane yet. Point a source at /v1/ingest to populate it.")));
+  } else {
+    const box=h("div",{class:"plan",style:"font-size:11px;max-height:520px;overflow:auto"});
+    const actorColor={ai:"var(--map)",human:"var(--accent)",system:"var(--territory)"};
+    const sevColor={critical:"var(--deviation)",crit:"var(--deviation)",warning:"var(--partial)",warn:"var(--partial)"};
+    events.forEach(ev=>{
+      box.append(h("div",{class:"ln"},
+        h("span",{class:"tag",style:"width:66px;flex:none;color:"+(actorColor[ev.actor]||"var(--ink3)")},ev.src),
+        h("span",{class:"tag",style:"width:52px;flex:none;color:"+(actorColor[ev.actor]||"var(--ink3)")},ev.actor),
+        h("span",{style:"flex:1;color:"+(sevColor[ev.sev]||"var(--ink2)")},ev.kind+(ev.tag?" · "+ev.tag:"")),
+        h("span",{style:"color:var(--map);flex:none"},ev.ref||"")));
+    });
+    strip.append(box);
+  }
+  strip.append(h("div",{class:"sec",style:"margin-top:14px"},h("span",{class:"lbl"},"demo"),
+    h("h3",{},"Representative fixtures (design preview)"),h("span",{class:"rule"})));
+  wrap.prepend(strip);
+  return wrap;
+};

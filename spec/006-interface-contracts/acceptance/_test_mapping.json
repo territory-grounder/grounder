@@ -1,0 +1,282 @@
+{
+  "feature": "interface-contracts.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes (must name a test); pending = specified behavior the parent will bind (REQ-501 scenarios bind against core/auth; the rest against core/httpapi, core/ingest, core/audit, core/schema, core/persist as they land); retrospective_gap = shipped without a driving test (must be zero for governed behavior). The REQ-501b generated-contract scenario is tagged @REQ-501b and mapped to its parent REQ-501, the interface requirement it hardens.",
+  "scenarios": [
+    {
+      "name": "An unauthenticated stats request is rejected before body parse",
+      "req": "REQ-501",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "A route registered with auth=none fails to register at boot",
+      "req": "REQ-501",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "A replayed nonce is rejected",
+      "req": "REQ-501",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "A stale-timestamp request is rejected",
+      "req": "REQ-501",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "A tampered body invalidates the HMAC signature",
+      "req": "REQ-501",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "Session-replay mints a new gated workflow from a read-only snapshot",
+      "req": "REQ-501",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "A replay lookup for an unknown id returns not-found",
+      "req": "REQ-504",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "An id the caller has no authority over is indistinguishable from a missing id",
+      "req": "REQ-504",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "Generated wire contracts cover every routed endpoint with provenance",
+      "req": "REQ-501",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "An ingest adapter publishes a triage.requested event keyed by external_ref",
+      "req": "REQ-502",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "Ingest runs dedup, flap, burst, and correlate before publishing",
+      "req": "REQ-502",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "Every risk classification appends one session_risk_audit row to the ledger",
+      "req": "REQ-503",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "Every governed row is stamped with its writer's schema_version",
+      "req": "REQ-505",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "A reader rejects a row written by a future schema version",
+      "req": "REQ-505",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "The discovered_scheduled_reboots registry is bi-temporal with a kill switch",
+      "req": "REQ-506",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "The escalation_queue is append-only and re-enters the gated pipeline",
+      "req": "REQ-507",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "Registering a route with auth set to none panics at registration",
+      "req": "REQ-501",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "A verifier without replay protection fails closed at construction",
+      "req": "REQ-501",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "An operator login issues a read-only session that satisfies the read surface",
+      "req": "REQ-508",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "A session principal never satisfies a machine route and never writes",
+      "req": "REQ-508",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "Tampered, expired, and revoked session cookies are rejected before the handler runs",
+      "req": "REQ-508",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "Operator login is rate-limited per operator and source ip",
+      "req": "REQ-508",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "The sessions surface serves the audit spine over an operator session",
+      "req": "REQ-509",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "An unwired sessions surface fails closed instead of fabricating rows",
+      "req": "REQ-509",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "An accepted ingest appears on the alerts surface with its validated fields",
+      "req": "REQ-510",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "A rejected payload never reaches the alerts surface",
+      "req": "REQ-510",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "The governance surface reports the posture its components hold",
+      "req": "REQ-511",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "The secrets surface carries references and resolution only, never a value",
+      "req": "REQ-512",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "The events stream emits the live posture on connect",
+      "req": "REQ-513",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "The models surface relays the gateway report verbatim and fails closed when unwired",
+      "req": "REQ-514",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "The contract surface serves the generated endpoint map verbatim",
+      "req": "REQ-515",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "The estate surface serves the latest published graph snapshot",
+      "req": "REQ-516",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "The estate surface reports no snapshot rather than fabricating a topology",
+      "req": "REQ-516",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "The grounding scorecard publishes the verifier distribution and the falsifiability signal",
+      "req": "REQ-517",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "The grounding scorecard reports honest zeros over an empty spine",
+      "req": "REQ-517",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "An authenticated operator vote signals the waiting decision it answers",
+      "req": "REQ-518",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "A vote on a closed decision window reports conflict, never success",
+      "req": "REQ-518",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "The config surface reports each knob with its source and the LAW clamp holds at resolve",
+      "req": "REQ-520",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "Step-up elevation grants the admin write tier on the same session",
+      "req": "REQ-522",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "The admin tier fails closed when unconfigured and refuses non-elevated callers uniformly",
+      "req": "REQ-522",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "A config write to a LAW key is refused as unprocessable — the clamp is the law",
+      "req": "REQ-523",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "An accepted config write is ledgered before the override row commits",
+      "req": "REQ-523",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "A sealed secret round-trips through envelope encryption and refuses a wrong key or name",
+      "req": "REQ-524",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "The secret write surface is write-only and the read surface lists names without values",
+      "req": "REQ-524",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "The mutation gate exposes a runtime disable that keeps mutation off",
+      "req": "REQ-525",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    },
+    {
+      "name": "The safety metrics exposition renders mutation_enabled zero and the breaker gauge",
+      "req": "REQ-525",
+      "status": "present",
+      "test": "TestInterfaceContractsAcceptance"
+    }
+  ]
+}

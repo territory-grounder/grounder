@@ -1,0 +1,84 @@
+# LiteLLM model-gateway config — the provider fallback ladder as configuration.
+# Provenance: [corrections] operator priority Kimi K3 → DeepSeek → Mistral → z.ai ·
+# [R] paradigm-rules 3, 6 (model-agnostic; per-org policy). Keys arrive as env references (INV-13).
+#
+# The Go side (adapters/model) only selects a model NAME ("primary"); LiteLLM maps it down the ladder
+# and handles retries, rate-limits, and per-org budgets. Priority order (operator-chosen):
+#   1) Kimi K3  2) DeepSeek  3) Mistral  4) z.ai
+# Anthropic/OpenAI/Grok were REMOVED 2026-07-19: their keys (ANTHROPIC/OPENAI/XAI_API_KEY) were blank on
+# the box, so they were keyless dead rungs that could never serve. Re-add with real keys if a paid
+# external fallback is ever wanted; until then the ladder reflects only models that can actually respond.
+#
+# NOTE on kimi-k3 (Moonshot): a thinking-ONLY reasoning model. It REJECTS any temperature != 1 with HTTP 400
+# "invalid temperature: only 1 is allowed for this model" — NOT a 429 overload (that earlier belief was WRONG,
+# disproven by direct upstream tests 2026-07-19). Global drop_params:true does NOT fix it: it strips UNSUPPORTED
+# params, but temperature is a SUPPORTED param with an out-of-range value, so temperature=0 from a caller
+# (e.g. the eval judge) passes straight through and 400s the whole call -> fail-over. The per-model
+# additional_drop_params on "primary" below strips the fixed sampling params so kimi uses its server defaults;
+# it also needs reasoning_effort=max, and the native moonshot/ provider (not openai/ passthrough).
+
+model_list:
+  - model_name: primary
+    litellm_params:
+      model: moonshot/kimi-k3                     # 1) Kimi K3 (Moonshot) — reasoning flagship (native moonshot/ provider)
+      api_base: https://api.moonshot.ai/v1
+      api_key: os.environ/KIMI_API_KEY
+      reasoning_effort: max                       # kimi-k3 requires reasoning_effort=max
+      # kimi-k3 is a thinking-ONLY model that REJECTS temperature!=1 (HTTP 400 "only 1 is allowed"). drop_params
+      # (global) only removes UNSUPPORTED params, so temperature=0 from a caller passes through and 400s the whole
+      # call -> fail-over. These per-model drops strip the fixed sampling params so kimi uses its server defaults.
+      additional_drop_params: ["temperature", "top_p", "n", "frequency_penalty", "presence_penalty"]
+  # "fast" is the AGENT-LOOP model. The read-only investigate loop makes MANY LLM calls (up to 10 cycles),
+  # so it needs LOW LATENCY + tool-calling — not the reasoning-heavy "primary" ladder. An eval run found
+  # triage stalling for tens of minutes on primary (the kimi-429 fail-over tax + deepseek-v4-pro reasoning
+  # on every cycle). Mistral Large is ~1s and tool-capable; it falls over to the strong reasoners only if
+  # it is down. The strong "primary" ladder stays the default for judgment/synthesis callers.
+  - model_name: fast
+    litellm_params:
+      model: mistral/mistral-large-latest
+      api_key: os.environ/MISTRAL_API_KEY
+  - model_name: fallback-deepseek
+    litellm_params:
+      model: deepseek/deepseek-v4-pro            # 2) DeepSeek V4 Pro — frontier reasoner (862B); replaces deepseek-chat (=v4-flash, deprecates 2026-07-24)
+      api_key: os.environ/DEEPSEEK_API_KEY
+  - model_name: fallback-mistral
+    litellm_params:
+      model: mistral/mistral-large-latest        # 3) Mistral — latest flagship (Large)
+      api_key: os.environ/MISTRAL_API_KEY
+  - model_name: fallback-zai
+    litellm_params:
+      model: zai/glm-5.2                          # 4) z.ai GLM (native zai/ provider). NOTE 2026-07-19: the z.ai
+      api_base: https://api.z.ai/api/paas/v4      # account returns 1113 "Insufficient balance" on ALL GLM models
+      api_key: os.environ/ZAI_API_KEY             # (auth + /models OK) -> serves only once the account is recharged.
+  # --- EMBEDDINGS (semantic retrieval plane, spec/012 REQ-1110): the worker calls /v1/embeddings with
+  # TG_EMBED_MODEL; LiteLLM proxies it OpenAI-compatibly. Uncomment ONE entry, set TG_EMBED_MODEL to its
+  # model_name (e.g. embed-nomic), and keep TG_EMBED_DIM equal to the migrated column: vector(768) —
+  # nomic-embed-text is 768-dim. A different-dimension model needs a new migration first (boot refuses a
+  # mismatch). Left commented so the active ladder above is unchanged until an operator opts in.
+  #
+  # Local-first (Ollama on the estate — no API key, no data leaves the network):
+  # - model_name: embed-nomic
+  #   litellm_params:
+  #     model: ollama/nomic-embed-text             # 768-dim, matches migration 0013's vector(768)
+  #     api_base: http://ollama:11434
+  #
+  # API alternative (Mistral; 1024-dim — requires a vector(1024) migration BEFORE use + TG_EMBED_DIM=1024):
+  # - model_name: embed-mistral
+  #   litellm_params:
+  #     model: mistral/mistral-embed
+  #     api_key: os.environ/MISTRAL_API_KEY
+
+# The auto-fallback ladder: a call to "primary" (Kimi K3) fails over on error/rate-limit/outage, in order.
+router_settings:
+  fallbacks:
+    - primary: [fallback-deepseek, fallback-mistral, fallback-zai]
+    - fast: [fallback-deepseek, fallback-zai]
+  # num_retries 0: an overloaded kimi-k3 (429 on nearly every call) must fail over to the next rung
+  # IMMEDIATELY rather than burn seconds retrying the same dead primary — the fallback ladder is the
+  # robustness mechanism, retrying a rate-limited deployment is not. This removes the ~9s/call kimi tax.
+  num_retries: 0
+  allowed_fails: 1
+
+litellm_settings:
+  drop_params: true
+  # Per-org budgets/quotas are attached via the "user" field TG sends per request.

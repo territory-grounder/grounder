@@ -1,0 +1,22 @@
+{
+  "feature": "groundnet.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes (must name a test); pending = specified behavior whose implementation (core/groundnet envelope + adapter seam) does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior, INV-22). This is a far-future Draft CONTRACT blocked on the flywheel graduating an artifact, the loadable-not-hardcoded prose migration, and the decision-tracer archive (docs/FEDERATION-VISION.md § 7), so every scenario is pending. Scenarios bind to real code as tasks T-021-* land once this spec graduates from Draft.",
+  "scenarios": [
+    { "name": "The wisdom-chunk envelope is a versioned signed unit with the stable field set", "req": "REQ-2100", "status": "pending" },
+    { "name": "The two-layer marker keeps every chunk generalizable and the estate-specific layer has no export path", "req": "REQ-2101", "status": "pending" },
+    { "name": "The payload is versioned and evolvable while the envelope stays stable", "req": "REQ-2102", "status": "pending" },
+    { "name": "The producer attestation is a stable pseudonym and reputation accrues to it not an identity", "req": "REQ-2103", "status": "pending" },
+    { "name": "A chunk whose signature does not verify is refused before ingest", "req": "REQ-2104", "status": "pending" },
+    { "name": "Provenance is anchored in a signed append-only transparency log and not a blockchain", "req": "REQ-2105", "status": "pending" },
+    { "name": "The groundnet log extends the local hash-chained governance ledger", "req": "REQ-2106", "status": "pending" },
+    { "name": "Reputation aggregates signed verified-outcome attestations weighted by quality not volume", "req": "REQ-2107", "status": "pending" },
+    { "name": "The adapter seam emits from the generalizable layer and ingests into local re-graduation", "req": "REQ-2108", "status": "pending" },
+    { "name": "An ingested chunk is a subordinate hint that passes the full local gate stack", "req": "REQ-2109", "status": "pending" },
+    { "name": "An ingested chunk re-graduates locally before it earns any local standing", "req": "REQ-2110", "status": "pending" },
+    { "name": "Membership export and consumption are opt-in default-off and authenticated", "req": "REQ-2111", "status": "pending" },
+    { "name": "Consumption is never gated behind contribution and no over-share is required", "req": "REQ-2112", "status": "pending" },
+    { "name": "A node is born groundnet-compatible while the local tracer does not depend on the contract", "req": "REQ-2113", "status": "pending" },
+    { "name": "A shared chunk is treated as unrecallable and the export decision is the last point of control", "req": "REQ-2114", "status": "pending" },
+    { "name": "A replayed or duplicate chunk is rejected by its id and provenance anchor", "req": "REQ-2115", "status": "pending" }
+  ]
+}

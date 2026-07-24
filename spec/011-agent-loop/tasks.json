@@ -1,0 +1,30 @@
+{
+  "spec": "011-agent-loop",
+  "tasks": [
+    {
+      "id": "T-011-1",
+      "title": "Native Go ReAct loop over LiteLLM: typed directive dispatch, read-only tools, confidence STOP, cycle limits, ParseProposal emit; ACI tool contract + recoverable tool-errors + thought-as-data; tool-result observations input-screened; no model token becomes control flow",
+      "files_owned": ["agent/loop.go", "agent/tools.go", "agent/confidence.go"],
+      "deps": [],
+      "req_ids": ["REQ-1001", "REQ-1002", "REQ-1003", "REQ-1004", "REQ-1005", "REQ-1006", "REQ-1007", "REQ-1008", "REQ-1009", "REQ-1010", "REQ-1011", "REQ-1012"],
+      "acceptance": {
+        "feature": "agent-loop.feature",
+        "scenarios": [
+          "The agent drives a read-only tool then emits a proposal via ParseProposal",
+          "A write tool is structurally withheld from the agent",
+          "A low-confidence turn stops and routes to a poll",
+          "A mid-confidence proposal escalates to a human poll",
+          "An unparseable model output fails closed with no second grammar",
+          "An injection tool name is never executed",
+          "The cycle hard-halt limit bounds the loop",
+          "A tool publishes an ACI schema that renders into the preamble and screens bad arguments",
+          "A tool error is recoverable and does not abort the session",
+          "A model thought is recorded as data and never routes dispatch",
+          "A hostile tool result is neutralized in the observation while a benign result and its id pass byte-clean"
+        ]
+      },
+      "budget": { "max_loc_delta": 900, "max_wall_clock_minutes": 120 },
+      "status": "completed"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+views.models = mdlModelsView;
+VIEW_META.models = ["Models","LLM routing, usage & spend, judge dead-man, model config — via litellm-gw01"];
+FACETS.models = [["24h","24h"],["7d","7 d"],["30d","30 d"]];
+facetState.models = "24h";
+mdlAddNav("Configure","models","Models",'<rect x="4.5" y="4.5" width="7" height="7" rx="1"/><path d="M6.5 1.5v3M9.5 1.5v3M6.5 11.5v3M9.5 11.5v3M1.5 6.5h3M1.5 9.5h3M11.5 6.5h3M11.5 9.5h3"/>',"models");
+{ const b = $('[data-badge="models"]'); if (b) b.textContent = String(MDL_USAGE["24h"].fallbackEvents); } // badge = ledgered gateway-fallback events, 24h window
+/* No live-sim registration needed: the judge "last heartbeat" counter ticks
+   on its own (guarded by reduceMotion, self-clears when the view unmounts). */

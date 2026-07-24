@@ -1,0 +1,15 @@
+{
+ "nav": {
+  "group": "TERRITORY",
+  "label": "Estate Depth",
+  "view_key": "estatedepth",
+  "badge": "estatedepth",
+  "icon_svg_inner": "<circle cx=\"8\" cy=\"8\" r=\"2.2\"/><path d=\"M8 2.6v2.2M8 11.2v2.2M2.6 8h2.2M11.2 8h2.2\"/><circle cx=\"8\" cy=\"8\" r=\"5.7\" stroke-dasharray=\"2 2.4\"/>"
+ },
+ "view_meta": [
+  "Estate Depth",
+  "Node inspector (golden signals \u00b7 dependencies \u00b7 blast radius) + incident master-clock"
+ ],
+ "purpose": "Estate depth: a node-inspector detail panel (identity, health, golden-signal sparklines, active alerts, infragraph dependencies with confidence weights, predicted blast radius) opened from the topology graph, plus the incident master-clock \u2014 one shared-time SVG with an event lane (alert \u2192 hypotheses \u2192 prediction.commit \u2192 approve \u2192 execute \u2192 verify) pixel-aligned above the session key-metric lane, showing the observed territory series (steel, solid) against the AI's predicted post-execution envelope (indigo, dashed) with T0 marked across both lanes.",
+ "notes": "Smoke-tested under Node with DOM stubs and the documented fixtures: all three entry points build, dependency/blast math verified (edge [a,b,w] read as \"a depends on b, confidence w\"; blast radius = transitive downstream closure with multiplied confidences, cycle-safe via best-confidence map, hop<=5, floor 0.05). ASSUMPTIONS where the foundation docs arrived empty: (1) sparkline is called as sparkline(values,{w,h,color,stroke}) through the est2Spark adapter \u2014 if the primitive exists and returns an element it is used verbatim; otherwise a token-faithful local fallback renders (steel solid line + 9% area + last-point dot), so nothing breaks either way. (2) The master-clock metric lane is rendered directly with svgEl on the SAME x-scale function as the event lane instead of through metricPanel/areaChart, because pixel-exact shared-time alignment across both lanes (plus the T0/alert verticals spanning them) is the whole point of the \"one incident clock\"; if areaChart later accepts {xDomain,width,markers} it can replace that block. Design language: observed series/sparklines = --territory solid; predicted envelope, infragraph confidence bars, hop chips = --map dashed/indigo; execute marker = --hazard; verify tick + out-of-envelope overlay = verdict tokens; every status is glyph+label+color (\u25cf \u25b2 \u25a0 / \u2713 \u25d0 \u2715); all numerics tabular mono; fixtures labeled \"fixture\"; actuation buttons present but disabled with a MUTATION OFF note; live-dot pulse and nothing else animates, gated on reduceMotion. incidentTimeline synthesizes a deterministic per-session clock (seeded by session id) from session.band/verdict/alerts/reason since stage timestamps are not in the fixture contract \u2014 real timestamps can be dropped into est2IncidentModel later without touching the renderer. Contract names estateNodeDetail/incidentTimeline are global per your spec; every other symbol is est2*/EST2_*/.e2- namespaced. Working copies: /tmp/claude-1000/-home-claude-runner-gitlab-products-territory-grounder-grou"
+}

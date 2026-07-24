@@ -1,0 +1,282 @@
+/* ===================== modules — view + helpers (all prefixed mods*) ===================== */
+
+const MODS_LOCK_SVG = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>';
+const MODS_KEY_SVG  = '<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="5" cy="8" r="3"/><path d="M8 8h6M12 8v3"/></svg>';
+const MODS_HGLYPH   = {live:"●", idle:"◐", dark:"✕"};
+
+/* deterministic per-module PRNG so the fixture history is stable across renders */
+function modsRng(seed){
+  let a = 2166136261;
+  for (let i = 0; i < seed.length; i++){ a ^= seed.charCodeAt(i); a = Math.imul(a, 16777619); }
+  return () => { a = (Math.imul(a, 1664525) + 1013904223) | 0; return (a >>> 0) / 4294967296; };
+}
+
+/* 24h poll-latency history: 48 samples, null = missed poll */
+function modsHist(m){
+  const r = modsRng(m.id), base = 30 + r() * 140, pts = [];
+  for (let i = 0; i < 48; i++){
+    let v = base * (0.75 + r() * 0.5);
+    if (r() < 0.05) v = base * (1.5 + r());               // occasional slow poll
+    if (m.health === "dark" && i >= 42) v = null;          // went dark at the end
+    else if (m.health === "idle" && i >= 38) v = null;     // stopped reporting
+    else if (m.health !== "live" && r() < 0.08) v = null;  // flaky before that
+    pts.push(v);
+  }
+  return { pts, budget: base * 1.6 };
+}
+
+/* shared spark painter — TERRITORY = observed latency (steel, solid);
+   MAP = expected budget (indigo, dashed); missed polls = deviation ticks on the baseline */
+function modsSparkInto(svg, pts, budget, W, H, tickH){
+  const vals = pts.filter(v => v != null);
+  const max = Math.max(budget, ...(vals.length ? vals : [budget])) * 1.12;
+  const x = i => 2 + i / (pts.length - 1) * (W - 4);
+  const y = v => (H - 2) - (v / max) * (H - 8);
+  svg.appendChild(svgEl("line", {x1:2, x2:W-2, y1:y(budget).toFixed(1), y2:y(budget).toFixed(1), class:"mods-sk-map", "vector-effect":"non-scaling-stroke"}));
+  let run = [];
+  const flush = () => {
+    if (run.length > 1) svg.appendChild(svgEl("polyline", {points:run.join(" "), class:"mods-sk-obs", "vector-effect":"non-scaling-stroke"}));
+    else if (run.length === 1){ const [cx, cy] = run[0].split(","); svg.appendChild(svgEl("circle", {cx, cy, r:1.3, class:"mods-sk-dot"})); }
+    run = [];
+  };
+  pts.forEach((v, i) => {
+    if (v == null){ flush(); svg.appendChild(svgEl("rect", {x:(x(i)-0.7).toFixed(1), y:H-tickH, width:1.4, height:tickH, class:"mods-sk-gap"})); }
+    else run.push(`${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+  });
+  flush();
+}
+
+function modsSpark(m){
+  const { pts, budget } = modsHist(m);
+  const svg = svgEl("svg", {class:"mods-spark", width:76, height:16, viewBox:"0 0 76 16", role:"img",
+    "aria-label":`${m.id}: observed poll latency vs expected budget, 24h`});
+  modsSparkInto(svg, pts, budget, 76, 16, 3);
+  return svg;
+}
+
+function modsSparkLg(m){
+  if (!m.enabled) return h("div", {class:"mods-dim mods-nohist"}, "module disabled — no polling, no history, no execution path");
+  const { pts, budget } = modsHist(m);
+  const W = 320, H = 56;
+  const svg = svgEl("svg", {class:"mods-spark-lg", viewBox:`0 0 ${W} ${H}`, preserveAspectRatio:"none", role:"img",
+    "aria-label":`${m.id}: 24h poll latency, observed vs expected budget`});
+  [1/3, 2/3].forEach(t => svg.appendChild(svgEl("line",
+    {x1:2, x2:W-2, y1:(H*t).toFixed(1), y2:(H*t).toFixed(1), class:"mods-sk-grid", "vector-effect":"non-scaling-stroke"})));
+  modsSparkInto(svg, pts, budget, W, H, 6);
+  const vals = pts.filter(v => v != null).sort((a, b) => a - b);
+  const q = p => Math.round(vals[Math.min(vals.length - 1, Math.floor(vals.length * p))] || 0);
+  const gaps = pts.filter(v => v == null).length;
+  return h("div", null,
+    svg,
+    h("div", {class:"mods-leg"},
+      h("span", null, h("i", {class:"mods-leg-obs"}), "observed latency (territory)"),
+      h("span", null, h("i", {class:"mods-leg-map"}), "expected budget (map)"),
+      h("span", null, h("i", {class:"mods-leg-gap"}), `missed poll × ${gaps}`)),
+    h("div", {class:"mods-sk-stats"},
+      `min ${q(0)} ms · p50 ${q(0.5)} ms · max ${q(1)} ms · budget ${Math.round(budget)} ms · 48 samples / 24 h`));
+}
+
+/* health is always color + glyph + label (never color alone) */
+function modsHealth(m){
+  if(!m.enabled) return h("span", {class:"mods-health", style:"color:var(--ink4)", title:"disabled \u2014 no execution path"}, "\u00b7 off");
+  return h("span", {class:"mods-hlt", "data-h":m.health, "data-off":m.enabled ? null : true},
+    h("i", {class:"mods-hlt-g", "aria-hidden":"true"}, MODS_HGLYPH[m.health]), m.health);
+}
+
+function modsScopeChip(m){
+  return h("span", {class:"mods-scope", "data-s":m.scope,
+    title: m.scope === "MUTATE" ? "MUTATE capability — no execution path while MUTATION is OFF" : "read-only capability"},
+    m.scope);
+}
+
+/* the ENABLED switch is a config write → gated while MUTATION OFF (rendered state only) */
+function modsToggle(m){
+  return h("span", {class:"mods-tgl", role:"switch", "aria-checked":String(m.enabled), "aria-disabled":"true",
+    "data-on": m.enabled ? true : null, tabindex:"-1",
+    title:"enable/disable is a config write — gated: MUTATION OFF · read-only preview",
+    onclick: e => e.stopPropagation()},
+    h("i", {class:"mods-tgl-k"}));
+}
+
+function modsRow(m){
+  const open = () => modsOpenDrawer(m);
+  return h("div", {class:"mods-row" + (m.enabled ? "" : " mods-off"), role:"button", tabindex:"0",
+    "aria-haspopup":"dialog", "aria-label":`${m.id} — open configuration`,
+    onclick: open,
+    onkeydown: e => { if (e.key === "Enter" || e.key === " "){ e.preventDefault(); open(); } }},
+    h("span", {class:"mods-stripe", "data-h":m.health}),
+    h("span", {class:"mods-name"}, m.id,
+      m.scope === "MUTATE" ? h("span", {class:"mods-gatetag", title:"no execution path while MUTATION OFF"}, "GATED") : null),
+    modsScopeChip(m),
+    modsHealth(m),
+    h("span", {class:"mods-ver"}, "v" + m.ver),
+    h("span", {class:"mods-last"}, m.last),
+    h("span", {class:"mods-sec", title:(m.auth.join(", ") || "no secrets") + " — references only, values never stored"},
+      m.auth.length ? `${m.auth.length} ref${m.auth.length > 1 ? "s" : ""}` : "0"),
+    h("span", {class:"mods-spk"}, m.enabled ? modsSpark(m) : h("span", {class:"mods-spk-none"}, "no path")),
+    modsToggle(m));
+}
+
+/* ---------------- per-module config drawer ---------------- */
+
+let modsEscHandler = null, modsLastFocus = null;
+
+function modsCloseDrawer(){
+  const s = document.querySelector(".mods-scrim"); if (s) s.remove();
+  const d = document.querySelector(".mods-drawer");
+  if (d){
+    if (reduceMotion) d.remove();
+    else { d.classList.remove("mods-on"); setTimeout(() => d.remove(), 170); }
+  }
+  if (modsEscHandler){ document.removeEventListener("keydown", modsEscHandler); modsEscHandler = null; }
+  if (modsLastFocus && modsLastFocus.focus){ modsLastFocus.focus(); modsLastFocus = null; }
+}
+
+function modsKV(k, v){
+  return h("div", {class:"mods-kv"}, h("span", {class:"mods-k"}, k), h("span", {class:"mods-v"}, v));
+}
+
+function modsSect(title, ...kids){
+  return h("section", {class:"mods-sect"}, h("h3", {class:"mods-sect-t"}, title), ...kids);
+}
+
+function modsOpenDrawer(m){
+  modsCloseDrawer();
+  modsLastFocus = document.activeElement;
+
+  const refs = m.auth.length
+    ? m.auth.map(rf => h("code", {class:"mods-ref"}, h("i", {class:"mods-ref-g", html:MODS_KEY_SVG}), rf))
+    : [h("span", {class:"mods-dim"}, "none required")];
+
+  const capNote = [];
+  if (!m.enabled) capNote.push(h("p", {class:"mods-note", "data-warn":true},
+    "Module is DISABLED — it has no execution path, regardless of declared scope."));
+  capNote.push(m.scope === "MUTATE"
+    ? h("p", {class:"mods-note", "data-warn":true},
+        "MUTATE capability declared, but the one-way MUTATION switch is OFF — this module has no execution path; plans render as previews only.")
+    : h("p", {class:"mods-note"}, "READ capability — this module can observe the territory, never act on it."));
+
+  const scrim = h("div", {class:"mods-scrim", onclick:modsCloseDrawer});
+  const dr = h("aside", {class:"mods-drawer", role:"dialog", "aria-modal":"true", "aria-label":m.id + " configuration", tabindex:"-1"},
+    h("header", {class:"mods-dr-hd"},
+      h("div", {class:"mods-dr-t"}, h("span", {class:"mods-dr-name"}, m.id), modsScopeChip(m), modsHealth(m)),
+      h("button", {class:"mods-x", onclick:modsCloseDrawer, "aria-label":"close configuration drawer"}, "✕")),
+    h("div", {class:"mods-dr-sub"},
+      `${m.fam} · v${m.ver} · ${m.enabled ? "enabled" : "disabled — no execution path"} · fixture preview`),
+
+    modsSect("Connection",
+      modsKV("endpoint", m.ep),
+      modsKV("auth", h("span", {class:"mods-refs"}, ...refs)),
+      h("p", {class:"mods-hint"}, "secret references only (env:VAR / file:path) — values are never stored, transmitted, or shown")),
+
+    modsSect("Capability", modsKV("scope", modsScopeChip(m)), ...capNote),
+
+    modsSect("Schedule & limits",
+      modsKV("poll interval", m.poll),
+      modsKV("rate limit", m.rate),
+      modsKV("timeout", m.timeout),
+      modsKV("last run", m.last)),
+
+    m.map ? modsSect("Normalizer mapping",
+      h("div", {class:"mods-map"},
+        h("div", {class:"mods-map-hd"}, h("span", null, "source field"), h("span", {"aria-hidden":"true"}), h("span", null, "canonical")),
+        ...m.map.map(([a, b]) => h("div", {class:"mods-map-r"},
+          h("code", null, a), h("span", {class:"mods-map-a", "aria-hidden":"true"}, "→"), h("code", null, b))))) : null,
+
+    modsSect("Health — 24 h", modsSparkLg(m)),
+
+    h("footer", {class:"mods-dr-ft"},
+      h("button", {class:"mods-test", disabled:true, "aria-disabled":"true"}, "TEST CONNECTION"),
+      h("span", {class:"mods-gate-note"}, "gated — design preview, no connector runtime · MUTATION OFF")));
+
+  document.body.appendChild(scrim);
+  document.body.appendChild(dr);
+  if (reduceMotion) dr.classList.add("mods-on");
+  else requestAnimationFrame(() => dr.classList.add("mods-on"));
+  modsEscHandler = e => { if (e.key === "Escape") modsCloseDrawer(); };
+  document.addEventListener("keydown", modsEscHandler);
+  dr.focus();
+}
+
+/* ---------------- the view ---------------- */
+
+function viewModules(){
+  modsCloseDrawer(); // never leak a stale drawer across re-renders / route changes
+
+  const facet = (typeof facetState !== "undefined" && facetState.modules) || "all";
+  const shown = m =>
+    facet === "all"    ? true :
+    facet === "mutate" ? m.scope === "MUTATE" :
+    facet === "off"    ? !m.enabled :
+    (m.enabled && m.health === facet);
+
+  const root = h("div", {class:"mods"});
+
+  /* invariant banner — the load-bearing safety fact of this view */
+  root.appendChild(h("div", {class:"mods-inv", role:"note"},
+    h("span", {class:"mods-inv-g", html:MODS_LOCK_SVG}),
+    h("span", {class:"mods-inv-t"},
+      h("b", null, "INVARIANT "), "a disabled module has ", h("b", null, "no execution path"),
+      ". MUTATE-scoped modules additionally have no execution path while the MUTATION switch is OFF."),
+    h("span", {class:"mods-inv-chip"}, "MUTATION OFF · READ-ONLY")));
+
+  /* fleet stats line */
+  const en = MODS_FLEET.filter(m => m.enabled);
+  const nH = hh => en.filter(m => m.health === hh).length;
+  const nMut = MODS_FLEET.filter(m => m.scope === "MUTATE").length;
+  root.appendChild(h("div", {class:"mods-stats"},
+    `${MODS_FLEET.length} modules · ${en.length} enabled · `,
+    h("span", {class:"mods-c-live"}, `${nH("live")} live`), " · ",
+    h("span", {class:"mods-c-idle"}, `${nH("idle")} idle`), " · ",
+    h("span", {class:"mods-c-dark"}, `${nH("dark")} dark`), " · ",
+    h("span", {class:"mods-c-mut"}, `${nMut} mutate-scoped`), " — 0 executable · fixture data, not live"));
+
+  /* family rollup tiles (always whole-fleet, unaffected by facet); click scrolls to the group */
+  const roll = h("div", {class:"mods-roll"});
+  MODS_FAMS.forEach(([key, label]) => {
+    const ms = MODS_FLEET.filter(m => m.fam === key);
+    const c = hh => ms.filter(m => m.enabled && m.health === hh).length;
+    const off = ms.filter(m => !m.enabled).length;
+    const seg = (cls, n) => n ? h("i", {class:"mods-b " + cls, style:`flex:${n}`}) : null;
+    roll.appendChild(h("button", {class:"mods-tile", onclick: () => {
+        const g = document.getElementById("mods-fam-" + key);
+        if (g) g.scrollIntoView(reduceMotion ? {block:"start"} : {block:"start", behavior:"smooth"});
+      }, title:`${label}: ${c("live")} live · ${c("idle")} idle · ${c("dark")} dark · ${off} off`},
+      h("span", {class:"mods-tile-l"}, label),
+      h("span", {class:"mods-tile-n"}, String(ms.length), h("small", null, " mod")),
+      h("span", {class:"mods-tile-bar", "aria-hidden":"true"},
+        seg("mods-b-live", c("live")), seg("mods-b-idle", c("idle")), seg("mods-b-dark", c("dark")), seg("mods-b-off", off)),
+      h("span", {class:"mods-tile-c"},
+        `${c("live")}● ${c("idle")}◐ ${c("dark")}✕ ${off}·off`)));
+  });
+  root.appendChild(roll);
+
+  /* registry table, grouped by family */
+  const tbl = h("div", {class:"mods-tbl", role:"list", "aria-label":"connector fleet registry"});
+  tbl.appendChild(h("div", {class:"mods-hd", "aria-hidden":"true"},
+    h("span"), h("span", null, "module"), h("span", null, "scope"), h("span", null, "health"),
+    h("span", null, "ver"), h("span", null, "last run"), h("span", null, "secrets"),
+    h("span", null, "poll · 24 h"), h("span", {class:"mods-hd-on"}, "on")));
+
+  MODS_FAMS.forEach(([key, label, desc]) => {
+    const ms = MODS_FLEET.filter(m => m.fam === key);
+    const vis = ms.filter(shown);
+    if (!vis.length) return;
+    const c = hh => ms.filter(m => m.enabled && m.health === hh).length;
+    tbl.appendChild(h("div", {class:"mods-grp", id:"mods-fam-" + key},
+      h("span", {class:"mods-grp-l"}, label),
+      h("span", {class:"mods-grp-d"}, desc),
+      h("span", {class:"mods-grp-c", "aria-label":`${c("live")} live, ${c("idle")} idle, ${c("dark")} dark`},
+        h("span", {class:"mods-c-live"}, c("live") + "●"), " ",
+        h("span", {class:"mods-c-idle"}, c("idle") + "◐"), " ",
+        h("span", {class:"mods-c-dark"}, c("dark") + "✕")),
+      h("span", {class:"mods-grp-n"}, `${vis.length}/${ms.length}`)));
+    vis.forEach(m => tbl.appendChild(modsRow(m)));
+  });
+
+  if (!tbl.querySelector(".mods-row"))
+    tbl.appendChild(h("div", {class:"mods-empty"}, "no modules match this facet"));
+
+  root.appendChild(tbl);
+  return root;
+}

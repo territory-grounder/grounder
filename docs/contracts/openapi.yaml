@@ -1,0 +1,343 @@
+openapi: 3.0.3
+info:
+  title: Territory Grounder API
+  version: "1"
+  x-provenance:
+    generated_at: "2026-07-21T13:29:28Z"
+    source_hash: "af7ba55a78497c99f6053b8309ac22df9502360c772f20df72f6e4707ee4a1cb"
+    coverage_scope: "routes=41;entities=16"
+components:
+  securitySchemes:
+    tgHMAC:
+      type: apiKey
+      in: header
+      name: X-TG-Signature
+paths:
+  /v1/alerts:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/capabilities:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/config:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/config/{key}:
+    post:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/contract:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/credentials/coverage:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/credentials/resolutions:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/credentials/sources:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/decisions:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/estate:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/events:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/governance:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/grounding:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/ingest/{source_type}:
+    post:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/ledger:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/mode:
+    post:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/models:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/policy/decisions:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/policy/graduation:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/policy/mode:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/policy/rules:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/regime:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/secrets:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/secrets/{name}:
+    post:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/session:
+    post:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/session/elevate:
+    post:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/session/logout:
+    post:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/sessions:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/sessions/{external_ref}:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/sessions/{external_ref}/replay:
+    post:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/sessions/{external_ref}/stream:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/skills:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/skills/trials:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/skills/versions/{id}/{verb}:
+    post:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/skills/{name}:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/skills/{name}/versions:
+    post:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/stats:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/vote:
+    post:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/whoami:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/wiki:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}
+  /v1/wiki/{slug}:
+    get:
+      security:
+        - tgHMAC: []
+      responses:
+        "200": {description: ok}
+        "401": {description: unauthenticated}
+        "404": {description: not found}

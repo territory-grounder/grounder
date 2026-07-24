@@ -1,0 +1,28 @@
+apiVersion: v2
+name: grounder
+description: >-
+  Territory Grounder — a first-class Kubernetes deploy target at parity with the docker-compose
+  single-node profile. Brings up the grounder control-plane, application Postgres (pgvector),
+  Temporal + its backing Postgres, the Temporal UI, and the LiteLLM model-gateway. Phase 0/1
+  read-only foundation: the mutation effect channel is disabled by default (values.mutation.enabled).
+# Provenance: [R] deploy-target parity · governed by spec/009-kubernetes-deploy.
+type: application
+
+# Chart version tracks the chart's own packaging; appVersion tracks the grounder control-plane image.
+version: 0.1.0
+appVersion: "0.1.0"
+
+home: https://gitlab.example.net
+sources:
+  - https://gitlab.example.net
+keywords:
+  - sre
+  - governed-autonomy
+  - temporal
+  - postgres
+  - litellm
+maintainers:
+  - name: Territory Grounder
+annotations:
+  territory-grounder/spec: spec/009-kubernetes-deploy
+  territory-grounder/parity-with: deploy/docker-compose.yml

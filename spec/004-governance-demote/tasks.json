@@ -1,0 +1,89 @@
+{
+  "spec": "004-governance-demote",
+  "tasks": [
+    {
+      "id": "T-304-1",
+      "title": "Repeat-offender demotion: per-incident recurrence over 30d, known-transient exclusion, analysis-only demote with auto-expiry",
+      "files_owned": [
+        "core/governance/repeat_offender.go",
+        "core/governance/demote.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-301",
+        "REQ-302",
+        "REQ-303",
+        "REQ-304"
+      ],
+      "acceptance": {
+        "feature": "governance-demote.feature",
+        "scenarios": [
+          "A genuine repeat-offender tuple is auto-demoted to analysis-only",
+          "A tuple recurring three times in thirty days is classified a demote candidate",
+          "A tuple recurring twice is not classified a demote candidate",
+          "An intentional known-transient tuple is excluded from demotion",
+          "A demotion auto-expires after thirty days"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 380,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-304-2",
+      "title": "Judge-liveness monitor: per-tenant judged fraction from judge-independent tables + judge-death warning",
+      "files_owned": [
+        "core/governance/judge_liveness.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-305",
+        "REQ-306"
+      ],
+      "acceptance": {
+        "feature": "governance-demote.feature",
+        "scenarios": [
+          "The judge-liveness monitor computes the judged fraction from judge-independent tables",
+          "A non-recent session is excluded from the judged fraction",
+          "A judged fraction below one half over more than three sessions raises a judge-death warning",
+          "A judged fraction below one half with three or fewer eligible sessions raises no warning"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 280,
+        "max_wall_clock_minutes": 75
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-304-3",
+      "title": "Governance Temporal Schedules + retention split: demotion decisions and liveness facts on the immutable audit spine, transcripts purgeable",
+      "files_owned": [
+        "core/governance/retention.go",
+        "temporal/governance/schedule.go"
+      ],
+      "deps": [
+        "T-304-1",
+        "T-304-2"
+      ],
+      "req_ids": [
+        "REQ-301",
+        "REQ-305"
+      ],
+      "acceptance": {
+        "feature": "governance-demote.feature",
+        "scenarios": [
+          "A governance demotion decision is appended to the immutable audit spine",
+          "A raw judged transcript is purgeable while the judged fraction fact is retained"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 260,
+        "max_wall_clock_minutes": 75
+      },
+      "status": "completed"
+    }
+  ]
+}

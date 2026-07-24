@@ -1,0 +1,288 @@
+/* ============================================================================
+   POLICY module (pol-) — the Policy Engine's operator surface (TG-94/TG-106).
+   Answers "which autonomy mode is active and what may it do?", "what are the
+   operator's rules (rules-as-data, ASA-style)?", "which op-classes have earned
+   autonomy?", and "what did the engine decide?" — all from the REAL persisted
+   projections (migration 0019) served by the read-only policy API. authZ
+   metadata only; no secret material is ever fetched or shown (INV-13).
+   ============================================================================ */
+
+/* relative time from an RFC3339 string; honest "never"/passthrough on empty/unparseable. */
+function polRel(iso) {
+  if (!iso) return "never";
+  const t = Date.parse(iso);
+  if (isNaN(t)) return String(iso);
+  let s = Math.floor((Date.now() - t) / 1000);
+  if (s < 0) return "just now";
+  if (s < 60) return s + "s ago";
+  const m = Math.floor(s / 60); if (m < 60) return m + "m ago";
+  const hh = Math.floor(m / 60); if (hh < 24) return hh + "h ago";
+  const d = Math.floor(hh / 24); if (d < 30) return d + "d ago";
+  const mo = Math.floor(d / 30); if (mo < 12) return mo + "mo ago";
+  return Math.floor(mo / 12) + "y ago";
+}
+
+function polErr(msg) { return h("div", { class: "empty", style: "padding:22px" }, h("div", { class: "desc" }, msg)); }
+function polNone(big, desc) { return h("div", { class: "empty", style: "padding:34px 20px" }, h("div", { class: "big" }, big), h("div", { class: "desc" }, desc)); }
+function polSec(lbl, title, extra) {
+  return h("div", { class: "sec" },
+    h("span", { class: "lbl", style: "color:var(--match)" }, lbl),
+    h("h3", {}, title),
+    h("span", { class: "rule" }),
+    extra || null);
+}
+/* a table wrapped in its own horizontal-scroll container — the page body never scrolls sideways. */
+function polCard(table) { return h("div", { class: "wrapcard" }, h("div", { class: "pol-scroll" }, table)); }
+
+/* verdict pill — auto (map-indigo) / approve (amber) / deny (deviation), rules-as-data semantics. */
+function polVerdict(v) {
+  const t = String(v || "").toLowerCase();
+  const tint = t === "auto" ? "var(--map)" : t === "approve" ? "var(--partial)" : t === "deny" ? "var(--deviation)" : "var(--ink3)";
+  return h("span", { class: "pol-pill", style: "color:" + tint + ";border-color:color-mix(in srgb," + tint + " 45%,transparent);background:color-mix(in srgb," + tint + " 9%,transparent)" }, (v || "—").toUpperCase());
+}
+/* graduation level pill — auto = earned autonomy (map), approve = human-gated (steel). */
+function polLevel(l) {
+  const t = String(l || "").toLowerCase();
+  const tint = t === "auto" ? "var(--map)" : "var(--territory)";
+  return h("span", { class: "pol-pill", style: "color:" + tint + ";border-color:color-mix(in srgb," + tint + " 45%,transparent);background:color-mix(in srgb," + tint + " 9%,transparent)" }, (l || "—").toUpperCase());
+}
+/* last-outcome chip on the ladder — verified_clean (ok) / deviated (bad) / unverified (neutral). */
+function polOutcome(o) {
+  const t = String(o || "").toLowerCase();
+  if (t === "verified_clean") return h("span", { class: "chip-ok" }, "VERIFIED CLEAN");
+  if (t === "deviated") return h("span", { class: "chip-bad" }, "DEVIATED");
+  return h("span", { class: "pol-pill", style: "color:var(--ink3);border-color:var(--line2)" }, (o || "unverified").toUpperCase().replace(/_/g, " "));
+}
+
+/* ---- section 1: mode & posture — the honest-posture hero (TG-106 read side) ------------------- */
+function polModeSection() {
+  const strip = h("div", { class: "pol-strip" });
+  strip.append(polSec("LIVE · autonomy mode", "Which mode is active — and what it may do"));
+  const m = liveState.policyMode;
+  if (m === undefined) { strip.append(polErr("Connecting to the policy engine…")); return strip; }
+  if (m === null) { strip.append(polErr("/v1/policy/mode is not served by this control plane yet (fail-closed).")); return strip; }
+
+  const mode = m.mode || "Shadow";
+  const key = mode.toLowerCase();
+  // color-coded by mode: read-only postures are safe/neutral, actuating postures warn.
+  const tint = key === "full-auto" ? "var(--deviation)" : key === "semi-auto" ? "var(--partial)"
+    : key === "hitl" ? "var(--territory)" : "var(--match)";
+
+  const badge = h("div", { class: "pol-mode-badge", style: "color:" + tint + ";border-color:color-mix(in srgb," + tint + " 50%,transparent);background:color-mix(in srgb," + tint + " 8%,transparent)" },
+    h("span", { class: "pol-mode-name" }, mode),
+    h("span", { class: "pol-mode-tag" }, m.may_auto_actuate ? "actuating posture" : "read-only posture"));
+
+  // honest posture flags derived from the API's own booleans — never inferred locally.
+  const flags = h("div", { class: "pol-flags" },
+    m.may_auto_actuate
+      ? h("span", { class: "chip-bad" }, "MAY AUTO-ACTUATE")
+      : h("span", { class: "chip-ok" }, "NO AUTO-ACTUATION"),
+    m.requires_human_vote
+      ? h("span", { class: "chip-warn" }, "HUMAN VOTE REQUIRED")
+      : h("span", { class: "pol-pill", style: "color:var(--ink3);border-color:var(--line2)" }, "NO VOTE GATE"),
+    m.persisted
+      ? h("span", { class: "pol-pill", style: "color:var(--territory);border-color:color-mix(in srgb,var(--territory) 45%,transparent)" }, "PERSISTED")
+      : h("span", { class: "chip-warn" }, "DEFAULT · NOT PERSISTED"));
+
+  // the worker's live mutation gate — an authZ verdict is still refused at the gate when mutation is OFF.
+  const mut = liveState.mutation;
+  const stale = liveState.postureStale;
+  const gateNote = stale
+    ? h("p", { class: "pol-note" }, "The worker's mutation posture is ", h("b", {}, "unverified"), " — the gate is treated as closed until it re-publishes.")
+    : mut
+      ? h("p", { class: "pol-note" }, "The worker's mutation gate reports ", h("b", { style: "color:var(--partial)" }, "ON"), " — allow/auto verdicts can reach the effect lane. Verify the canary posture on Governance.")
+      : h("p", { class: "pol-note" }, "Mutation is currently ", h("b", { style: "color:var(--match)" }, "OFF"), " at the worker gate — even an ", h("b", {}, "auto"), " verdict is reasoned-and-logged, never applied (Phase 0/1).");
+
+  const body = h("div", { class: "pol-mode-body" },
+    h("p", { class: "pol-posture" }, m.posture || "The active autonomy mode governs whether an allowed action may actuate without a human vote."),
+    flags,
+    gateNote);
+
+  strip.append(h("div", { class: "wrapcard pol-mode" }, badge, body));
+
+  // read-only mode control — a DISABLED, clearly-labeled placeholder for the gated admin write.
+  strip.append(h("div", { class: "pol-disabled" },
+    h("button", { class: "pol-disbtn", disabled: "", tabindex: "-1", "aria-disabled": "true", title: "Changing the autonomy mode is a gated admin write — wired in a later slice." }, "Change mode…"),
+    h("span", { class: "pol-disnote" }, "Read-only here. Changing the mode is a gated, ledgered admin action (double-confirmed for actuating modes) wired in a later slice — this surface never mutates it.")));
+  return strip;
+}
+
+/* ---- section 2: ASA rules — the ordered, rules-as-data access-list (TG-104 read side) --------- */
+function polRuleParams(r) {
+  const parts = [];
+  if (r.band_mode) parts.push(h("span", {}, h("b", {}, "band:"), " " + r.band_mode));
+  if (r.min_confidence != null) parts.push(h("span", {}, h("b", {}, "min-conf:"), " " + r.min_confidence));
+  if (r.rate_limit != null) parts.push(h("span", {}, h("b", {}, "rate:"), " " + r.rate_limit));
+  if (!parts.length) return h("span", { style: "color:var(--ink4)" }, "—");
+  const out = h("span", { class: "pol-params" });
+  parts.forEach((p, i) => { if (i) out.append(h("span", { style: "color:var(--ink4)" }, "  ·  ")); out.append(p); });
+  return out;
+}
+function polRulesSection() {
+  const strip = h("div", { class: "pol-strip" });
+  const p = liveState.policyRules;
+  const meta = p && p.present && p.updated_by
+    ? h("span", { class: "lbl", style: "font-size:9px" }, "by " + p.updated_by + (p.updated_at ? " · " + polRel(p.updated_at) : ""))
+    : null;
+  strip.append(polSec("LIVE · policy · rules-as-data", "The active access-list — evaluated top-down, deny-overrides", meta));
+  if (p === undefined) { strip.append(polErr("Connecting to the policy engine…")); return strip; }
+  if (p === null) { strip.append(polErr("/v1/policy/rules is not served by this control plane yet (fail-closed).")); return strip; }
+  if (!p.present || !p.rules || !p.rules.length) {
+    strip.append(polNone("No ruleset persisted", "No operator policy has been written — every action resolves to the fail-closed default (deny/approve). Rules-as-data appear here once a ruleset is persisted."));
+    return strip;
+  }
+
+  const t = h("table", { class: "tbl" });
+  t.append(h("thead", {}, h("tr", {}, ...["#", "Verdict", "Selector", "Op-class", "Params", "Approve by", "Reversible"].map(x => h("th", {}, x)))));
+  const tb = h("tbody");
+  p.rules.forEach((r, i) => {
+    const mt = r.match || {};
+    const rev = mt.reversible == null ? h("span", { style: "color:var(--ink4)" }, "—")
+      : mt.reversible ? h("span", { style: "color:var(--match)" }, "reversible")
+        : h("span", { style: "color:var(--deviation)" }, "irreversible");
+    tb.append(h("tr", { class: r.is_default ? "pol-def" : "" },
+      h("td", { class: "pol-ord" }, r.is_default ? "def" : String(i + 1)),
+      h("td", {}, polVerdict(r.verdict)),
+      h("td", {}, mt.selector ? h("span", { class: "pol-sel" }, mt.selector) : h("span", { style: "color:var(--ink4)" }, "any")),
+      h("td", { class: "m" }, mt.op_class ? h("span", { style: "color:var(--map)" }, mt.op_class) : h("span", { style: "color:var(--ink4)" }, "any")),
+      h("td", {}, polRuleParams(r)),
+      h("td", {}, (r.approve_by && r.approve_by.length) ? h("span", { class: "pol-approve" }, r.approve_by.join(", ")) : h("span", { style: "color:var(--ink4)" }, "—")),
+      h("td", { class: "m" }, rev)));
+  });
+  t.append(tb);
+  strip.append(polCard(t));
+  strip.append(h("div", { class: "pol-disabled" },
+    h("button", { class: "pol-disbtn", disabled: "", tabindex: "-1", "aria-disabled": "true", title: "Editing the ruleset is a sealed admin write — wired in a later slice." }, "Edit rules…"),
+    h("span", { class: "pol-disnote" }, "Read-only. Editing rules-as-data is a sealed, ledgered admin write wired in a later slice — this surface only renders the active ruleset.")));
+  return strip;
+}
+
+/* ---- section 3: graduation ladder — the earned-autonomy view --------------------------------- */
+const POL_PROMOTE_DEFAULT = 5; // engine DefaultPromoteThreshold — labeled as the default, never asserted per-class.
+function polGradSection() {
+  const strip = h("div", { class: "pol-strip" });
+  strip.append(polSec("LIVE · graduation ladder", "Earned autonomy — clean runs toward promotion"));
+  const g = liveState.policyGraduation;
+  if (g === undefined) { strip.append(polErr("Connecting to the policy engine…")); return strip; }
+  if (g === null) { strip.append(polErr("/v1/policy/graduation is not served by this control plane yet (fail-closed).")); return strip; }
+  if (!g.length) {
+    strip.append(polNone("No op-class has graduated yet", "The ladder is empty — an op-class appears here once the engine records its first run outcome. Autonomy is earned, never assumed."));
+    return strip;
+  }
+
+  const t = h("table", { class: "tbl" });
+  t.append(h("thead", {}, h("tr", {}, ...["Op-class", "Level", "Progress toward auto", "Last outcome", "Updated"].map(x => h("th", {}, x)))));
+  const tb = h("tbody");
+  g.forEach(c => {
+    const auto = String(c.level || "").toLowerCase() === "auto";
+    const n = c.clean_run_count || 0;
+    const frac = auto ? 1 : Math.min(n, POL_PROMOTE_DEFAULT) / POL_PROMOTE_DEFAULT;
+    const fill = auto ? "var(--map)" : "var(--match)";
+    const prog = auto
+      ? h("span", { class: "pol-grad" }, h("span", { class: "pol-grad-bar" }, h("span", { class: "pol-grad-fill", style: "width:100%;background:" + fill })), h("span", { class: "pol-grad-n", style: "color:var(--map)" }, "earned"))
+      : h("span", { class: "pol-grad", title: n + " consecutive verified-clean runs (default threshold " + POL_PROMOTE_DEFAULT + ")" },
+          h("span", { class: "pol-grad-bar" }, h("span", { class: "pol-grad-fill", style: "width:" + (frac * 100).toFixed(0) + "%;background:" + fill })),
+          h("span", { class: "pol-grad-n" }, n + " / " + POL_PROMOTE_DEFAULT));
+    tb.append(h("tr", {},
+      h("td", { class: "m", style: "color:var(--map)" }, c.op_class || "—"),
+      h("td", {}, polLevel(c.level)),
+      h("td", {}, prog),
+      h("td", {}, polOutcome(c.last_outcome)),
+      h("td", { class: "m", style: "color:var(--ink3)" }, polRel(c.updated_at))));
+  });
+  t.append(tb);
+  strip.append(polCard(t));
+  strip.append(h("div", { class: "pol-cap" }, "Progress shows consecutive verified-clean runs against the engine's default promotion threshold (" + POL_PROMOTE_DEFAULT + "); a class's own threshold may differ. A deviation demotes to approve and resets the streak."));
+  return strip;
+}
+
+/* ---- section 4: decision log — recent policy decisions, ?limit= respected -------------------- */
+let polDecLimit = 50;
+let polDecLoading = false;
+
+async function polRunDecFetch() {
+  polDecLoading = true;
+  polRerenderView();
+  try { const p = await liveGet("/v1/policy/decisions?limit=" + encodeURIComponent(polDecLimit)); liveState.policyDecisions = p.decisions || []; }
+  catch (e) { liveState.policyDecisions = null; }
+  polDecLoading = false;
+  polRerenderView();
+}
+/* re-render the whole surface in place (mode/rules/graduation are cached on liveState — cheap). */
+function polRerenderView() {
+  if ((location.hash || "").replace("#", "") !== "policy") return;
+  const host = document.querySelector(".main .view");
+  if (!host) return;
+  host.innerHTML = "";
+  host.append(views.policy());
+}
+function polDecisionsSection() {
+  const strip = h("div", { class: "pol-strip" });
+  const sel = h("select", {
+    class: "pol-lim m", "aria-label": "decision log limit",
+    onchange: e => { const v = parseInt(e.target.value, 10); if (v > 0) { polDecLimit = v; polRunDecFetch(); } }
+  });
+  [25, 50, 100, 200].forEach(n => {
+    const o = h("option", { value: String(n) }, "limit " + n);
+    if (n === polDecLimit) o.selected = true;
+    sel.append(o);
+  });
+  const note = polDecLoading ? h("span", { class: "lbl", style: "font-size:9px;color:var(--ink3)" }, "loading…") : null;
+  strip.append(polSec("LIVE · decision log", "What the engine decided — newest first", h("span", { style: "display:inline-flex;gap:8px;align-items:center" }, note, sel)));
+
+  const rs = liveState.policyDecisions;
+  if (rs === undefined) { strip.append(polErr("Connecting to the policy engine…")); return strip; }
+  if (rs === null) { strip.append(polErr("/v1/policy/decisions is not served by this control plane yet (fail-closed).")); return strip; }
+  if (!rs.length) {
+    strip.append(polNone("No decisions recorded", "The engine has not logged a policy_decision yet — a quiet log is an idle engine. Each Decide evaluation appends one non-secret audit row here."));
+    return strip;
+  }
+
+  const t = h("table", { class: "tbl" });
+  t.append(h("thead", {}, h("tr", {}, ...["Rule", "Verdict", "Band", "Min-conf", "Mode", "Decided"].map(x => h("th", {}, x)))));
+  const tb = h("tbody");
+  rs.forEach(r => {
+    tb.append(h("tr", {},
+      h("td", { class: "m" }, r.rule_id ? h("span", { style: "color:var(--territory)" }, r.rule_id) : h("span", { style: "color:var(--ink4)", title: "no rule matched — fail-closed default" }, "default")),
+      h("td", {}, polVerdict(r.verdict)),
+      h("td", { class: "m" }, r.composed_band ? h("span", { class: "pol-band" }, r.composed_band) : h("span", { style: "color:var(--ink4)" }, "—")),
+      h("td", { class: "m", style: "color:var(--ink2)" }, r.min_confidence != null ? String(r.min_confidence) : "—"),
+      h("td", { class: "m", style: "color:var(--ink3)" }, r.mode || "—"),
+      h("td", { class: "m", style: "color:var(--ink3)" }, polRel(r.created_at))));
+  });
+  t.append(tb);
+  strip.append(polCard(t));
+  return strip;
+}
+
+/* ---- deferred: packet-tracer ("may TG act on host X?") --------------------------------------- */
+/* TG-105. The live trace needs a worker-side Decide endpoint that does not exist yet, so we render a
+   clearly-labeled coming-soon placeholder rather than fabricate a trace result. */
+function polTraceSection() {
+  const strip = h("div", { class: "pol-strip" });
+  strip.append(polSec("SOON · packet-tracer", "“May TG act on host X?” — trace an action through the policy"));
+  strip.append(h("div", { class: "empty", style: "padding:30px 20px" },
+    h("div", { class: "big" }, "Live trace — requires the worker Decide endpoint"),
+    h("div", { class: "desc" }, "The ASA-style packet-tracer (walk a candidate action through mode → rules → graduation → band and show the resolved verdict) needs a worker-side evaluation endpoint that is not wired yet. It is a follow-on; no simulated verdict is shown here.")));
+  return strip;
+}
+
+/* ---- the surface ----------------------------------------------------------------------------- */
+function polView() {
+  const wrap = h("div");
+  if (typeof liveState === "undefined" || !liveState.on) {
+    wrap.append(h("div", { class: "empty", style: "padding:52px 20px" },
+      h("div", { class: "big" }, "Policy engine — live only"),
+      h("div", { class: "desc" }, "This surface reads live, non-secret policy state from the control plane. It has no preview data; sign in to adopt it.")));
+    return wrap;
+  }
+  wrap.append(h("p", { class: "desc pol-intro" },
+    "authZ, not authN — the ASA-style access-control layer (rules-as-data · deny-overrides). Which autonomy mode is active and what it may do, the operator's rules, which op-classes have earned autonomy, and what the engine decided. ",
+    h("b", {}, "Read-only, non-secret metadata"), " — no argv, host, or credential (INV-13); mode/rule changes are gated admin writes wired later."));
+  wrap.append(polModeSection());
+  wrap.append(polRulesSection());
+  wrap.append(polGradSection());
+  wrap.append(polDecisionsSection());
+  wrap.append(polTraceSection());
+  return wrap;
+}

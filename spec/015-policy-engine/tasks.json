@@ -1,0 +1,363 @@
+{
+  "spec": "015-policy-engine",
+  "tasks": [
+    {
+      "id": "T-015-1",
+      "title": "OPA/Rego embed: fixed audited evaluator module + deny-overrides effect (TG-95)",
+      "files_owned": [
+        "core/policy/engine.go",
+        "core/policy/eval.go",
+        "core/policy/rego/policy.rego"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-1503",
+        "REQ-1504",
+        "REQ-1522"
+      ],
+      "acceptance": {
+        "feature": "policy-engine.feature",
+        "scenarios": [
+          "Operator rules enter the fixed Rego module as data only",
+          "A matching deny wins regardless of rule order",
+          "Every decision records the bundle version and the full matched-rule list"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 500,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-015-2",
+      "title": "Rule data model + schema + verdict trinary + param inheritance (TG-96)",
+      "files_owned": [
+        "core/policy/rule.go",
+        "core/policy/schema.go"
+      ],
+      "deps": [
+        "T-015-1"
+      ],
+      "req_ids": [
+        "REQ-1505",
+        "REQ-1506",
+        "REQ-1507"
+      ],
+      "acceptance": {
+        "feature": "policy-engine.feature",
+        "scenarios": [
+          "A rule resolves an action to one of auto approve or deny",
+          "An unset rule param inherits from the global-default rule"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-015-3",
+      "title": "min_confidence clamp + rate_limit governor (TG-97)",
+      "files_owned": [
+        "core/policy/confidence.go",
+        "core/policy/ratelimit.go"
+      ],
+      "deps": [
+        "T-015-2"
+      ],
+      "req_ids": [
+        "REQ-1507",
+        "REQ-1508"
+      ],
+      "acceptance": {
+        "feature": "policy-engine.feature",
+        "scenarios": [
+          "A below-min-confidence action is clamped to approve",
+          "An over-rate-limit action is clamped to approve"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-015-4",
+      "title": "Four global modes: exactly-one-active, gated+audited transitions, fail-closed Shadow default (TG-98)",
+      "files_owned": [
+        "core/policy/mode.go"
+      ],
+      "deps": [
+        "T-015-1"
+      ],
+      "req_ids": [
+        "REQ-1500",
+        "REQ-1502",
+        "REQ-1519",
+        "REQ-1520"
+      ],
+      "acceptance": {
+        "feature": "policy-engine.feature",
+        "scenarios": [
+          "Exactly one of the four modes is active",
+          "A mode transition is gated and audited to the ledger",
+          "An absent persisted mode fails closed to Shadow",
+          "The mode is the sole actuation chokepoint that absorbs the retired gate"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 350,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-015-5",
+      "title": "Identical-pipeline invariant: mode governs only the actuation branch (TG-99)",
+      "files_owned": [
+        "core/policy/pipeline_guard.go"
+      ],
+      "deps": [
+        "T-015-4"
+      ],
+      "req_ids": [
+        "REQ-1501"
+      ],
+      "acceptance": {
+        "feature": "policy-engine.feature",
+        "scenarios": [
+          "The investigation pipeline is identical across all four modes"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "done"
+    },
+    {
+      "id": "T-015-6",
+      "title": "Band composition: respect (more-restrictive) and force (override, double-warn) (TG-100)",
+      "files_owned": [
+        "core/policy/band.go"
+      ],
+      "deps": [
+        "T-015-2"
+      ],
+      "req_ids": [
+        "REQ-1509",
+        "REQ-1510"
+      ],
+      "acceptance": {
+        "feature": "policy-engine.feature",
+        "scenarios": [
+          "Respect band_mode emits the more-restrictive of verdict and risk band",
+          "Force band_mode overrides the risk band and double-warns"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 75
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-015-7",
+      "title": "Execution deny-floor + conservative/bare templates + removable-with-warn (TG-101)",
+      "files_owned": [
+        "core/policy/floor.go",
+        "core/policy/templates/conservative.json",
+        "core/policy/templates/bare.json"
+      ],
+      "deps": [
+        "T-015-1"
+      ],
+      "req_ids": [
+        "REQ-1511",
+        "REQ-1512",
+        "REQ-1513"
+      ],
+      "acceptance": {
+        "feature": "policy-engine.feature",
+        "scenarios": [
+          "A floor-class action is still proposed with rationale in every mode",
+          "The conservative template loads the predecessor deny-patterns and governor",
+          "Removing the conservative template warns but is not blocked"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 450,
+        "max_wall_clock_minutes": 100
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-015-8",
+      "title": "Per-op-class graduation promote/demote bound to verify-on-auto (TG-102)",
+      "files_owned": [
+        "core/policy/graduation.go"
+      ],
+      "deps": [
+        "T-015-4",
+        "T-015-7"
+      ],
+      "req_ids": [
+        "REQ-1514",
+        "REQ-1515"
+      ],
+      "acceptance": {
+        "feature": "policy-engine.feature",
+        "scenarios": [
+          "An op-class promotes to auto after N clean verified runs",
+          "An op-class demotes to approve on the first deviation",
+          "An auto verdict still runs predict execute verify breaker"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 100
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-015-9",
+      "title": "Local principals+groups + approve_by enforcement on /v1/vote (TG-103)",
+      "files_owned": [
+        "core/policy/identity.go",
+        "core/policy/approve.go"
+      ],
+      "deps": [
+        "T-015-2"
+      ],
+      "req_ids": [
+        "REQ-1516"
+      ],
+      "acceptance": {
+        "feature": "policy-engine.feature",
+        "scenarios": [
+          "A vote from an approve_by member is admitted",
+          "A vote from a non-member is rejected"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 350,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-015-10",
+      "title": "Federated LDAP/OIDC principal resolution behind the identity interface (TG-104)",
+      "files_owned": [
+        "core/policy/federated.go"
+      ],
+      "deps": [
+        "T-015-9"
+      ],
+      "req_ids": [
+        "REQ-1516"
+      ],
+      "acceptance": {
+        "feature": "policy-engine.feature",
+        "scenarios": [
+          "A federated principal resolves through the configured provider"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 350,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-015-11",
+      "title": "Warn-don't-block guard + audit-every-decision + admin engine toggle (TG-105)",
+      "files_owned": [
+        "core/policy/warn.go",
+        "core/policy/audit.go"
+      ],
+      "deps": [
+        "T-015-4"
+      ],
+      "req_ids": [
+        "REQ-1517",
+        "REQ-1518",
+        "REQ-1519"
+      ],
+      "acceptance": {
+        "feature": "policy-engine.feature",
+        "scenarios": [
+          "A single allow-all policy is permitted behind a red double-confirmation",
+          "Every policy decision is appended to the governance ledger",
+          "Forcing the engine on in Shadow warns and disabling it in Semi-auto double-warns"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 100
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-015-12",
+      "title": "policy_decision persistence migration + console policy surface + packet-tracer (TG-106)",
+      "files_owned": [
+        "db/migrations/0016_policy_engine.sql",
+        "frontend/src/surfaces/Policy.tsx"
+      ],
+      "deps": [
+        "T-015-2",
+        "T-015-4",
+        "T-015-11"
+      ],
+      "req_ids": [
+        "REQ-1502",
+        "REQ-1505",
+        "REQ-1518"
+      ],
+      "acceptance": {
+        "feature": "policy-engine.feature",
+        "scenarios": [
+          "The policy_decision table is append-only with no runtime UPDATE or DELETE",
+          "The console edits rules as data and renders the packet-tracer explanation"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 600,
+        "max_wall_clock_minutes": 150
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-015-13",
+      "title": "Safety-core refactor: absorb MutationGate + TG_MUTATION_ENABLED into the mode chokepoint; re-express INV-09/INV-21 (breaker, /halt, boot preflight, spec/013, lockstep) in mode terms (TG-95 refactor)",
+      "files_owned": [
+        "core/safety/mutation_chokepoint.go",
+        "docs/adr/0013-mode-is-the-actuation-chokepoint.md"
+      ],
+      "deps": [
+        "T-015-4",
+        "T-015-8"
+      ],
+      "req_ids": [
+        "REQ-1520",
+        "REQ-1521"
+      ],
+      "acceptance": {
+        "feature": "policy-engine.feature",
+        "scenarios": [
+          "The mode is the sole actuation chokepoint that absorbs the retired gate",
+          "Absorbing the mutation gate is a deliberate audited safety-core refactor"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 500,
+        "max_wall_clock_minutes": 150
+      },
+      "status": "done"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+title = "Territory Grounder gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "obvious placeholders, secret references, and docs (no real secrets)"
+regexes = [
+  '''change-me[-a-z]*''',        # .env.example placeholders
+  '''os\.environ/[A-Z_]+''',     # litellm-config.yaml env references
+  '''env:[A-Z_]+''',             # secret references
+  '''file:/[A-Za-z0-9/_.-]+''',
+  '''proxmox/AWX/k8s''',         # false-positive: a code comment listing actuation lanes (no secret), core/credential/plane_split.go
+]
+paths = [
+  '''docs/.*''',
+  '''deploy/\.env\.example''',
+  '''.*_test\.go''',             # test fixtures use throwaway secrets
+]

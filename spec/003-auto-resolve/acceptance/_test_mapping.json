@@ -1,0 +1,60 @@
+{
+  "feature": "auto-resolve.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes; pending = specified behavior whose implementation (core/reconcile.Reconciler + core/escalation.Queue, Phase 2) does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior). Every scenario here is pending: no Go exists yet.",
+  "scenarios": [
+    {
+      "name": "An incident closes only after the alert condition is confirmed cleared",
+      "req": "REQ-201",
+      "status": "present",
+      "test": "TestAutoResolveAcceptance"
+    },
+    {
+      "name": "A band-AUTO recovered host transitions its ticket to Done",
+      "req": "REQ-202",
+      "status": "present",
+      "test": "TestAutoResolveAcceptance"
+    },
+    {
+      "name": "Every close-out records a resolution_type",
+      "req": "REQ-203",
+      "status": "present",
+      "test": "TestAutoResolveAcceptance"
+    },
+    {
+      "name": "A session with no terminal result leaves the incident open",
+      "req": "REQ-204",
+      "status": "present",
+      "test": "TestAutoResolveAcceptance"
+    },
+    {
+      "name": "Outcomes are recorded as per-incident best-outcome rows",
+      "req": "REQ-205",
+      "status": "present",
+      "test": "TestAutoResolveAcceptance"
+    },
+    {
+      "name": "An unanswered poll schedules a delayed re-check in the escalation queue",
+      "req": "REQ-206",
+      "status": "present",
+      "test": "TestAutoResolveAcceptance"
+    },
+    {
+      "name": "A re-check with a still-active condition re-escalates and pages the approver graph",
+      "req": "REQ-207",
+      "status": "present",
+      "test": "TestAutoResolveAcceptance"
+    },
+    {
+      "name": "A re-check with a recovered condition defers closure to the autocloser",
+      "req": "REQ-207",
+      "status": "present",
+      "test": "TestAutoResolveAcceptance"
+    },
+    {
+      "name": "Reaching the unanswered-poll cap stands down to a human",
+      "req": "REQ-208",
+      "status": "present",
+      "test": "TestAutoResolveAcceptance"
+    }
+  ]
+}

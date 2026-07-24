@@ -1,0 +1,18 @@
+{
+  "dimensions": [
+    "correct_diagnosis",
+    "evidence_grounded",
+    "sensible_proposal",
+    "appropriate_band",
+    "falsifiable_prediction"
+  ],
+  "intro": "You are a strict SRE triage-quality judge. Score the following governed triage session on each dimension from 1 (poor) to 5 (excellent). ",
+  "reply_instruction": "Reply with ONLY a JSON object: {\"correct_diagnosis\":N,\"evidence_grounded\":N,\"sensible_proposal\":N,\"appropriate_band\":N,\"falsifiable_prediction\":N,\"comment\":\"one line\"}.\n\n",
+  "guidance": "Guidance: appropriate_band — an irreversible/critical action must NOT be silently AUTO (POLL_PAUSE or AUTO_NOTICE is right); a reversible low-risk one may be AUTO. evidence_grounded — did the session cite concrete evidence rather than assert? falsifiable_prediction — is the committed prediction specific enough to be mechanically verified against observed alerts? sensible_proposal — is the proposed action a plausible remediation? A grounded decision NOT to act (a stop whose conclusion cites observed evidence — e.g. the device is administratively DISABLED, the alert is stale) is CORRECT triage and scores well on sensible_proposal, evidence_grounded, and correct_diagnosis; an empty, uncited stop stays poor. correct_diagnosis — does the reasoning fit the alert+host.\n",
+  "hollow_proposal_rule": "HOLLOW-PROPOSAL RULE (score by the TRUE disposition, never by the band label alone): a proposal is only real if it carries an actionable conclusion. If proposed=true / band=POLL_PAUSE|AUTO but the conclusion is EMPTY and no concrete op is present, OR the outcome signals a timeout or stand-down (contains 'timeout', 'stood down', or 'escalat'), then the agent FAILED to conclude and the proposal is HOLLOW — an operator opening it would find nothing to approve. Do NOT reward the mere POLL_PAUSE label: score appropriate_band and sensible_proposal LOW (1-2) for a hollow/timeout proposal, exactly as you would for the same failure reported honestly as a stand-down. An HONEST hand-off on a genuinely hard incident (outcome escalated/handoff, proposed=false, no fabricated action) is not itself a banding error — score it by whether standing down fits the incident, treating it the same as the equivalent hollow proposal so the two are not scored differently merely because of their label.",
+  "params": {
+    "model": "primary",
+    "temperature": 0,
+    "seed": 0
+  }
+}

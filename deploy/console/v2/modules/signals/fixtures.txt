@@ -1,0 +1,60 @@
+/* ---- SIGNALS fixtures (sig-) — representative data, clearly not live ---- */
+/* clock anchor for the fixture window: "now" = 14:31 (matches ALERTS/LEDGER) */
+const sigNOWMIN = 14 * 60 + 31;
+
+/* time ranges: samples per window + x-tick step (hours) + forecast extension (hours) */
+const sigRANGES = {
+  "1h":  { hrs: 1,  n: 72,  step: 0.25, fut: 0.4 },
+  "6h":  { hrs: 6,  n: 96,  step: 1,    fut: 0.8 },
+  "24h": { hrs: 24, n: 120, step: 6,    fut: 1.6 },
+};
+
+/* estate heat-row fallback (mirrors the global HOSTS shape) — used only if HOSTS absent */
+const sigHOSTS_FB = {
+  "dc1k8s-cp1": { site: "dc1", role: "k8s control-plane", health: "ok"   },
+  "dc1k8s-w1":  { site: "dc1", role: "k8s worker",        health: "ok"   },
+  "dc1k8s-w3":  { site: "dc1", role: "k8s worker",        health: "crit" },
+  "dc1db01":    { site: "dc1", role: "postgres primary",  health: "ok"   },
+  "dc1fw01":    { site: "dc1", role: "cisco asa",         health: "ok"   },
+  "dc2pve02":   { site: "dc2", role: "proxmox node",      health: "ok"   },
+  "dc2nas01":   { site: "dc2", role: "synology nas",      health: "warn" },
+};
+
+/* TG events in the window, keyed to panels. t = hours relative to now (negative = past).
+   Tones map to reserved semantics: deviation=alert/unpredicted, notice/pause=band, ink=neutral action. */
+const sigEVENTS = {
+  p99: [
+    { t: -1.25, glyph: "▲", label: "alert librenms:22101", tone: "deviation" },
+    { t: -0.75, glyph: "⟲", label: "rollback e5c8a122",    tone: "ink"       },
+  ],
+  err: [
+    { t: -0.75, glyph: "⟲", label: "rollback e5c8a122", tone: "ink" },
+  ],
+  fs: [
+    { t: -0.05, glyph: "▲", label: "DiskPressure · 3 evicted", tone: "deviation" },
+  ],
+  vol: [
+    { t: -0.10, glyph: "◇", label: "prune 9d2f10e6 · AUTO_NOTICE", tone: "notice" },
+  ],
+  iops: [
+    { t: -0.10, glyph: "◇", label: "GC begin", tone: "notice" },
+  ],
+};
+
+/* section metadata: [key, title, one-line summary (summarize-first)] */
+const sigSECTIONS = [
+  ["pay",  "payments-api · golden signals",
+    "rev 119 regression 12:58 → rollback e5c8a122 13:46 → recovered · verdict DEVIATION (db01 outside predicted set)"],
+  ["k8s",  "k8s nodes · dc1",
+    "w3 imagefs 92% → DiskPressure evictions 14:31 · drain a3e91c4f held at POLL_PAUSE · map: full at +24m without action"],
+  ["stor", "storage · dc2",
+    "nas01 volume1 88.2% → prune 9d2f10e6 executing (AUTO_NOTICE) · map: settle 66±3% · pve02 backup-latency transient predicted"],
+];
+
+/* summary tiles (summarize-first strip) */
+const sigTILES = [
+  { lbl: "watched series",   val: "9",     sub: "3 sections · 7 hosts · 2 sites" },
+  { lbl: "active anomalies", val: "2",     sub: "w3 imagefs 92% · nas01 vol 88%", tone: "deviation", glyph: "▲" },
+  { lbl: "tg events in window", val: "3", sub: "2 executed · 1 held — rollback · prune · drain", tone: "notice", glyph: "◇" },
+  { lbl: "map agreement 24h", val: "91.4%", sub: "observed within predicted envelope", tone: "match", bar: 0.914 },
+];

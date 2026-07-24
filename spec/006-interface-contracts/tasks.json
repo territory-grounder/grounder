@@ -1,0 +1,468 @@
+{
+ "spec": "006-interface-contracts",
+ "tasks": [
+  {
+   "id": "T-006-1",
+   "title": "Authenticated HTTP surface: stats + session-replay handlers on core/auth router (reject-before-parse, no resume-with-prompt, authority-scoped not-found)",
+   "files_owned": [
+    "core/httpapi/router.go",
+    "core/httpapi/stats.go",
+    "core/httpapi/replay.go",
+    "core/httpapi/console.go",
+    "core/httpapi/ingest.go",
+    "core/httpapi/capabilities.go"
+   ],
+   "deps": [],
+   "req_ids": [
+    "REQ-501",
+    "REQ-504"
+   ],
+   "acceptance": {
+    "feature": "interface-contracts.feature",
+    "scenarios": [
+     "An unauthenticated stats request is rejected before body parse",
+     "A route registered with auth=none fails to register at boot",
+     "A replayed nonce is rejected",
+     "A stale-timestamp request is rejected",
+     "A tampered body invalidates the HMAC signature",
+     "Session-replay mints a new gated workflow from a read-only snapshot",
+     "A replay lookup for an unknown id returns not-found",
+     "An id the caller has no authority over is indistinguishable from a missing id"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 450,
+    "max_wall_clock_minutes": 120
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-006-2",
+   "title": "Ingest event surface: typed IncidentEnvelope + per-field grammar, run dedup/flap/burst/correlate, publish triage.requested keyed by external_ref",
+   "files_owned": [
+    "core/ingest/envelope.go",
+    "core/ingest/validate.go",
+    "core/ingest/normalize.go",
+    "core/ingest/publish.go"
+   ],
+   "deps": [],
+   "req_ids": [
+    "REQ-502"
+   ],
+   "acceptance": {
+    "feature": "interface-contracts.feature",
+    "scenarios": [
+     "An ingest adapter publishes a triage.requested event keyed by external_ref",
+     "Ingest runs dedup, flap, burst, and correlate before publishing"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 600,
+    "max_wall_clock_minutes": 120
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-006-3",
+   "title": "session_risk_audit persistence contract: required-field row appended to the hash-chained governance ledger",
+   "files_owned": [
+    "core/audit/risk_audit.go",
+    "core/audit/ledger.go"
+   ],
+   "deps": [],
+   "req_ids": [
+    "REQ-503"
+   ],
+   "acceptance": {
+    "feature": "interface-contracts.feature",
+    "scenarios": [
+     "Every risk classification appends one session_risk_audit row to the ledger"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 350,
+    "max_wall_clock_minutes": 90
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-006-4",
+   "title": "schema_version stamping registry: writer stamps current version, reader rejects future versions with SchemaVersionError",
+   "files_owned": [
+    "core/schema/version.go",
+    "core/schema/stamp.go"
+   ],
+   "deps": [],
+   "req_ids": [
+    "REQ-505"
+   ],
+   "acceptance": {
+    "feature": "interface-contracts.feature",
+    "scenarios": [
+     "Every governed row is stamped with its writer's schema_version",
+     "A reader rejects a row written by a future schema version"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 250,
+    "max_wall_clock_minutes": 60
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-006-5",
+   "title": "discovered_scheduled_reboots persistence contract: bi-temporal per-tenant registry with kill switch and valid_until",
+   "files_owned": [
+    "core/persist/scheduled_reboots.go"
+   ],
+   "deps": [
+    "T-006-4"
+   ],
+   "req_ids": [
+    "REQ-506"
+   ],
+   "acceptance": {
+    "feature": "interface-contracts.feature",
+    "scenarios": [
+     "The discovered_scheduled_reboots registry is bi-temporal with a kill switch"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 250,
+    "max_wall_clock_minutes": 60
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-006-6",
+   "title": "escalation_queue persistence contract: append-only rate-capped requeue lane that re-enters the gated pipeline",
+   "files_owned": [
+    "core/persist/escalation_queue.go"
+   ],
+   "deps": [
+    "T-006-4"
+   ],
+   "req_ids": [
+    "REQ-507"
+   ],
+   "acceptance": {
+    "feature": "interface-contracts.feature",
+    "scenarios": [
+     "The escalation_queue is append-only and re-enters the gated pipeline"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 250,
+    "max_wall_clock_minutes": 60
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-006-7",
+   "title": "Generated wire contracts (REQ-501b): emit openapi.yaml/asyncapi.yaml/JSON Schemas from the canonical model with 100%-endpoint coverage and provenance",
+   "files_owned": [
+    "tools/gencontracts/gencontracts.go",
+    "tools/gencontracts/cmd/gencontracts/main.go"
+   ],
+   "deps": [
+    "T-006-1",
+    "T-006-2"
+   ],
+   "req_ids": [
+    "REQ-501"
+   ],
+   "acceptance": {
+    "feature": "interface-contracts.feature",
+    "scenarios": [
+     "Generated wire contracts cover every routed endpoint with provenance"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 400,
+    "max_wall_clock_minutes": 100
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-006-8",
+   "title": "Browser operator session (REQ-508): AuthReadOnly/AuthOperatorLogin/AuthSession route classes, HMAC-signed server-registered cookie, digest-only operators, rate-limited login, fail-closed composition",
+   "files_owned": [
+    "core/auth/session.go",
+    "core/httpapi/session.go"
+   ],
+   "deps": [
+    "T-006-1"
+   ],
+   "req_ids": [
+    "REQ-508"
+   ],
+   "acceptance": {
+    "feature": "interface-contracts.feature",
+    "scenarios": [
+     "An operator login issues a read-only session that satisfies the read surface",
+     "A session principal never satisfies a machine route and never writes",
+     "Tampered, expired, and revoked session cookies are rejected before the handler runs",
+     "Operator login is rate-limited per operator and source ip"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 450,
+    "max_wall_clock_minutes": 120
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-006-9",
+   "title": "Sessions read surface (REQ-509): audit-spine session list (latest classification per ref \u22c8 mechanical verdict), GET-only, bounded, fail-closed",
+   "files_owned": [
+    "core/httpapi/sessions.go",
+    "core/db/sessions_read.go"
+   ],
+   "deps": [
+    "T-006-8"
+   ],
+   "req_ids": [
+    "REQ-509"
+   ],
+   "acceptance": {
+    "feature": "interface-contracts.feature",
+    "scenarios": [
+     "The sessions surface serves the audit spine over an operator session",
+     "An unwired sessions surface fails closed instead of fabricating rows"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 450,
+    "max_wall_clock_minutes": 120
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-006-10",
+   "title": "Alerts read surface (REQ-510): bounded accepted-envelope log appended at the ingest front door, GET-only, fail-closed",
+   "files_owned": [
+    "core/httpapi/alerts.go"
+   ],
+   "deps": [
+    "T-006-9"
+   ],
+   "req_ids": [
+    "REQ-510"
+   ],
+   "acceptance": {
+    "feature": "interface-contracts.feature",
+    "scenarios": [
+     "An accepted ingest appears on the alerts surface with its validated fields",
+     "A rejected payload never reaches the alerts surface"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 450,
+    "max_wall_clock_minutes": 120
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-006-11",
+   "title": "Governance + secret-reference read surfaces (REQ-511/512): posture from authoritative components; references-only secrets, valueless by construction",
+   "files_owned": [
+    "core/httpapi/governance.go",
+    "core/httpapi/secrets.go"
+   ],
+   "deps": [
+    "T-006-10"
+   ],
+   "req_ids": [
+    "REQ-511",
+    "REQ-512"
+   ],
+   "acceptance": {
+    "feature": "interface-contracts.feature",
+    "scenarios": [
+     "The governance surface reports the posture its components hold",
+     "The secrets surface carries references and resolution only, never a value"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 450,
+    "max_wall_clock_minutes": 120
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-006-12",
+   "title": "Liveness stream (REQ-513): SSE posture events \u2014 immediate snapshot then bounded interval, emit-only, fail-closed",
+   "files_owned": [
+    "core/httpapi/events.go"
+   ],
+   "deps": [
+    "T-006-11"
+   ],
+   "req_ids": [
+    "REQ-513"
+   ],
+   "acceptance": {
+    "feature": "interface-contracts.feature",
+    "scenarios": [
+     "The events stream emits the live posture on connect"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 450,
+    "max_wall_clock_minutes": 120
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-006-13",
+   "title": "Models read surface (REQ-514): verbatim LiteLLM control passthrough, key server-side, fail-closed",
+   "files_owned": [
+    "core/httpapi/models.go"
+   ],
+   "deps": [
+    "T-006-12"
+   ],
+   "req_ids": [
+    "REQ-514"
+   ],
+   "acceptance": {
+    "feature": "interface-contracts.feature",
+    "scenarios": [
+     "The models surface relays the gateway report verbatim and fails closed when unwired"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 450,
+    "max_wall_clock_minutes": 120
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-006-14",
+   "title": "Contract read surface (REQ-515): the generated OpenAPI served verbatim via go:embed, drift-gated, fail-closed",
+   "files_owned": [
+    "core/httpapi/contract.go",
+    "docs/contracts/embed.go"
+   ],
+   "deps": [
+    "T-006-13"
+   ],
+   "req_ids": [
+    "REQ-515"
+   ],
+   "acceptance": {
+    "feature": "interface-contracts.feature",
+    "scenarios": [
+     "The contract surface serves the generated endpoint map verbatim"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 450,
+    "max_wall_clock_minutes": 120
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-006-15",
+   "title": "Estate read surface (REQ-516): latest published estate_snapshot served as nodes+edges; grounder reads, worker writes; fail-closed / available=false",
+   "files_owned": [
+    "core/httpapi/estate.go"
+   ],
+   "deps": [
+    "T-006-14"
+   ],
+   "req_ids": [
+    "REQ-516"
+   ],
+   "acceptance": {
+    "feature": "interface-contracts.feature",
+    "scenarios": [
+     "The estate surface serves the latest published graph snapshot",
+     "The estate surface reports no snapshot rather than fabricating a topology"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 450,
+    "max_wall_clock_minutes": 120
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-006-16",
+   "title": "Grounding scorecard (REQ-517): live aggregates over verdict/prediction/audit tables \u2014 verifier match-rate, blast-radius precision/recall, the shuffled-graph falsifiability signal, and band/floor-hold distribution; honest zeros over an empty spine; fail-closed",
+   "files_owned": [
+    "core/httpapi/grounding.go"
+   ],
+   "deps": [
+    "T-006-15"
+   ],
+   "req_ids": [
+    "REQ-517"
+   ],
+   "acceptance": {
+    "feature": "interface-contracts.feature",
+    "scenarios": [
+     "The grounding scorecard publishes the verifier distribution and the falsifiability signal",
+     "The grounding scorecard reports honest zeros over an empty spine"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 450,
+    "max_wall_clock_minutes": 120
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-006-17",
+   "title": "Vote intake (REQ-518): session-authenticated POST binds {external_ref, approve} and signals the waiting Runner; voter = the session principal; 503 unwired; 409 on a closed decision window",
+   "files_owned": [
+    "core/httpapi/vote.go"
+   ],
+   "deps": [
+    "T-006-16"
+   ],
+   "req_ids": [
+    "REQ-518"
+   ],
+   "acceptance": {
+    "feature": "interface-contracts.feature",
+    "scenarios": [
+     "An authenticated operator vote signals the waiting decision it answers",
+     "A vote on a closed decision window reports conflict, never success"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 300,
+    "max_wall_clock_minutes": 90
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-006-18",
+   "title": "Canary safety + observability plane (REQ-525): MutationGate.Disable + worker halt-only kill-switch + armed mutation breaker + read-only /metrics exposition on grounder and worker (mutation stays OFF, no enable path)",
+   "files_owned": [
+    "core/safety/mutation_breaker.go",
+    "core/metrics/exposition.go",
+    "cmd/worker/admin.go"
+   ],
+   "deps": [
+    "T-006-17"
+   ],
+   "req_ids": [
+    "REQ-525"
+   ],
+   "acceptance": {
+    "feature": "interface-contracts.feature",
+    "scenarios": [
+     "The mutation gate exposes a runtime disable that keeps mutation off",
+     "The safety metrics exposition renders mutation_enabled zero and the breaker gauge"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 700,
+    "max_wall_clock_minutes": 180
+   },
+   "status": "completed"
+  }
+ ]
+}

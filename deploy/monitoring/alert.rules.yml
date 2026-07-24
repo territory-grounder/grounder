@@ -1,0 +1,47 @@
+# Territory Grounder — Phase-2 canary safety alert rules.
+#
+# The load-bearing rule is UnexpectedMutationEnabled: while the read-only foundation holds (Phase 0/1),
+# mutation_enabled MUST be 0 on every process. A 1 means the gate flipped on — page immediately. The other
+# rules cover an armed-breaker trip, an observed post-execution deviation, and a blind monitor (target down).
+groups:
+  - name: territory-grounder-safety
+    rules:
+      # CRITICAL: mutation is enabled anywhere while it should be OFF. Under Phase 0/1 this must NEVER fire.
+      - alert: UnexpectedMutationEnabled
+        expr: mutation_enabled == 1
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Mutation ENABLED on {{ $labels.job }}/{{ $labels.component }} (unexpected while read-only)"
+          description: "mutation_enabled == 1. The mutation gate flipped on. If this was not an authorized canary, HALT now: POST /halt on the worker admin surface (:8444) disables the gate."
+
+      # CRITICAL: the armed mutation breaker tripped open (gauge 2) — an auto-halt fired on a deviation/chain-gap.
+      - alert: MutationBreakerOpen
+        expr: circuit_breaker_state{name="mutation"} == 2
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Mutation breaker OPEN on {{ $labels.job }}"
+          description: "circuit_breaker_state{name=\"mutation\"} == 2 — the armed breaker tripped and disabled the gate. Investigate the deviation before any re-enable (re-enabling is owner-gated)."
+
+      # WARNING: any post-execution deviation observed by the mutation breaker. Under mutation OFF: stays flat.
+      - alert: MutationDeviationObserved
+        expr: increase(deviation_count[5m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Post-execution deviation(s) observed on {{ $labels.job }}"
+          description: "deviation_count increased over 5m — the mechanical verifier caught a post-state deviation. Under mutation OFF this must stay flat at zero."
+
+      # WARNING: a scrape target is unreachable — the safety monitor is blind to it.
+      - alert: MetricsTargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Metrics target {{ $labels.job }} is DOWN"
+          description: "Prometheus cannot scrape {{ $labels.instance }} — the safety monitor cannot see its mutation/breaker gauges."

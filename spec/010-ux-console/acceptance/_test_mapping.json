@@ -1,0 +1,114 @@
+{
+  "feature": "ux-console.feature",
+  "note": "Honest coverage frontier for the operator console. status: present = a runnable step drives real frontend code and passes; pending = specified panel behavior whose implementation (frontend/ React console) does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed UI). The console is scaffolded (frontend/) with vitest oracles; each scenario names its passing vitest test, run by the frontend CI job.",
+  "scenarios": [
+    {
+      "name": "The console builds its API layer only from the generated OpenAPI client",
+      "req": "REQ-601",
+      "status": "present",
+      "test": "contract.test.ts"
+    },
+    {
+      "name": "A dropped SSE stream shows a disconnected indicator and reconnects",
+      "req": "REQ-613",
+      "status": "present",
+      "test": "sse.test.ts"
+    },
+    {
+      "name": "Interactive console components conform to WAI-ARIA",
+      "req": "REQ-614",
+      "status": "present",
+      "test": "baseline.test.ts"
+    },
+    {
+      "name": "The console never enforces a safety decision client-side",
+      "req": "REQ-615",
+      "status": "present",
+      "test": "foundation.test.ts"
+    },
+    {
+      "name": "An API error renders the restrictive state",
+      "req": "REQ-616",
+      "status": "present",
+      "test": "foundation.test.ts"
+    },
+    {
+      "name": "In read-only mode the console exposes no mutating control",
+      "req": "REQ-602",
+      "status": "present",
+      "test": "controls.test.tsx"
+    },
+    {
+      "name": "When mutation is enabled an authorized operator gains operational controls",
+      "req": "REQ-603",
+      "status": "present",
+      "test": "controls.test.tsx"
+    },
+    {
+      "name": "The approval console shows the plan, prediction, and reversibility signals for a pending decision",
+      "req": "REQ-604",
+      "status": "present",
+      "test": "approval.test.tsx"
+    },
+    {
+      "name": "An approver action is gated by role and re-checked server-side",
+      "req": "REQ-605",
+      "status": "present",
+      "test": "approval.test.tsx"
+    },
+    {
+      "name": "A non-approver cannot act on a pending decision",
+      "req": "REQ-605",
+      "status": "present",
+      "test": "approval.test.tsx"
+    },
+    {
+      "name": "The ActionManifest timeline renders one chain keyed by the action id",
+      "req": "REQ-606",
+      "status": "present",
+      "test": "manifest.test.tsx"
+    },
+    {
+      "name": "Replaying a completed manifest reconstructs the chain without re-executing",
+      "req": "REQ-607",
+      "status": "present",
+      "test": "manifest.test.tsx"
+    },
+    {
+      "name": "The ledger view surfaces the server-computed chain verification status",
+      "req": "REQ-608",
+      "status": "present",
+      "test": "ledger.test.tsx"
+    },
+    {
+      "name": "A broken ledger chain is shown as tamper-detected",
+      "req": "REQ-608",
+      "status": "present",
+      "test": "ledger.test.tsx"
+    },
+    {
+      "name": "The explainability panel shows the banding signals, execution class, and tool-result evidence",
+      "req": "REQ-609",
+      "status": "present",
+      "test": "explain.test.tsx"
+    },
+    {
+      "name": "Autonomy-band and kill-switch controls call the policy API and are RBAC-gated",
+      "req": "REQ-610",
+      "status": "present",
+      "test": "controls.test.tsx"
+    },
+    {
+      "name": "A kill-switch reflects the disabled state only after the API confirms it",
+      "req": "REQ-611",
+      "status": "present",
+      "test": "controls.test.tsx"
+    },
+    {
+      "name": "The admin panel manages users, roles, on-call, and modules",
+      "req": "REQ-612",
+      "status": "present",
+      "test": "admin.test.tsx"
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "spec": "007-spec-code-lockstep",
+  "tasks": [
+    {
+      "id": "T-701-1",
+      "title": "Content-aware lockstep gate: hash-bound manifest, comment-insensitive semantic hash, spec-drift CI fail, no governed-file exclusion, spec-index lookup",
+      "files_owned": [
+        "tools/specvalidate/main.go",
+        "spec/.lockstep.lock",
+        "tools/specvalidate/lockstep/lockstep.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-701",
+        "REQ-702",
+        "REQ-704"
+      ],
+      "acceptance": {
+        "feature": "spec-code-lockstep.feature",
+        "scenarios": [
+          "A governed safety-critical file is recorded with a content hash in the lockstep manifest",
+          "A governed file changed without its owning spec fails the lockstep check",
+          "The lockstep manifest excludes no governed safety-critical file",
+          "A cosmetic comment edit alone does not register as spec drift",
+          "A semantic code change registers as spec drift"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 600,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-701-2",
+      "title": "RBAC-gated, ledger-audited re-stamp authorization: accept re-stamped hashes only via an authorized approval recorded on the governance ledger",
+      "files_owned": [
+        "core/governance/lockstep_restamp.go"
+      ],
+      "deps": [
+        "T-701-1"
+      ],
+      "req_ids": [
+        "REQ-703"
+      ],
+      "acceptance": {
+        "feature": "spec-code-lockstep.feature",
+        "scenarios": [
+          "A re-stamp is accepted only via an authorized audited approval",
+          "An unauthorized re-stamp attempt is rejected"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 260,
+        "max_wall_clock_minutes": 75
+      },
+      "status": "completed"
+    }
+  ]
+}

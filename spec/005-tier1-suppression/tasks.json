@@ -1,0 +1,193 @@
+{
+  "spec": "005-tier1-suppression",
+  "tasks": [
+    {
+      "id": "T-005-1",
+      "title": "Suppression chain orchestrator: fail-open zero value, phase ordering, critical/unknown severity floor",
+      "files_owned": [
+        "core/suppression/chain.go",
+        "core/suppression/decision.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-405",
+        "REQ-407"
+      ],
+      "acceptance": {
+        "feature": "tier1-suppression.feature",
+        "scenarios": [
+          "A phase exception fails open to escalation",
+          "An unconfirmed suppression match fails open to escalation",
+          "A critical-severity reboot is never suppressed",
+          "An unknown-severity alert is never suppressed"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-005-2",
+      "title": "Phase-1 dedup with grammar-validated timestamp boundary (reject future-dated / negative-age)",
+      "files_owned": [
+        "core/suppression/dedup.go"
+      ],
+      "deps": [
+        "T-005-1"
+      ],
+      "req_ids": [
+        "REQ-408"
+      ],
+      "acceptance": {
+        "feature": "tier1-suppression.feature",
+        "scenarios": [
+          "A future-dated triage entry is rejected and the alert escalates",
+          "A negative-age triage entry is rejected and the alert escalates",
+          "A prior entry within the window is accepted for dedup evaluation"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-005-3",
+      "title": "Blast-radius fold over the temporally-bounded suppression-policy registry",
+      "files_owned": [
+        "core/suppression/blastradius.go"
+      ],
+      "deps": [
+        "T-005-1"
+      ],
+      "req_ids": [
+        "REQ-402",
+        "REQ-403"
+      ],
+      "acceptance": {
+        "feature": "tier1-suppression.feature",
+        "scenarios": [
+          "A currently-valid suppression-policy record activates the fold",
+          "An active fold posts the child alert as a notice without a session",
+          "An expired suppression-policy record fails open",
+          "A stale-verified suppression-policy record fails open"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-005-4",
+      "title": "Phase SR scheduled-reboot matcher over the live schedule registry with DST-correct window",
+      "files_owned": [
+        "core/suppression/scheduled.go",
+        "core/suppression/cronwindow.go"
+      ],
+      "deps": [
+        "T-005-1"
+      ],
+      "req_ids": [
+        "REQ-404",
+        "REQ-407"
+      ],
+      "acceptance": {
+        "feature": "tier1-suppression.feature",
+        "scenarios": [
+          "An on-schedule reboot with a live registered schedule is suppressed",
+          "An observing schedule does not suppress",
+          "A reboot outside the schedule window escalates",
+          "A critical reboot with a matching schedule is not suppressed"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-005-5",
+      "title": "Host-agnostic known-transient and active-memory pattern match keyed on alert_rule",
+      "files_owned": [
+        "core/suppression/knownpattern.go",
+        "core/suppression/activememory.go"
+      ],
+      "deps": [
+        "T-005-1"
+      ],
+      "req_ids": [
+        "REQ-401"
+      ],
+      "acceptance": {
+        "feature": "tier1-suppression.feature",
+        "scenarios": [
+          "A host-agnostic transient rule matches by alert rule",
+          "A transient rule does not match a different alert rule"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-005-6",
+      "title": "Two-phase boot verifier: reopen and page on a non-clean boot after a suppressed reboot",
+      "files_owned": [
+        "core/suppression/verify.go"
+      ],
+      "deps": [
+        "T-005-4"
+      ],
+      "req_ids": [
+        "REQ-406"
+      ],
+      "acceptance": {
+        "feature": "tier1-suppression.feature",
+        "scenarios": [
+          "A dirty boot after a suppressed reboot reopens and pages",
+          "A clean systemd-reboot stays suppressed"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-005-7",
+      "title": "Observe-before-live discovery and promotion writers for the schedule registry",
+      "files_owned": [
+        "core/suppression/discover.go",
+        "core/suppression/promote.go"
+      ],
+      "deps": [
+        "T-005-4"
+      ],
+      "req_ids": [
+        "REQ-404"
+      ],
+      "acceptance": {
+        "feature": "tier1-suppression.feature",
+        "scenarios": [
+          "A schedule promotes to live after two in-window boots",
+          "A single in-window boot does not promote the schedule",
+          "A removed schedule drifts to disabled"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    }
+  ]
+}

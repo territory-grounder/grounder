@@ -1,0 +1,10 @@
+views.skills = skView;
+VIEW_META.skills = ["Skills", "the versioned skill library — history + rationale, diffs, drafts, trials (spec/014)"];
+FACETS.skills = [["library", "Library"], ["trials", "Trials"]];
+facetState.skills = facetState.skills || "library";
+skBadge();
+/* eager live load: wrap session adoption so the library + badge go live the moment a session lands
+   (boot and the login overlay both call liveAdopt AFTER this reassignment). */
+const skPrevLiveAdopt = liveAdopt;
+liveAdopt = async function(){ await skPrevLiveAdopt(); if (liveState.on) skLoadList(); };
+

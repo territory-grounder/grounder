@@ -1,0 +1,239 @@
+{
+  "spec": "017-actuation-regime-engine",
+  "tasks": [
+    {
+      "id": "T-017-1",
+      "title": "RegimeResolver core: Target -> Regime -> Lane, config-not-code, one-regime, fail-closed ambiguity, shared object-model (TG-110)",
+      "files_owned": [
+        "core/regime/engine.go",
+        "core/regime/resolver.go",
+        "core/regime/regime.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-1700",
+        "REQ-1701",
+        "REQ-1703"
+      ],
+      "acceptance": {
+        "feature": "actuation-regime-engine.feature",
+        "scenarios": [
+          "A target resolves to exactly one regime and its lane",
+          "An unknown regime falls back to the default lane or refuses and an ambiguous regime fails closed",
+          "Regime resolution matches on the same estate object-model as policy and credential"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 450,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "done"
+    },
+    {
+      "id": "T-017-2",
+      "title": "Lane abstraction + interceptor composition seam: an effect leaf reachable only through spec/013 Do, never a bypass (TG-110)",
+      "files_owned": [
+        "core/regime/lane.go",
+        "core/regime/effect.go"
+      ],
+      "deps": [
+        "T-017-1"
+      ],
+      "req_ids": [
+        "REQ-1702"
+      ],
+      "acceptance": {
+        "feature": "actuation-regime-engine.feature",
+        "scenarios": [
+          "Every lane is reachable only through the actuation interceptor chain"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 350,
+        "max_wall_clock_minutes": 100
+      },
+      "status": "done"
+    },
+    {
+      "id": "T-017-3",
+      "title": "AWX-job actuator (the FIRST lane, the buildable slice): allowlisted+policy-authorized template, typed extra_vars, credential+mode compose, sensor vs mutating, native Go distroless (TG-110)",
+      "files_owned": [
+        "modules/actuation/awxjob/awxjob.go",
+        "modules/actuation/awxjob/client.go",
+        "modules/actuation/awxjob/extravars.go"
+      ],
+      "deps": [
+        "T-017-1",
+        "T-017-2"
+      ],
+      "req_ids": [
+        "REQ-1704",
+        "REQ-1705",
+        "REQ-1706",
+        "REQ-1707",
+        "REQ-1708"
+      ],
+      "acceptance": {
+        "feature": "actuation-regime-engine.feature",
+        "scenarios": [
+          "The AWX-job actuator launches only an allowlisted policy-authorized template",
+          "The AWX-job effect is a template plus typed extra_vars and rejects unknown keys",
+          "The AWX-job lane resolves the token after policy and launches only while the mode chokepoint permits",
+          "A read-only setup job is a sensor and a mutating template stays off until the flip",
+          "The AWX token is a sealed SecretRef and the sensor token is read-only and distinct"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 650,
+        "max_wall_clock_minutes": 160
+      },
+      "status": "done"
+    },
+    {
+      "id": "T-017-4",
+      "title": "Async-verify channel (GLOBAL): job handle + poll-to-terminal, launch-as-prediction verdict, pending-verification+timeout-unverified, idempotent action_id binding (TG-110)",
+      "files_owned": [
+        "core/regime/asyncverify.go",
+        "core/regime/pending.go"
+      ],
+      "deps": [
+        "T-017-2",
+        "T-017-3"
+      ],
+      "req_ids": [
+        "REQ-1709",
+        "REQ-1710",
+        "REQ-1711",
+        "REQ-1712"
+      ],
+      "acceptance": {
+        "feature": "actuation-regime-engine.feature",
+        "scenarios": [
+          "An async actuation returns a job handle and is polled to a terminal state",
+          "The launch is a prediction verified against the terminal outcome and fed to the graduation ladder",
+          "A launched but unverified job counts as no clean run and times out to unverified",
+          "A second launch for the same action_id is refused"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 500,
+        "max_wall_clock_minutes": 140
+      },
+      "status": "done"
+    },
+    {
+      "id": "T-017-5",
+      "title": "Playbooks-as-knowledge lane: read-only AWX template+description+inventory ingest into wiki+RAG, re-read by id, launches nothing (TG-110)",
+      "files_owned": [
+        "modules/knowledge/awxplaybooks/ingest.go"
+      ],
+      "deps": [
+        "T-017-3"
+      ],
+      "req_ids": [
+        "REQ-1713",
+        "REQ-1714"
+      ],
+      "acceptance": {
+        "feature": "actuation-regime-engine.feature",
+        "scenarios": [
+          "The knowledge lane ingests templates and inventory read-only re-read by id",
+          "The knowledge lane launches nothing and only proposes a runbook"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 450,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "done"
+    },
+    {
+      "id": "T-017-6",
+      "title": "regime_resolution + regime_actuation + deferred_verdict persistence migration + audit-every-resolution/launch/verdict, append-only, no secret (TG-110)",
+      "files_owned": [
+        "core/db/migrations/0020_actuation_regime.up.sql",
+        "core/db/migrations/0020_actuation_regime.down.sql",
+        "core/regime/audit.go"
+      ],
+      "deps": [
+        "T-017-1",
+        "T-017-4"
+      ],
+      "req_ids": [
+        "REQ-1715"
+      ],
+      "acceptance": {
+        "feature": "actuation-regime-engine.feature",
+        "scenarios": [
+          "Every resolution launch and verdict is appended to the ledger with no secret and the tables are append-only"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 500,
+        "max_wall_clock_minutes": 130
+      },
+      "status": "done"
+    },
+    {
+      "id": "T-017-7",
+      "title": "Console regime UX (read-only): per-target regime/lane map, AWX template-allowlist with authorized op-class, pending-verification queue, lane-coverage view from real /v1/regime state (TG-110)",
+      "files_owned": [
+        "frontend/src/panels/regime/regime-panel.tsx",
+        "frontend/src/panels/regime/regime-client.ts",
+        "frontend/src/panels/regime/regime.test.tsx",
+        "spec/017-actuation-regime-engine/acceptance/regimeconsole_steps_test.go"
+      ],
+      "deps": [
+        "T-017-4",
+        "T-017-6"
+      ],
+      "req_ids": [
+        "REQ-1716"
+      ],
+      "acceptance": {
+        "feature": "actuation-regime-engine.feature",
+        "scenarios": [
+          "The console renders the regime map allowlist pending-verification queue and lane coverage",
+          "Every allowlist edit is appended to the tamper-evident ledger"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 800,
+        "max_wall_clock_minutes": 180
+      },
+      "status": "done",
+      "note": "Read-only slice DONE: the regime panel (frontend/src/panels/regime) renders REAL engine state from GET /v1/regime — the per-target regime→lane map, lane-coverage (wired vs inert/fail-closed), the observed AWX template-allowlist (template→op-class), the pending-verification queue, and the actuation tail — self-fetched via the shared query client, fail-closed on error, honest empty state at Shadow. It's registered in the app nav (app.tsx) and reuses the existing panel/guarded-state/a11y visual system. The console React oracles are in regime.test.tsx; the Go acceptance read scenario (@REQ-1716, present) binds the /v1/regime wire contract the panel depends on. FOLLOW-ON (still @pending, scenario 'Every allowlist edit is appended to the tamper-evident ledger'): the ledger-audited allowlist EDITOR is a mutation-adjacent write path needing an authenticated write API + AuthAdminSession + audit; scoped OUT of this read-only MR."
+    },
+    {
+      "id": "T-017-8",
+      "title": "Durable pgx pending-verification store: a launched job's deferred verify SURVIVES a worker restart (flip-prereq); UNIQUE action_id idempotency atomic at the DB; INSERT/SELECT/UPDATE but NOT DELETE (TG-110)",
+      "files_owned": [
+        "core/db/migrations/0022_regime_pending_verification.up.sql",
+        "core/db/migrations/0022_regime_pending_verification.down.sql",
+        "core/db/regime_pending_write.go",
+        "core/db/regime_pending_write_test.go"
+      ],
+      "deps": [
+        "T-017-4",
+        "T-017-6"
+      ],
+      "req_ids": [
+        "REQ-1711",
+        "REQ-1712"
+      ],
+      "acceptance": {
+        "feature": "actuation-regime-engine.feature",
+        "scenarios": [
+          "A second launch for the same action_id is refused",
+          "A launched but unverified job counts as no clean run and times out to unverified"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 450,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "done",
+      "note": "Durability slice DONE: the async-verify channel's pending-verification record (regime.PendingStore) is now backed by the DURABLE pgx table pending_verification (migration 0022) instead of the in-memory fake, so a launched AWX job's deferred verify SURVIVES a worker restart — a flip-prerequisite (before this, a restart between a launch and its terminal poll would forget the launch and lose the launch-as-prediction discipline). This record is MUTABLE (unlike the append-only 0020 audit tables T-017-6 built): a launch is reserved (state='pending'), a handle is bound, then it transitions EXACTLY ONCE to terminal 'verified' or bound-elapsed 'unverified'. So the runtime role KEEPS INSERT/SELECT/UPDATE but LOSES DELETE — action_id is the PRIMARY KEY (the idempotency guard, REQ-1712: a 2nd Reserve raises a 23505 unique-violation the pgx store maps to ErrDuplicatePending → ErrDuplicateLaunch, atomic at the DB, never a read-then-write race), and a claimed id is retained forever so a retry/re-poll/redelivery can never double-launch and a resolved record stays auditable/visible (REQ-1711). Single-org (no tenant_id), NON-SECRET (the AWX token is a SecretRef held elsewhere; only the non-secret job_id + the NUL-free committed prediction jsonb are stored), parameterized SQL only, schema_version reader-guard. core/db/regime_pending_write.go implements the interface EXACTLY (compile-time assertion) and the in-memory MemPendingStore stays the CI oracle; a shared store-contract test runs the SAME assertions against BOTH (mem in CI + pgx DSN-gated) and a pure-Go prediction round-trip test guards the 'pgx-fake-hides-a-dropped-field' class. Wired in cmd/worker/main.go (durable when the pool exists; mem fallback keeps the channel wired with no DB). core/regime/* is UNCHANGED (the interface + channel logic were already done in T-017-4). Mutation stays OFF: this is verify-state persistence — it launches nothing and actuates nothing (the table is empty at Shadow)."
+    }
+  ]
+}

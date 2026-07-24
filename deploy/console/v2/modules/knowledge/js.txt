@@ -1,0 +1,153 @@
+/* ============================================================================
+   KNOWLEDGE module (know-) — the living wiki.
+   The predecessor accumulated knowledge into a hand-maintained 941-page MkDocs
+   site. TG's knowledge is DERIVED instead of authored: every page is composed
+   from the estate graph (what an entity depends on), the incidents that touched
+   it, and the verifier's verdicts (what was learned). Nothing here is typed by
+   hand — so it can never go stale relative to the running estate.
+   Two panes: a searchable index of pages (hosts · incident precedents ·
+   operational rules) and the selected page. Epistemics preserved: observed
+   dependencies render TERRITORY-steel, learned/predicted notes render MAP-indigo.
+   ============================================================================ */
+
+let knowSel = null;   // {kind, id}
+let knowQuery = "";
+
+function knowSec(lbl, title, ...extra) {
+  return h("div", { class: "sec" }, h("span", { class: "lbl" }, lbl), h("h3", {}, title),
+    h("span", { class: "rule" }), ...extra);
+}
+function knowVerdictTag(v) {
+  const cls = v === "match" ? "match" : v === "partial" ? "partial" : v === "deviation" ? "deviation" : "";
+  return h("span", { class: "know-verdict " + cls }, v || "—");
+}
+function knowBandTag(b) {
+  const cls = b === "AUTO" ? "auto" : b === "AUTO_NOTICE" ? "notice" : "pause";
+  return h("span", { class: "bandtag " + cls }, b || "—");
+}
+
+/* build the flat page list from the knowledge model */
+function knowPages(model) {
+  const pages = [];
+  (model.hosts || []).forEach(host => pages.push({ kind: "host", id: host.name, title: host.name, sub: host.role, data: host }));
+  (model.incidents || []).forEach(inc => pages.push({ kind: "incident", id: inc.ref, title: inc.ref, sub: (inc.host || "") + " · " + (inc.verdict || ""), data: inc }));
+  (model.rules || []).forEach((r, i) => pages.push({ kind: "rule", id: "rule-" + i, title: r.title, sub: "operational rule", data: r }));
+  return pages;
+}
+
+/* ---- page renderers ---- */
+function knowHostPage(host) {
+  const pane = h("div");
+  pane.append(knowSec("host · derived from the estate graph", host.name,
+    h("span", { class: "know-role" }, host.role || host.type)));
+  const depTable = (rows, dir) => {
+    if (!rows || !rows.length) return h("p", { class: "know-empty-line" }, dir === "out" ? "No recorded dependencies." : "Nothing depends on this entity yet.");
+    const t = h("table", { class: "tbl know-tbl" });
+    t.append(h("thead", {}, h("tr", {}, ...[dir === "out" ? "Depends on" : "Depended on by", "Relation", "Conf", "Source"].map(x => h("th", {}, x)))));
+    const tb = h("tbody");
+    rows.forEach(e => tb.append(h("tr", {},
+      h("td", { class: "m", style: "color:var(--territory)" }, e.to || e.from),
+      h("td", { class: "m" }, e.rel),
+      h("td", { class: "m", style: "color:var(--ink3)" }, (e.confidence != null ? e.confidence.toFixed(2) : "—")),
+      h("td", { class: "m", style: "color:var(--ink4)" }, e.source || "—"))));
+    t.append(tb); return t;
+  };
+  pane.append(h("div", { class: "know-block" }, h("div", { class: "know-h" }, "Dependencies"), depTable(host.depends_on, "out")));
+  pane.append(h("div", { class: "know-block" }, h("div", { class: "know-h" }, "Dependents"), depTable(host.dependents, "in")));
+  pane.append(h("div", { class: "know-block" }, h("div", { class: "know-h" }, "Incidents seen here"),
+    (host.incidents && host.incidents.length)
+      ? h("div", { class: "know-inc-list" }, ...host.incidents.map(inc => h("div", { class: "know-inc" },
+          h("a", { class: "know-link m", href: "#knowledge", onclick: e => { e.preventDefault(); knowGo("incident", inc.ref); } }, inc.ref),
+          knowBandTag(inc.band), knowVerdictTag(inc.verdict),
+          h("span", { class: "know-inc-note" }, inc.note || ""))))
+      : h("p", { class: "know-empty-line" }, "No incidents recorded against this entity — a quiet host.")));
+  return pane;
+}
+function knowIncidentPage(inc) {
+  const pane = h("div");
+  pane.append(knowSec("incident precedent · derived from the audit spine", inc.ref,
+    knowBandTag(inc.band), knowVerdictTag(inc.verdict)));
+  pane.append(h("div", { class: "know-meta" },
+    h("div", {}, h("span", { class: "know-k" }, "Entity"), h("a", { class: "know-link m", href: "#knowledge", onclick: e => { e.preventDefault(); knowGo("host", inc.host); } }, inc.host || "—")),
+    h("div", {}, h("span", { class: "know-k" }, "Risk"), h("span", { class: "m" }, inc.risk || "—")),
+    h("div", {}, h("span", { class: "know-k" }, "Classified"), h("span", { class: "m", style: "color:var(--ink3)" }, inc.classified ? String(inc.classified).slice(0, 19).replace("T", " ") : "—"))));
+  pane.append(h("div", { class: "know-block" }, h("div", { class: "know-h" }, "What was learned"),
+    h("p", { class: "know-learned" }, inc.learned || "No precedent note recorded for this incident.")));
+  return pane;
+}
+function knowRulePage(rule) {
+  const pane = h("div");
+  pane.append(knowSec("operational rule · invariant of the running system", rule.title));
+  pane.append(h("p", { class: "know-learned" }, rule.body));
+  return pane;
+}
+
+function knowRenderPage(page) {
+  if (!page) return h("div", { class: "empty", style: "padding:40px 20px;text-align:center" },
+    h("div", { class: "big" }, "Select a page"),
+    h("div", { class: "desc" }, "Pick a host, an incident precedent, or an operational rule from the index."));
+  if (page.kind === "host") return knowHostPage(page.data);
+  if (page.kind === "incident") return knowIncidentPage(page.data);
+  return knowRulePage(page.data);
+}
+
+/* navigate to a page and refresh the surface in place */
+function knowGo(kind, id) {
+  knowSel = { kind, id };
+  const host = document.querySelector(".main .view");
+  if (host) { host.innerHTML = ""; host.append(views.knowledge()); }
+}
+
+/* the surface: an index rail + the selected page */
+function knowRender(model, live) {
+  const pages = knowPages(model);
+  const wrap = h("div", { class: "know-wrap" });
+
+  wrap.append(h("div", { class: "know-lead" },
+    h("div", { class: "lbl", style: "color:" + (live ? "var(--match)" : "var(--ink3)") },
+      live ? "LIVE · derived knowledge" : "design preview · derived knowledge"),
+    h("h2", { class: "know-lead-title" }, "A wiki the estate writes itself"),
+    h("p", { class: "know-lead-desc" },
+      "Every page below is composed from the estate graph, the incidents that touched an entity, and the ",
+      "verifier's verdicts — never hand-authored, so it cannot drift from the running system. ",
+      pages.length ? h("span", {}, h("b", {}, String(pages.length)), " pages.") : "No pages yet.")));
+
+  const grid = h("div", { class: "know-grid" });
+
+  // ---- index rail (searchable, grouped) ----
+  const rail = h("div", { class: "know-index" });
+  const search = h("input", { class: "know-search m", type: "search", placeholder: "filter pages…", value: knowQuery,
+    oninput: e => { knowQuery = e.target.value; const host = document.querySelector(".main .view"); if (host) { host.innerHTML = ""; host.append(views.knowledge()); const s = host.querySelector(".know-search"); if (s) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); } } } });
+  rail.append(search);
+  const q = knowQuery.trim().toLowerCase();
+  const groups = [["Hosts", "host"], ["Incident precedents", "incident"], ["Operational rules", "rule"]];
+  let shown = 0;
+  groups.forEach(([label, kind]) => {
+    const items = pages.filter(p => p.kind === kind && (!q || (p.title + " " + (p.sub || "")).toLowerCase().includes(q)));
+    if (!items.length) return;
+    rail.append(h("div", { class: "know-grp" }, label));
+    items.forEach(p => {
+      shown++;
+      const active = knowSel && knowSel.kind === p.kind && knowSel.id === p.id;
+      rail.append(h("a", { class: "know-item" + (active ? " active" : ""), href: "#knowledge",
+        onclick: e => { e.preventDefault(); knowGo(p.kind, p.id); } },
+        h("span", { class: "know-item-t m" }, p.title),
+        h("span", { class: "know-item-s" }, p.sub || "")));
+    });
+  });
+  if (!shown) rail.append(h("div", { class: "know-empty-line", style: "padding:14px 10px" }, "No pages match “" + knowQuery + "”."));
+  grid.append(rail);
+
+  // ---- selected page ----
+  let sel = null;
+  if (knowSel) sel = pages.find(p => p.kind === knowSel.kind && p.id === knowSel.id) || null;
+  if (!sel && pages.length) { sel = pages[0]; knowSel = { kind: sel.kind, id: sel.id }; }
+  grid.append(h("div", { class: "know-page wrapcard" }, knowRenderPage(sel)));
+
+  wrap.append(grid);
+  return wrap;
+}
+
+function knowView() {
+  return knowRender(typeof KNOW !== "undefined" ? KNOW : { hosts: [], incidents: [], rules: [] }, false);
+}

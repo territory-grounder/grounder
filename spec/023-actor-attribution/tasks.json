@@ -1,0 +1,355 @@
+{
+ "spec": "023-actor-attribution",
+ "tasks": [
+  {
+   "id": "T-023-1",
+   "title": "adapters/actorevidence: the read-only per-domain actor-evidence Reader seam + typed Evidence record",
+   "files_owned": [
+    "adapters/actorevidence/actorevidence.go"
+   ],
+   "deps": [],
+   "req_ids": [
+    "REQ-2306",
+    "REQ-2312"
+   ],
+   "acceptance": {
+    "feature": "actor-attribution.feature",
+    "scenarios": [
+     "Actor evidence is collected only by registered read-only readers with least-privilege credentials"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 250,
+    "max_wall_clock_minutes": 75
+   },
+   "status": "done"
+  },
+  {
+   "id": "T-023-2",
+   "title": "core/attribution: deterministic attributor \u2014 taxonomy derivation, absence/ambiguity rules, reader-failure honesty",
+   "files_owned": [
+    "core/attribution/attribution.go",
+    "core/attribution/attribution_test.go"
+   ],
+   "deps": [
+    "T-023-1"
+   ],
+   "req_ids": [
+    "REQ-2300",
+    "REQ-2303",
+    "REQ-2307",
+    "REQ-2310",
+    "REQ-2312"
+   ],
+   "acceptance": {
+    "feature": "actor-attribution.feature",
+    "scenarios": [
+     "Absent evidence yields unattributable and the pre-feature ladder unchanged",
+     "A reader error is treated as absent evidence with a recorded warning and never blocks triage",
+     "Contradictory non-suspicious evidence escalates to the approver graph with all candidates recorded",
+     "Agent free-text can never set or alter the taxonomy value"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 450,
+    "max_wall_clock_minutes": 120
+   },
+   "status": "done"
+  },
+  {
+   "id": "T-023-3",
+   "title": "Rules-as-data: taxonomy to disposition mapping + INV-20 carve-out rows in the versioned ruleset store, fail-closed loader",
+   "files_owned": [
+    "core/attribution/ruleset.go",
+    "core/attribution/ruleset_test.go",
+    "core/attribution/default_mapping.json"
+   ],
+   "deps": [
+    "T-023-2"
+   ],
+   "req_ids": [
+    "REQ-2308",
+    "REQ-2309"
+   ],
+   "acceptance": {
+    "feature": "actor-attribution.feature",
+    "scenarios": [
+     "The taxonomy-to-disposition mapping is loadable data with a closed disposition enum",
+     "An absent or corrupt mapping escalates every non-unattributable taxonomy to a human",
+     "A valid carve-out classifies a harness fault authorized-test, heals, and records the attribution",
+     "An expired carve-out rule no longer matches and the attribution stands down"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 400,
+    "max_wall_clock_minutes": 120
+   },
+   "status": "done"
+  },
+  {
+   "id": "T-023-4",
+   "title": "modules/actorevidence/pve: native PVE task-log reader (read-only token, guest resolve, bounded timeout)",
+   "files_owned": [
+    "modules/actorevidence/pve/pve.go",
+    "modules/actorevidence/pve/pve_test.go"
+   ],
+   "deps": [
+    "T-023-1"
+   ],
+   "req_ids": [
+    "REQ-2306",
+    "REQ-2307"
+   ],
+   "acceptance": {
+    "feature": "actor-attribution.feature",
+    "scenarios": [
+     "The PVE task-log reader returns actor evidence for a guest lifecycle change",
+     "The PVE reader authenticates with a read-only token distinct from the actuation token"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 450,
+    "max_wall_clock_minutes": 150
+   },
+   "status": "done"
+  },
+  {
+   "id": "T-023-5",
+   "title": "Runner wiring: attribute activity, GatedInput disposition fields, attributed-self already-remediated terminal outcome",
+   "files_owned": [
+    "temporal/runner/attribution.go",
+    "temporal/runner/attribution_test.go"
+   ],
+   "deps": [
+    "T-023-2",
+    "T-023-3",
+    "T-023-4"
+   ],
+   "req_ids": [
+    "REQ-2301",
+    "REQ-2302",
+    "REQ-2305"
+   ],
+   "acceptance": {
+    "feature": "actor-attribution.feature",
+    "scenarios": [
+     "An admin-attributed fault stands down to the approver graph and is never auto-undone",
+     "A TG-self-remediated incident terminates already-remediated without re-actuation",
+     "An authorized-test outcome traverses every existing gate unchanged"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 500,
+    "max_wall_clock_minutes": 180
+   },
+   "status": "done"
+  },
+  {
+   "id": "T-023-6",
+   "title": "Persistence + tracer surfacing: migration 0034 (session_triage attribution column + evidence blob), ledger signals, tracer attribute step",
+   "files_owned": [
+    "core/db/migrations/0034_actor_attribution.up.sql",
+    "core/db/migrations/0034_actor_attribution.down.sql",
+    "core/db/triage_attribution.go",
+    "core/db/triage_attribution_test.go"
+   ],
+   "deps": [
+    "T-023-5"
+   ],
+   "req_ids": [
+    "REQ-2311",
+    "REQ-2313"
+   ],
+   "acceptance": {
+    "feature": "actor-attribution.feature",
+    "scenarios": [
+     "The attribution outcome and evidence references persist on session_triage and the governance ledger",
+     "The decision tracer surfaces the attribution as a named trace step",
+     "Persisted evidence is retention-bounded and redacted at every boundary"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 400,
+    "max_wall_clock_minutes": 120
+   },
+   "status": "done"
+  },
+  {
+   "id": "T-023-7",
+   "title": "Security-escalation routing: suspicious disposition to POLL_PAUSE + security channel notification (Phase 2)",
+   "files_owned": [
+    "core/attribution/security.go",
+    "core/attribution/security_test.go"
+   ],
+   "deps": [
+    "T-023-5"
+   ],
+   "req_ids": [
+    "REQ-2304"
+   ],
+   "acceptance": {
+    "feature": "actor-attribution.feature",
+    "scenarios": [
+     "An unsanctioned-actor change polls with security escalation and is never auto-healed",
+     "A covered audit trail missing an entry for an observed mutation escalates as suspicious"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 350,
+    "max_wall_clock_minutes": 120
+   },
+   "status": "done"
+  },
+  {
+   "id": "T-023-8",
+   "title": "modules/actorevidence/journal: systemd-journal / sudo / auditd action-evidence reader (Phase 2)",
+   "files_owned": [
+    "modules/actorevidence/journal/journal.go",
+    "modules/actorevidence/journal/journal_test.go"
+   ],
+   "deps": [
+    "T-023-1"
+   ],
+   "req_ids": [
+    "REQ-2306",
+    "REQ-2307",
+    "REQ-2314"
+   ],
+   "acceptance": {
+    "feature": "actor-attribution.feature",
+    "scenarios": [
+     "The journal reader returns typed actor evidence for a privileged host action",
+     "The journal reader fails closed when no known-hosts file is configured"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 450,
+    "max_wall_clock_minutes": 150
+   },
+   "status": "completed",
+   "notes": "Reuses syslogng.NewNativeRunner (native host-key-verified read-only SSH, distroless-safe) + credential.IdentityResolver per-host identity, mirroring modules/observability/hostdiag. Deterministic JSON parse (journalctl -o json / ausearch) into []attribution.Evidence \u2014 never raw text to the model."
+  },
+  {
+   "id": "T-023-9",
+   "title": "modules/actorevidence/k8saudit: Kubernetes audit-log reader (Phase 2)",
+   "files_owned": [
+    "modules/actorevidence/k8saudit/k8saudit.go",
+    "modules/actorevidence/k8saudit/k8saudit_test.go"
+   ],
+   "deps": [
+    "T-023-1"
+   ],
+   "req_ids": [
+    "REQ-2306",
+    "REQ-2307"
+   ],
+   "acceptance": {
+    "feature": "actor-attribution.feature",
+    "scenarios": [
+     "The k8s audit reader returns actor evidence for a cluster object change"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 450,
+    "max_wall_clock_minutes": 150
+   },
+   "status": "pending"
+  },
+  {
+   "id": "T-023-10",
+   "title": "modules/actorevidence/netbox + awx: CMDB changelog and job-history readers (Phase 3)",
+   "files_owned": [
+    "modules/actorevidence/netbox/netbox.go",
+    "modules/actorevidence/netbox/netbox_test.go",
+    "modules/actorevidence/awx/awx.go",
+    "modules/actorevidence/awx/awx_test.go"
+   ],
+   "deps": [
+    "T-023-1"
+   ],
+   "req_ids": [
+    "REQ-2306",
+    "REQ-2307"
+   ],
+   "acceptance": {
+    "feature": "actor-attribution.feature",
+    "scenarios": [
+     "The NetBox changelog reader returns actor evidence for an inventory change",
+     "The AWX job-history reader returns actor evidence for a playbook-driven change"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 500,
+    "max_wall_clock_minutes": 180
+   },
+   "status": "done"
+  },
+  {
+   "id": "T-023-11",
+   "title": "modules/actorevidence/gitopsmr: GitOps MR-history reader (Phase 3; docker dropped \u2014 see note)",
+   "files_owned": [
+    "modules/actorevidence/gitopsmr/gitopsmr.go",
+    "modules/actorevidence/gitopsmr/gitopsmr_test.go"
+   ],
+   "deps": [
+    "T-023-1"
+   ],
+   "req_ids": [
+    "REQ-2306",
+    "REQ-2307"
+   ],
+   "acceptance": {
+    "feature": "actor-attribution.feature",
+    "scenarios": [
+     "The GitOps MR-history reader returns actor evidence for a declarative change"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 500,
+    "max_wall_clock_minutes": 180
+   },
+   "status": "done",
+   "note": "docker-events reader DROPPED (grounded 2026-07-24): the docker daemon records no human actor (no audit shim on the socket; container lifecycle events carry the runtime, not the invoking user), so a docker attribution reader would be inert. Shipping an inert reader violates the evidence-gated-honesty invariant (REQ-2307); the GitOps MR reader already attributes the declarative change that a docker action merely enacts."
+  },
+  {
+   "id": "T-023-12",
+   "title": "Identity/auth enrichment seam: SanctionResolver + LDAP/FreeIPA resolver + AttributeActivity dynamic-sanction fold",
+   "files_owned": [
+    "adapters/actorevidence/sanction.go",
+    "modules/actorevidence/ldapident/ldapident.go",
+    "modules/actorevidence/ldapident/ldapident_test.go"
+   ],
+   "deps": [
+    "T-023-1",
+    "T-023-5"
+   ],
+   "req_ids": [
+    "REQ-2315",
+    "REQ-2316",
+    "REQ-2317",
+    "REQ-2318",
+    "REQ-2319",
+    "REQ-2320",
+    "REQ-2321"
+   ],
+   "acceptance": {
+    "feature": "actor-attribution.feature",
+    "scenarios": [
+     "An identity fact can never by itself set a taxonomy value",
+     "Identity enrichment leaves the deterministic core attributor unchanged",
+     "A confirmed live admin is promoted to a stand-down",
+     "A disabled admin credential in use is demoted to a security escalation",
+     "A directory outage reproduces the Phase-1 classification",
+     "Identity data is retention-bounded and redacted at every boundary",
+     "A missing authentication event never moves a classification"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 600,
+    "max_wall_clock_minutes": 210
+   },
+   "notes": "SanctionResolver is a NON-Reader seam (never mints taxonomy). The LDAP resolver reuses modules/credsource/ldap transport (go-ldap/v3, LDAPS CA-verified, NL->GR failover) + one new single-principal query (nsAccountLock/krbPrincipalExpiration/memberOf/objectClass). The fold runs in AttributeActivity over a COPIED cfg.Sanctioned: ADD confirmed live admins (promotion), REMOVE disabled static admins (demotion). core/attribution/attribution.go stays byte-for-byte unchanged. SanctionedGroups is loadable rules-as-data. Fail-open-to-static, positive-evidence-only. RADIUS (REQ-2321) is advisory-annotation-only, NOT built here.",
+   "status": "completed"
+  }
+ ]
+}

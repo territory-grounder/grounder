@@ -1,0 +1,1687 @@
+[
+  {
+    "external_ref": "pred-ik-10",
+    "host": "dc2pve02",
+    "alert_rule": "iSCSI-I/O-contention",
+    "site": "gr",
+    "summary": "SeaweedFS 2x500GB volume zvols on ssd-pool were the heaviest writers, causing TXG flush storms that cascaded into I/O errors for Prometheus, AWX, Loki.",
+    "resolution": "Migrated SeaweedFS volumes from iSCSI (ZFS ssd-pool) to NFS on sdc (7.3TB ext4 HDD). Created NFS export + static NFS PVs. Fresh volumes (000 replication). Cleaned 4 old zvols+targets. ssd-pool: 19→15 targets, 56→50% cap. Combined with TXG tunables (txg_timeout=2, dirty_data_max=2GB, async_write_max_active=5).",
+    "tags": [
+      "seaweedfs",
+      "iscsi",
+      "nfs",
+      "migration",
+      "sdc"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1052",
+    "host": "dc1fw01",
+    "alert_rule": "chaos-tunnel",
+    "site": "nl",
+    "resolution": "Chaos finding (chaos-2026-06-01-001): Convergence 38.4s exceeded SLO threshold 30.0s. Convergence: 38.4s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1053",
+    "host": "dc1fw01",
+    "alert_rule": "chaos-tunnel",
+    "site": "nl",
+    "resolution": "Chaos finding (chaos-2026-06-01-001): Error budget consumption 1.48% exceeds 1% threshold. Convergence: 38.4s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1054",
+    "host": "dc2fw01",
+    "alert_rule": "chaos-tunnel",
+    "site": "gr",
+    "resolution": "Chaos finding (chaos-2026-06-01-004): Convergence 45.0s exceeded SLO threshold 30.0s. Convergence: 45.0s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1055",
+    "host": "dc2fw01",
+    "alert_rule": "chaos-tunnel",
+    "site": "gr",
+    "resolution": "Chaos finding (chaos-2026-06-01-005): Convergence 45.0s exceeded SLO threshold 30.0s. Convergence: 45.0s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1330",
+    "host": "dc1dmz01",
+    "alert_rule": "chaos-dmz",
+    "site": "nl",
+    "resolution": "Chaos finding (chaos-2026-06-15-002): Convergence 300.0s exceeded SLO threshold 120.0s. Convergence: 300.0s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1619",
+    "host": "dc1gpu01",
+    "alert_rule": "Port-status-up/down",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1620",
+    "host": "dc1pve03",
+    "alert_rule": "Service-up/down",
+    "site": "nl",
+    "summary": "recurred 5x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1621",
+    "host": "dc1syno01",
+    "alert_rule": "DSM:-Data-backup-task-on-dc1syno01-partially-comple",
+    "site": "nl",
+    "summary": "recurred 5x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1622",
+    "host": "dc1nc01",
+    "alert_rule": "Service-up/down",
+    "site": "nl",
+    "summary": "recurred 6x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1623",
+    "host": "dc1claude01",
+    "alert_rule": "AS214304UpstreamCountLow",
+    "site": "nl",
+    "summary": "recurred 111x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1624",
+    "host": "dc1claude01",
+    "alert_rule": "Gpu01DockerDanglingImagesHigh",
+    "site": "nl",
+    "summary": "recurred 67x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1625",
+    "host": "dc1claude01",
+    "alert_rule": "KubeStatefulSetReplicasMismatch",
+    "site": "nl",
+    "summary": "recurred 336x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1626",
+    "host": "dc1claude01",
+    "alert_rule": "KubePdbNotEnoughHealthyPods",
+    "site": "nl",
+    "summary": "recurred 361x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1627",
+    "host": "dc1syno01",
+    "alert_rule": "Sensor-over-limit---Check-Device-Health-Settings",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1628",
+    "host": "dc1pve02",
+    "alert_rule": "Space-on-/-is-90-and-95-in-use",
+    "site": "nl",
+    "summary": "recurred 4x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1629",
+    "host": "dc2pve02",
+    "alert_rule": "Service-up/down",
+    "site": "gr",
+    "summary": "recurred 8x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1630",
+    "host": "dc1nms01",
+    "alert_rule": "Service-up/down",
+    "site": "nl",
+    "summary": "recurred 7x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1631",
+    "host": "dc1nc02",
+    "alert_rule": "Service-up/down",
+    "site": "nl",
+    "summary": "recurred 7x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1632",
+    "host": "dc1claude01",
+    "alert_rule": "PodCrashLoopBackOff",
+    "site": "nl",
+    "summary": "recurred 334x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1633",
+    "host": "dc1claude01",
+    "alert_rule": "KubePodCrashLooping",
+    "site": "nl",
+    "summary": "recurred 160x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1634",
+    "host": "dc1lte01",
+    "alert_rule": "Sensor-over-limit---Check-Device-Health-Settings",
+    "site": "nl",
+    "summary": "recurred 6x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1635",
+    "host": "dc1claude01",
+    "alert_rule": "CiliumAgentNotReady",
+    "site": "nl",
+    "summary": "recurred 7x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1636",
+    "host": "dc1claude01",
+    "alert_rule": "KubeDeploymentReplicasMismatch",
+    "site": "nl",
+    "summary": "recurred 96x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1637",
+    "host": "dc1claude01",
+    "alert_rule": "ASABindingDrift",
+    "site": "nl",
+    "summary": "recurred 4x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1638",
+    "host": "dc1pve02",
+    "alert_rule": "Service-up/down",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1639",
+    "host": "dc1claude01",
+    "alert_rule": "AlertmanagerFailedToSendAlerts",
+    "site": "nl",
+    "summary": "recurred 18x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1640",
+    "host": "dc1pve04",
+    "alert_rule": "Service-up/down",
+    "site": "nl",
+    "summary": "recurred 4x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1641",
+    "host": "dc1claude01",
+    "alert_rule": "etcdHighCommitDurations",
+    "site": "nl",
+    "summary": "recurred 151x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1642",
+    "host": "dc1claude01",
+    "alert_rule": "KubeDaemonSetRolloutStuck",
+    "site": "nl",
+    "summary": "recurred 201x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1643",
+    "host": "dc1claude01",
+    "alert_rule": "KubeAPIErrorBudgetBurn",
+    "site": "nl",
+    "summary": "recurred 98x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1644",
+    "host": "dc1claude01",
+    "alert_rule": "etcdHighNumberOfLeaderChanges",
+    "site": "nl",
+    "summary": "recurred 7x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1645",
+    "host": "dc1claude01",
+    "alert_rule": "etcdHighNumberOfFailedGRPCRequests",
+    "site": "nl",
+    "summary": "recurred 186x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1646",
+    "host": "dc1claude01",
+    "alert_rule": "etcdHighFsyncDurations",
+    "site": "nl",
+    "summary": "recurred 84x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1647",
+    "host": "dc1claude01",
+    "alert_rule": "PrometheusOutOfOrderTimestamps",
+    "site": "nl",
+    "summary": "recurred 4x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1648",
+    "host": "dc1claude01",
+    "alert_rule": "etcdNoLeader",
+    "site": "nl",
+    "summary": "recurred 10x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1649",
+    "host": "dc1k8s-node03",
+    "alert_rule": "Linux-High-Memory-Usage-90-in-use",
+    "site": "nl",
+    "summary": "recurred 34x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1650",
+    "host": "dc1claude01",
+    "alert_rule": "NodeSystemSaturation",
+    "site": "nl",
+    "summary": "recurred 107x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1651",
+    "host": "dc1gpu01",
+    "alert_rule": "Linux-High-Memory-Usage-90-in-use",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1652",
+    "host": "dc1claude01",
+    "alert_rule": "PacemakerNodeStuckStandby",
+    "site": "nl",
+    "summary": "recurred 76x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1653",
+    "host": "dc1claude01",
+    "alert_rule": "Unknown",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1654",
+    "host": "dc3cam01",
+    "alert_rule": "Device-Down-Due-to-no-ICMP-response.",
+    "site": "gr",
+    "summary": "recurred 26x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1655",
+    "host": "dc1claude01",
+    "alert_rule": "KubePodNotReady",
+    "site": "nl",
+    "summary": "recurred 44x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1656",
+    "host": "dc1claude01",
+    "alert_rule": "KubeContainerWaiting",
+    "site": "nl",
+    "summary": "recurred 44x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1657",
+    "host": "dc1claude01",
+    "alert_rule": "RAGLatencyP95High",
+    "site": "nl",
+    "summary": "recurred 54x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1696",
+    "host": "dc1code01",
+    "alert_rule": "Device-Down-Due-to-no-ICMP-response.",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1697",
+    "host": "dc1code01",
+    "alert_rule": "Device-Down-SNMP-unreachable",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-17",
+    "host": "dc1fw01",
+    "alert_rule": "Service-up/down",
+    "site": "nl",
+    "summary": "EEM watchdog timer auto-reload",
+    "resolution": "Weekly EEM watchdog reboot (604800s timer). Total NL outage for ~5-10 min. All devices recover automatically. No action required. Cascading alerts across all NL hosts are expected.",
+    "tags": [
+      "scheduled",
+      "maintenance",
+      "asa",
+      "reboot",
+      "cascading",
+      "eem",
+      "watchdog"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1736",
+    "host": "dc1syno01",
+    "alert_rule": "DSM:-The-UPS-device-connected-to-dc1syno01-has-ente",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1737",
+    "host": "dc2openarchiver01",
+    "alert_rule": "Device-Down-Due-to-no-ICMP-response.",
+    "site": "gr",
+    "summary": "recurred 4x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1738",
+    "host": "dc1syno02",
+    "alert_rule": "Sensor-over-limit---Check-Device-Health-Settings",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1777",
+    "host": "dc1claude01",
+    "alert_rule": "NodeMemoryMajorPagesFaults",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-1778",
+    "host": "dc2postiz01",
+    "alert_rule": "Device-Down-Due-to-no-ICMP-response.",
+    "site": "gr",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-18",
+    "host": "dc1fw01",
+    "alert_rule": "Devices-up/down",
+    "site": "nl",
+    "summary": "EEM watchdog timer auto-reload",
+    "resolution": "Weekly EEM watchdog reboot. Cascading device-down alerts expected across all NL hosts. Auto-recovers within 5-10 minutes. Do not escalate during scheduled reboot window.",
+    "tags": [
+      "scheduled",
+      "maintenance",
+      "asa",
+      "reboot",
+      "cascading"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-19",
+    "host": "dc2fw01",
+    "alert_rule": "Service-up/down",
+    "site": "gr",
+    "summary": "EEM watchdog timer auto-reload",
+    "resolution": "EEM watchdog reboot (590400s timer, ~6d20h cycle). GR total outage ~5-10 min + NL VPN tunnel drop. Auto-recovers. GR and NL devices may show cascading alerts.",
+    "tags": [
+      "scheduled",
+      "maintenance",
+      "asa",
+      "reboot",
+      "cascading",
+      "eem",
+      "watchdog",
+      "vpn"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-20",
+    "host": "dc1pve02",
+    "alert_rule": "Service-up/down",
+    "site": "nl",
+    "resolution": "Resolved via Claude session IFRNLLEI01PRD-338"
+  },
+  {
+    "external_ref": "pred-ik-2010",
+    "host": "dc2ap01",
+    "alert_rule": "Device-Down-Due-to-no-ICMP-response.",
+    "site": "gr",
+    "summary": "recurred 4x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2011",
+    "host": "dc1claude01",
+    "alert_rule": "HolisticHealthFailing",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2012",
+    "host": "dc2cam01",
+    "alert_rule": "Device-Down-Due-to-no-ICMP-response.",
+    "site": "gr",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2064",
+    "host": "dc1claude01",
+    "alert_rule": "CronicleJobsFailing",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2065",
+    "host": "dc1gpu01",
+    "alert_rule": "ProactiveDiskPressure",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2066",
+    "host": "dc1oas03",
+    "alert_rule": "Device-Down-Due-to-no-ICMP-response.",
+    "site": "nl",
+    "summary": "recurred 6x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2067",
+    "host": "dc1oas02",
+    "alert_rule": "Device-Down-Due-to-no-ICMP-response.",
+    "site": "nl",
+    "summary": "recurred 6x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2069",
+    "host": "dc1claude01",
+    "alert_rule": "etcdMemberCommunicationSlow",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2070",
+    "host": "dc2pikvm01",
+    "alert_rule": "Device-Down-Due-to-no-ICMP-response.",
+    "site": "gr",
+    "summary": "recurred 4x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2071",
+    "host": "dc1claude01",
+    "alert_rule": "ComposedEvalMetricsStale",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2072",
+    "host": "dc1claude01",
+    "alert_rule": "JudgeFrontierDrift",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-21",
+    "host": "dc3cam01",
+    "alert_rule": "Device-Down-Due-to-no-ICMP-response.",
+    "site": "gr",
+    "resolution": "Resolved via Claude session IFRGRSKG01PRD-165"
+  },
+  {
+    "external_ref": "pred-ik-2190",
+    "host": "dc1claude01",
+    "alert_rule": "NodeMemoryHighUtilization",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2191",
+    "host": "dc1claude01",
+    "alert_rule": "KubeNodeReadinessFlapping",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2192",
+    "host": "dc2sw01",
+    "alert_rule": "Port-status-up/down",
+    "site": "gr",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-22",
+    "host": "dc3cam01",
+    "alert_rule": "Device-Down-Due-to-no-ICMP-response.",
+    "site": "gr",
+    "resolution": "Resolved via Claude session IFRGRSKG01PRD-163"
+  },
+  {
+    "external_ref": "pred-ik-23",
+    "host": "dc3sw01",
+    "alert_rule": "Device-Down-Due-to-no-ICMP-response.",
+    "site": "gr",
+    "resolution": "Resolved via Claude session IFRGRSKG01PRD-161"
+  },
+  {
+    "external_ref": "pred-ik-24",
+    "host": "dc1nc02",
+    "alert_rule": "Service-up/down",
+    "site": "nl",
+    "resolution": "Resolved via Claude session IFRNLLEI01PRD-336"
+  },
+  {
+    "external_ref": "pred-ik-25",
+    "host": "dc1pve01",
+    "alert_rule": "Service-up/down",
+    "site": "nl",
+    "resolution": "Resolved via Claude session IFRNLLEI01PRD-334"
+  },
+  {
+    "external_ref": "pred-ik-2561",
+    "host": "dc1claude01",
+    "alert_rule": "ChatOpsQASuiteFailing",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-26",
+    "host": "dc1myspeed01",
+    "alert_rule": "Devices-up/down",
+    "site": "nl",
+    "resolution": "Resolved via Claude session IFRNLLEI01PRD-323"
+  },
+  {
+    "external_ref": "pred-ik-2619",
+    "host": "dc1claude01",
+    "alert_rule": "RenovateAutonomyHighPollRate",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2620",
+    "host": "dc1claude01",
+    "alert_rule": "KubeDeploymentRolloutStuck",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2621",
+    "host": "dc1claude01",
+    "alert_rule": "ComposedEvalJudgeFooled",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2622",
+    "host": "dc2cam02",
+    "alert_rule": "Device-Down-Due-to-no-ICMP-response.",
+    "site": "gr",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2660",
+    "host": "dc3ap02",
+    "alert_rule": "Port-status-up/down",
+    "site": "gr",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2661",
+    "host": "dc1rtr01",
+    "alert_rule": "Port-status-up/down",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2662",
+    "host": "dc1claude01",
+    "alert_rule": "MeshBFDSessionDown",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2663",
+    "host": "dc1claude01",
+    "alert_rule": "MeshiBGPPeerDown",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2671",
+    "host": "dc1gpu01",
+    "alert_rule": "Devices-up/down",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2694",
+    "host": "dc1claude01",
+    "alert_rule": "KubePersistentVolumeFillingUp",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-27",
+    "host": "dc1librespeed01",
+    "alert_rule": "Devices-up/down",
+    "site": "nl",
+    "resolution": "Resolved via Claude session IFRNLLEI01PRD-322"
+  },
+  {
+    "external_ref": "pred-ik-2721",
+    "host": "dc3ap02",
+    "alert_rule": "Device-Down-Due-to-no-ICMP-response.",
+    "site": "gr",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2785",
+    "host": "dc2sw02",
+    "alert_rule": "Port-status-up/down",
+    "site": "gr",
+    "summary": "recurred 4x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-28",
+    "host": "dc1hpb01",
+    "alert_rule": "Devices-up/down",
+    "site": "nl",
+    "resolution": "Resolved via Claude session IFRNLLEI01PRD-286"
+  },
+  {
+    "external_ref": "pred-ik-2846",
+    "host": "dc1librespeed01",
+    "alert_rule": "Device-Down-SNMP-unreachable",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2847",
+    "host": "dc1myspeed01",
+    "alert_rule": "Devices-up/down",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2872",
+    "host": "dc1librespeed01",
+    "alert_rule": "Space-on-/-is-90-and-95-in-use",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-2873",
+    "host": "dc1librespeed01",
+    "alert_rule": "Service-up/down",
+    "site": "nl",
+    "summary": "recurred 3x in 30d without durable fix",
+    "resolution": "analysis-only pending root-cause",
+    "tags": [
+      "governance",
+      "auto-demote"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-29",
+    "host": "dc1pve01",
+    "alert_rule": "Port-status-up/down",
+    "site": "nl",
+    "resolution": "Resolved via Claude session IFRNLLEI01PRD-282"
+  },
+  {
+    "external_ref": "pred-ik-30",
+    "host": "dc1protonmail-bridge01",
+    "alert_rule": "Device-rebooted",
+    "site": "nl",
+    "resolution": "Resolved via Claude session IFRNLLEI01PRD-280"
+  },
+  {
+    "external_ref": "pred-ik-31",
+    "host": "dc1cl01iot02",
+    "alert_rule": "Service-up/down",
+    "site": "nl",
+    "resolution": "Resolved via Claude session IFRNLLEI01PRD-260"
+  },
+  {
+    "external_ref": "pred-ik-32",
+    "host": "dc1cl01iot01",
+    "alert_rule": "Device-rebooted",
+    "site": "nl",
+    "resolution": "Resolved via Claude session IFRNLLEI01PRD-259"
+  },
+  {
+    "external_ref": "pred-ik-33",
+    "host": "dc1mealie01",
+    "alert_rule": "Devices-up/down",
+    "site": "nl",
+    "resolution": "Resolved via Claude session IFRNLLEI01PRD-232"
+  },
+  {
+    "external_ref": "pred-ik-34",
+    "host": "dc1netvisor01",
+    "alert_rule": "Devices-up/down",
+    "site": "nl",
+    "resolution": "Resolved via Claude session IFRNLLEI01PRD-231"
+  },
+  {
+    "external_ref": "pred-ik-35",
+    "host": "dc1fw01",
+    "alert_rule": "Service-up/down",
+    "site": "nl",
+    "summary": "Freedom ISP PPPoE session dropped. ASA outside_freedom (Po1.6 VLAN 6) up/up but IP unassigned. PPP virtual interface id=1 deleted and pending reuse. Genexis XGS-PON ONT (PoE-powered on dc1sw01 Gi1/0/36) not responding to PADI. Cascade: all 73 crypto-map entries on outside_freedom_map dead, GR site 100% unreachable, 10+ LibreNMS critical alerts, VPS tunnels to NL dead.",
+    "resolution": "xs4all WAN carries all traffic automatically (full tunnel parity configured 2026-04-08). Check: show vpdn pppinterface (PPP id=1 status), show interface outside_freedom (IP assigned?). Physical fix: power-cycle Genexis ONT on dc1sw01 Gi1/0/36 or contact Freedom ISP. QoS auto-applied to tenant rooms via freedom-qos-toggle.sh cron.",
+    "tags": [
+      "freedom",
+      "pppoe",
+      "vpn",
+      "xs4all",
+      "ont",
+      "genexis",
+      "tunnel",
+      "isp-outage",
+      "wan-failover"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-36",
+    "host": "dc2pve01",
+    "alert_rule": "Devices-up/down",
+    "site": "gr",
+    "summary": "GR devices showing down from NL LibreNMS perspective. Root cause: NL Freedom ISP PPPoE failure causing S2S VPN tunnel collapse to GR. All GR hosts on 192.168.2.x unreachable. Correlated with Service up/down alerts on NL PVE nodes and NL services. NOT an actual GR device failure.",
+    "resolution": "Check NL ASA Freedom PPPoE status first: show vpdn pppinterface. If PPP id=1 is deleted/pending, this is a Freedom ISP outage, not a GR problem. xs4all WAN has full tunnel coverage. If both WANs down, GR is genuinely isolated — check GR ASA independently via LTE backup.",
+    "tags": [
+      "freedom",
+      "vpn",
+      "gr-unreachable",
+      "correlated-burst",
+      "false-positive",
+      "cross-site"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-37",
+    "host": "dc1pve01",
+    "alert_rule": "Service-up/down",
+    "site": "nl",
+    "summary": "Multiple NL hosts showing Service up/down during Freedom ISP outage. These are LibreNMS service checks that failed during the VPN tunnel renegotiation period. Most auto-recover within 5-15 minutes once xs4all tunnels establish. Not actual service failures.",
+    "resolution": "Monitor and wait 15 minutes after Freedom drops. xs4all tunnels auto-establish for all GR traffic. Check: show vpn-sessiondb l2l on NL ASA for active tunnel count and child SAs. If child SAs \u003c 5 after 15 min, investigate crypto-map or NAT exemption issues on xs4all map.",
+    "tags": [
+      "freedom",
+      "xs4all",
+      "service-flap",
+      "transient",
+      "auto-recovery",
+      "tunnel-renegotiation"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-4",
+    "host": "dc1pve01",
+    "alert_rule": "Service-up/down",
+    "site": "nl",
+    "summary": "dc1pve01 oversubscribed: 80% RAM (75/94GB), 7 VMs (40GB) + 57 LXC on single host. 1GB ZFS swapfile was 100% full and deadlocked. Load spiked to 229 causing cascading service check failures, apiserver crash loops on dc1k8s-ctrlr01 (lives on dc1pve01), and iot01 VM shutdown.",
+    "resolution": "Removed dangerous ZFS swapfile (orphaned, clears on reboot). Started iot01 VM. Closed 9 cascading alerts. Root fix: servarr LXC consolidation (IFRNLLEI01PRD-202) or K8s worker migration off dc1pve01.",
+    "tags": [
+      "dc1pve01",
+      "oversubscription",
+      "swap",
+      "cascade"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-44",
+    "host": "dc1fw01",
+    "alert_rule": "BGP-peer-down-Freedom-VTI-to-GR-10.255.200.11",
+    "site": "nl",
+    "summary": "Freedom VTI tunnel (Tunnel4) is down. Check: show interface Tunnel4, show vpn-sessiondb l2l, show track 1. If Freedom ISP down, SLA track shows DOWN and default route auto-switches to xs4all.",
+    "resolution": "BGP auto-failover to FRR transit (LP 100) in ~30s. Verify: show bgp ipv4 unicast summary, show route bgp. After recovery: clear conn address for corosync (192.168.187.0/29) and NFS (192.168.188.0/27) subnets on BOTH ASAs.",
+    "tags": [
+      "bgp",
+      "vti",
+      "freedom",
+      "failover",
+      "tunnel"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-45",
+    "host": "dc1fw01",
+    "alert_rule": "xs4all-VTI-tunnel-UP-but-zero-ESP-traffic-Bytes-Rx:-0",
+    "site": "nl",
+    "summary": "EXPECTED BEHAVIOR. ASA tunnel source interface does NOT override routing table. VPN peer host routes (metric 1) via outside_freedom force ALL ESP out Freedom. Freedom ISP drops xs4all-sourced ESP (BCP38). xs4all tunnels are dormant backups.",
+    "resolution": "No action needed. xs4all activates only when Freedom ISP goes completely down. Verify: show crypto ipsec sa | include interface|pkts dec — Freedom tunnels healthy, xs4all encaps\u003e0 decaps=0 is normal.",
+    "tags": [
+      "bgp",
+      "vti",
+      "xs4all",
+      "dormancy",
+      "expected-behavior"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-46",
+    "host": "dc1fw01",
+    "alert_rule": "Cross-site-corosync/NFS-blackhole-after-BGP-route-change",
+    "site": "nl",
+    "summary": "Stale ASA connection table entries from old forwarding path. BGP route changed but existing stateful flows still use cached path.",
+    "resolution": "Clear connections on BOTH ASAs: clear conn address 192.168.87.0 netmask 255.255.255.248 (NL corosync), clear conn address 192.168.187.0 netmask 255.255.255.248 (GR corosync), clear conn address 192.168.88.0 netmask 255.255.255.224 (NL NFS), clear conn address 192.168.188.0 netmask 255.255.255.224 (GR NFS). Verify: pvecm status shows 5/5 quorate.",
+    "tags": [
+      "bgp",
+      "stale-connections",
+      "corosync",
+      "nfs",
+      "failover"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-47",
+    "host": "dc2fw01",
+    "alert_rule": "BGP-peer-down-Freedom-VTI-to-NL-10.255.200.10",
+    "site": "gr",
+    "summary": "NL ASA Freedom VTI tunnel is down. GR ASA sees BGP session drop. NL Tunnel4 may be admin-down, IKE failed, or Freedom ISP is down.",
+    "resolution": "GR auto-failovers to FRR transit (LP 100) via VPS in ~30s. Verify: show bgp ipv4 unicast summary, show route bgp. Check NL side: show interface Tunnel4, show track 1. After recovery: clear conn address for corosync/NFS subnets.",
+    "tags": [
+      "bgp",
+      "vti",
+      "freedom",
+      "failover",
+      "tunnel"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-471",
+    "host": "dc1claude01",
+    "alert_rule": "KubeClientErrors",
+    "site": "nl",
+    "summary": "Brief etcd/apiserver client-error spike on dc1k8s-ctrlr01 — repeats every 45-90 min during host pressure on dc1pve01.",
+    "resolution": "Self-resolved without intervention in the 33 observed re-fires in last 7d. No control-plane outage in event_log. Pattern matches the 2026-04-15 IFRNLLEI01PRD-589 baseline (dc1pve01 memory pressure → etcd fsync stall → transient apiserver client errors).",
+    "tags": [
+      "transient",
+      "flap",
+      "kube-apiserver",
+      "recovered",
+      "self-resolved",
+      "pve01-memory-pressure"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-472",
+    "host": "dc1claude01",
+    "alert_rule": "HighPodRestartRate",
+    "site": "nl",
+    "summary": "Pod restart rate fires above-threshold during routine dev-pod redeployment on the k8s cluster.",
+    "resolution": "Self-resolved once the deployment rollout completes. 21 fires in 7d, all coincided with active dev-pod churn windows.",
+    "tags": [
+      "transient",
+      "flap",
+      "k8s-dev-churn",
+      "self-resolved",
+      "deployment-rollout"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-473",
+    "host": "dc1claude01",
+    "alert_rule": "ContainerOOMKilled",
+    "site": "nl",
+    "summary": "OOM kill events on dev-tier pods with intentional memory caps; routine restart by k8s scheduler.",
+    "resolution": "Self-resolved by pod restart. Container memory limits intentionally tight on dev workloads; production workloads have wider envelopes. 18 fires in 7d.",
+    "tags": [
+      "transient",
+      "flap",
+      "k8s-dev",
+      "oom-recoverable",
+      "self-resolved"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-474",
+    "host": "dc1claude01",
+    "alert_rule": "TargetDown",
+    "site": "nl",
+    "summary": "Prometheus scrape target reports down for a short window — usually a single missed-scrape interval on an exporter under load.",
+    "resolution": "Self-resolved on next successful scrape. 24 fires in 7d; none correlated with sustained target outages in metrics-server logs.",
+    "tags": [
+      "transient",
+      "flap",
+      "prometheus-scrape",
+      "recovered",
+      "self-resolved"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-48",
+    "host": "dc1fw01",
+    "alert_rule": "Freedom-ISP-PPPoE-down-full-BGP-failover",
+    "site": "nl",
+    "summary": "Freedom PPPoE died. SLA track 1 detects in ~15s. Default route switches to xs4all. Freedom VTI BGP drops (~30s). xs4all tunnels activate.",
+    "resolution": "Automatic failover. Verify: 1) show track 1 (DOWN), 2) show route 0.0.0.0 (xs4all at metric 10), 3) show bgp summary (xs4all VTI peers establish), 4) show crypto ipsec sa (xs4all decaps increasing). QoS toggle auto-applies. Physical fix: power-cycle ONT on dc1sw01 Gi1/0/36.",
+    "tags": [
+      "bgp",
+      "freedom",
+      "pppoe",
+      "failover",
+      "xs4all",
+      "sla"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-49",
+    "host": "dc2dmz01",
+    "alert_rule": "chaos-dmz",
+    "site": "gr",
+    "resolution": "Chaos finding (chaos-2026-04-13-014): Experiment verdict FAIL: {\"vpn_tunnels\": {[REDACTED:password], \"pre_up\": 6, \"post_up\": 0, \"note\": \"Lost 6 tunnel(s)\"}, \"bgp_peers\": {[REDACTED:password], \"pre_established\": 7, \"post_established\": 0, \"note\": \"Lost 7 peer(s)\"}, \"bgp_routes\": {[REDACTED:password], \"pre_routes\": 2, \"post_routes\": 0, \"note\": \"Route count dropped below 90% (0 \u003c 1)\"}, \"http\": {[REDACTED:password], \"pre_ok\": 5, \"post_ok\": 5, \"note\": \"OK\"}, \"containers\": {[REDACTED:password], \"note\":…",
+    "tags": [
+      "chaos",
+      "recovery-gap",
+      "critical"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-498",
+    "host": "dc1fw01",
+    "alert_rule": "chaos-tunnel",
+    "site": "nl",
+    "resolution": "Chaos finding (chaos-2026-05-13-001): Convergence 31.8s exceeded SLO threshold 30.0s. Convergence: 31.8s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-499",
+    "host": "dc1fw01",
+    "alert_rule": "chaos-tunnel",
+    "site": "nl",
+    "resolution": "Chaos finding (chaos-2026-05-13-001): Error budget consumption 1.23% exceeds 1% threshold. Convergence: 31.8s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-5",
+    "host": "dc1cl01iot01",
+    "alert_rule": "Devices-up/down",
+    "site": "nl",
+    "summary": "iot01 is VMID 666 (non-standard) on dc1pve01. Stopped by OOM pressure during dc1pve01 overload. Pacemaker cluster (3 nodes: iot01/iot02/dc1cl01iotarb01) correctly fenced iot01 and failed over g_iot_stack (HA, Mosquitto, Z2M, ESPHome, Node-RED) to iot02.",
+    "resolution": "Started VM via qm start 666. Cluster rejoined: 3/3 nodes online, 12/12 resources on iot02. Do NOT failback automatically — leave on current active node. SSH: ssh -i ~/.ssh/one_key root@dc1cl01iot01",
+    "tags": [
+      "iot",
+      "pacemaker",
+      "failover",
+      "vmid666"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-50",
+    "host": "dc1fw01",
+    "alert_rule": "chaos-tunnel",
+    "site": "nl",
+    "resolution": "Chaos finding (chaos-2026-04-13-003): Error budget consumption 1.16% exceeds 1% threshold. Convergence: 30.0s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-51",
+    "host": "dc2fw01",
+    "alert_rule": "chaos-tunnel",
+    "site": "gr",
+    "resolution": "Chaos finding (chaos-2026-04-13-008): Convergence 45.0s exceeded SLO threshold 30.0s. Convergence: 45.0s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-52",
+    "host": "dc2fw01",
+    "alert_rule": "chaos-tunnel",
+    "site": "gr",
+    "resolution": "Chaos finding (chaos-2026-04-13-009): Convergence 45.0s exceeded SLO threshold 30.0s. Convergence: 45.0s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-53",
+    "host": "dc2fw01",
+    "alert_rule": "chaos-tunnel",
+    "site": "gr",
+    "resolution": "Chaos finding (chaos-2026-04-13-010): Convergence 60.0s exceeded SLO threshold 30.0s. Convergence: 60.0s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-54",
+    "host": "dc2fw01",
+    "alert_rule": "chaos-tunnel",
+    "site": "gr",
+    "resolution": "Chaos finding (chaos-2026-04-13-010): Error budget consumption 2.31% exceeds 1% threshold. Convergence: 60.0s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-55",
+    "host": "dc2fw01",
+    "alert_rule": "chaos-tunnel",
+    "site": "gr",
+    "resolution": "Chaos finding (chaos-2026-04-13-011): Convergence 60.0s exceeded SLO threshold 30.0s. Convergence: 60.0s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-56",
+    "host": "dc2fw01",
+    "alert_rule": "chaos-tunnel",
+    "site": "gr",
+    "resolution": "Chaos finding (chaos-2026-04-13-011): Error budget consumption 2.31% exceeds 1% threshold. Convergence: 60.0s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-57",
+    "host": "dc2dmz01",
+    "alert_rule": "chaos-dmz",
+    "site": "gr",
+    "resolution": "Chaos finding (chaos-2026-04-13-014): Experiment verdict FAIL: {\"vpn_tunnels\": {[REDACTED:password], \"pre_up\": 6, \"post_up\": 0, \"note\": \"Lost 6 tunnel(s)\"}, \"bgp_peers\": {[REDACTED:password], \"pre_established\": 7, \"post_established\": 0, \"note\": \"Lost 7 peer(s)\"}, \"bgp_routes\": {[REDACTED:password], \"pre_routes\": 2, \"post_routes\": 0, \"note\": \"Route count dropped below 90% (0 \u003c 1)\"}, \"http\": {[REDACTED:password], \"pre_ok\": 5, \"post_ok\": 5, \"note\": \"OK\"}, \"containers\": {[REDACTED:password], \"note\":…",
+    "tags": [
+      "chaos",
+      "recovery-gap",
+      "critical"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-58",
+    "host": "dc1dmz01",
+    "alert_rule": "chaos-dmz",
+    "site": "nl",
+    "resolution": "Chaos finding (chaos-2026-04-13-016): Convergence 300.0s exceeded SLO threshold 120.0s. Convergence: 300.0s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-59",
+    "host": "dc1dmz01",
+    "alert_rule": "chaos-dmz",
+    "site": "nl",
+    "resolution": "Chaos finding (chaos-2026-04-14-002): Error budget consumption 3.34% exceeds 1% threshold. Convergence: 86.6s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-6",
+    "host": "dc1k8s-ctrlr01",
+    "alert_rule": "KubePodCrashLooping",
+    "site": "nl",
+    "summary": "apiserver-ctrlr01 crash looping (498 restarts) is a symptom of dc1pve01 memory pressure. dc1k8s-ctrlr01 VM (8GB) runs on dc1pve01 which was at 80% RAM + swap maxed. etcd WAL fsync latency causes probe failures.",
+    "resolution": "Self-recovered when dc1pve01 load dropped. All 3 apiservers Running and Ready, all API services Available. Long-term fix: migrate dc1k8s-ctrlr01 off dc1pve01.",
+    "tags": [
+      "apiserver",
+      "dc1pve01",
+      "dc1k8s-ctrlr01",
+      "etcd"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-62",
+    "host": "dc1fw01",
+    "alert_rule": "chaos-tunnel",
+    "site": "nl",
+    "resolution": "Chaos finding (chaos-2026-04-14-009): Convergence 64.3s exceeded SLO threshold 30.0s. Convergence: 64.3s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-63",
+    "host": "dc1fw01",
+    "alert_rule": "chaos-tunnel",
+    "site": "nl",
+    "resolution": "Chaos finding (chaos-2026-04-14-009): Error budget consumption 2.48% exceeds 1% threshold. Convergence: 64.3s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-64",
+    "host": "dc2fw01",
+    "alert_rule": "chaos-tunnel",
+    "site": "gr",
+    "resolution": "Chaos finding (chaos-2026-04-14-011): Convergence 45.0s exceeded SLO threshold 30.0s. Convergence: 45.0s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-66",
+    "host": "dc1dmz01",
+    "alert_rule": "chaos-dmz",
+    "site": "nl",
+    "resolution": "Chaos finding (chaos-2026-04-15-004): Error budget consumption 3.15% exceeds 1% threshold. Convergence: 81.6s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-67",
+    "host": "dc2dmz01",
+    "alert_rule": "chaos-dmz",
+    "site": "gr",
+    "resolution": "Chaos finding (chaos-2026-04-15-005): Error budget consumption 3.19% exceeds 1% threshold. Convergence: 82.6s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-70",
+    "host": "dc1k8s-ctrlr01",
+    "alert_rule": "KubeClientErrors",
+    "site": "nl",
+    "summary": "dc1pve01 memory pressure: 53 guests (9 VMs + 44 LXCs), 2.5x memory overcommit, zero swap, only 1.9 GB free of 94 GB. Pressure starved etcd I/O on dc1k8s-ctrlr01 (raft consensus 100-433ms vs \u003c10ms target, KV/Range DeadlineExceeded). kube-apiserver gRPC to local etcd failed every ~12s, readiness probe HTTP 500 (21,636 failures), kubelet SIGKILL after 8 liveness failures -\u003e 754 apiserver restarts on dc1k8s-ctrlr01.",
+    "resolution": "Shut down dc1androidsdk01 (freed ~9.7 GB, 8 CPUs) + dc1dmz02 (already stopped, onboot=0). Host free: 1.9 GB -\u003e 10 GB, available: 10 GB -\u003e 19 GB. dc1k8s-ctrlr02/dc1k8s-ctrlr03 unaffected because their PVE hosts have less memory pressure. Long-term: enable balloon on dc1k8s-ctrlr01, or add swap to dc1pve01, or migrate a VM to dc1pve02/dc1pve03. See memory pve01_memory_pressure_apiserver_20260415.md.",
+    "tags": [
+      "dc1pve01",
+      "memory-pressure",
+      "apiserver",
+      "etcd",
+      "kubernetes",
+      "androidsdk01"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-71",
+    "host": "dc1k8s-ctrlr01",
+    "alert_rule": "KubeAPIErrorBudgetBurn",
+    "site": "nl",
+    "summary": "Cascading from IFRNLLEI01PRD-566. The apiserver restart cycle on dc1k8s-ctrlr01 (754 kubelet SIGKILLs) caused the API error budget burn rate to cross the warning threshold. Same underlying dc1pve01 memory-pressure starvation -\u003e etcd deadline exceeded -\u003e gRPC failures -\u003e 500-class readiness probes.",
+    "resolution": "Same mitigation as IFRNLLEI01PRD-566: shut down dc1androidsdk01 on dc1pve01. Error budget recovered after restart storm ended. Both -566 and -567 moved to Done. Monitor apiserver_restart_total; if resumes, escalate to VM migration off dc1pve01.",
+    "tags": [
+      "dc1pve01",
+      "memory-pressure",
+      "apiserver",
+      "error-budget",
+      "cascading"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-72",
+    "host": "dc1n8n01",
+    "alert_rule": "n8n-SQLite-mutex-timeout",
+    "site": "nl",
+    "summary": "Same dc1pve01 memory-pressure class as IFRNLLEI01PRD-566/567. dc1pve01 at 74.8/94 GB used, zero swap, load avg 21.5, /proc/pressure/io some avg10=59.24 (severe). IO spike starved the n8n LXC's SQLite writer mutex (default 200ms timeout) -\u003e n8n returned 503 'Database is not ready' upstream -\u003e cascading ECONNRESET / 'Connection lost before handshake' on in-flight TLS. Self-healed in ~90s. n8n internals never actually broke; NPM + local port 5678 stayed healthy throughout. Heaviest VMs on n…",
+    "resolution": "Self-healed in ~90s. No intervention needed. Recurring failure class: zero swap + 80% mem + high IO VMs co-located. Open remediation options: (1) add zram/swap on dc1pve01, (2) bump n8n LXC 2G-\u003e4G RAM, (3) live-migrate n8n LXC off dc1pve01 to dc1pve02/dc1pve03, (4) investigate workload growth after androidsdk01 shutdown. See memory incident_n8n_sqlite_mutex_20260416.md for full timeline.",
+    "tags": [
+      "dc1pve01",
+      "memory-pressure",
+      "n8n",
+      "sqlite",
+      "mutex",
+      "recurring-class"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-861",
+    "host": "dc1fw01",
+    "alert_rule": "chaos-tunnel",
+    "site": "nl",
+    "resolution": "Chaos finding (chaos-2026-05-27-001): Convergence 41.6s exceeded SLO threshold 30.0s. Convergence: 41.6s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-862",
+    "host": "dc1fw01",
+    "alert_rule": "chaos-tunnel",
+    "site": "nl",
+    "resolution": "Chaos finding (chaos-2026-05-27-001): Error budget consumption 1.6% exceeds 1% threshold. Convergence: 41.6s. Category: slo-breach. Action: investigate and verify fix with follow-up experiment.",
+    "tags": [
+      "chaos",
+      "slo-breach",
+      "high"
+    ]
+  },
+  {
+    "external_ref": "pred-ik-9",
+    "host": "dc1pve01",
+    "alert_rule": "Service-up/down",
+    "site": "nl",
+    "summary": "PVE swap audit: dc1pve01 had 1GB swapfile on ZFS (deadlock risk, Proxmox warns against). dc1pve03/dc2pve01 had no swap on ZFS (correct). dc2pve02 had 8GB LVM swap on slow SATA but inactive. Recommended swappiness=10 for all PVE (default 60 too aggressive).",
+    "resolution": "dc1pve01: removed ZFS swapfile (deadlocked on swapoff, clears on reboot). dc1pve02: swappiness→10. dc2pve01: 8GB swapfile on Samsung ext4 NVMe + swappiness=10. dc2pve02: deactivated SATA swap. Proxmox best practice: swap on physical partition outside ZFS, max 8GB, swappiness=10.",
+    "tags": [
+      "swap",
+      "zfs",
+      "proxmox",
+      "audit"
+    ]
+  }
+]

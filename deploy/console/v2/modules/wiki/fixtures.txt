@@ -1,0 +1,37 @@
+/* The living wiki (REQ-521) — representative fixtures mirroring the REAL /v1/wiki DTOs
+   (core/httpapi/wiki.go WikiIndex / WikiPage) so the view renders identically for demo and live.
+   Lessons mirror the knowledge-corpus schema exactly: no confidence, no timestamp — the corpus
+   records neither, and the wiki never invents a field. Runbook fixtures are excerpts of the pages
+   embedded in the grounder binary (docs/wiki). */
+const WIKI_FIX = {
+  index: {
+    lessons: [
+      { slug: "librenms-4821", external_ref: "librenms-4821", host: "dc1k8s-w3", alert_rule: "kubelet flap",
+        site: "dc1", summary: "kubelet flapped on a worker with a healthy control plane",
+        resolution: "no action — self-limiting flap, confirmed clear on re-poll", tags: ["k8s", "flap"] },
+      { slug: "librenms-4790", external_ref: "librenms-4790", host: "dc1stor01", alert_rule: "volume usage above 90%",
+        site: "dc1", summary: "backup spool filled the volume",
+        resolution: "rotated the stale spool set after identifying the writer first", tags: ["storage"] },
+    ],
+    lesson_total: 2,
+    runbooks: [
+      { slug: "grounding-model", title: "The grounding model — predictions, verdicts, and the scorecard" },
+      { slug: "skill-lifecycle", title: "The skill-store lifecycle — draft, trial, production, retired, watch" },
+      { slug: "triage-protocol", title: "Triage protocol — how an alert becomes a gated proposal" },
+    ],
+    skills: [
+      { name: "conservative-remediation", kind: "behavioral", pinned: true, production_version: "1.0.0", active_trial: false },
+      { name: "triage-protocol", kind: "behavioral", pinned: false, production_version: "1.1.0", active_trial: true },
+      { name: "proving-your-work", kind: "behavioral", pinned: false, production_version: "1.0.0", active_trial: false },
+    ],
+    skills_available: true,
+  },
+  pages: {
+    "triage-protocol": { slug: "triage-protocol", title: "Triage protocol — how an alert becomes a gated proposal", kind: "runbook",
+      body: "# Triage protocol — how an alert becomes a gated proposal\n\nEvery step below is enforced in code; none of it is aspiration.\n\n## 1. Intake\n\nAn alert enters only through `POST /v1/ingest/{source_type}` — a declared, enabled source (INV-17), authenticated by HMAC, mTLS, or a per-source bearer token.\n\n## 2. Investigate\n\nRead-only: estate-graph context, precedent retrieval with a transparent lexical scorer, and the novelty gate — a never-seen `(host, rule)` signature forces a human poll.\n\n## 3. Predict, then verify\n\nThe consequence prediction is content-hashed into the ActionManifest **before** anything would run; the mechanical verifier scores `match` / `partial` / `deviation` after.\n\n> Phase 0/1 posture: mutation is OFF — every session ends in a gated proposal." },
+    "skill-lifecycle": { slug: "skill-lifecycle", title: "The skill-store lifecycle — draft, trial, production, retired, watch", kind: "runbook",
+      body: "# The skill-store lifecycle\n\nAppend-only versions; every transition needs a **rationale** and is ledger-recorded before the row changes.\n\n```\ndraft -> trial -> production -> retired\n```\n\nA trial graduates only by evidence (a one-sided Welch t-test against the concurrent production control), and a graduate is **watched**: consecutive regressing sessions auto-retire it and restore the prior version." },
+    "grounding-model": { slug: "grounding-model", title: "The grounding model — predictions, verdicts, and the scorecard", kind: "runbook",
+      body: "# The grounding model\n\nCommitted predictions (content-hashed pre-execution), a deterministic verifier as the **sole verdict author**, and a degree-preserving shuffled-graph control that makes the blast-radius signal falsifiable.\n\nThe scorecard at `/v1/grounding` publishes match rate, precision/recall, the signal ratio, and the floor-hold count — zeros on an empty spine, never invented." },
+  },
+};

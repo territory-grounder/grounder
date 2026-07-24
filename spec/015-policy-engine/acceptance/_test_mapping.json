@@ -1,0 +1,195 @@
+{
+  "feature": "policy-engine.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes (must name a test); pending = specified behavior whose implementation (core/policy.Engine, Phase 2) does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior, INV-22). The FOUNDATION leaves T-015-1 (embedded fixed OPA/Rego evaluator + deny-overrides) and T-015-2 (rule data model + verdict trinary + param inheritance) have landed, so their four scenarios are present and bound to spec/015-policy-engine/acceptance/acceptance_test.go; T-015-4 (four global modes: exactly-one-active, gated+audited transitions, fail-closed Shadow default) has landed and bound its three mode-state-machine scenarios (exactly-one-active, gated+audited transition, absent→Shadow) — its fourth scenario 'the mode is the sole actuation chokepoint that absorbs the retired gate' (REQ-1520) has now LANDED with the safety-core refactor T-015-13 (see below) and is present; T-015-6 (band composition — respect emits the more-restrictive of {verdict, risk band}, force overrides and double-warns, and neither breaches the INV-09 never-auto floor) has landed and bound its two band scenarios to spec/015-policy-engine/acceptance/acceptance_test.go; T-015-8 (per-op-class graduation ladder — promote to auto only after N verified-clean runs, demote on the first deviation, verify-on-auto bound so an unverified auto never counts) has landed and bound its two REQ-1514 promote/demote scenarios to spec/015-policy-engine/acceptance/acceptance_test.go — its third scenario 'An auto verdict still runs predict execute verify breaker' (REQ-1515) stays pending because it asserts the spec/013 predict→execute→verify→breaker ACTUATION chain, which this leaf deliberately does not wire (graduation only consumes the verifier's outcome via OutcomeFromVerdict; the actuation-chain wiring is a later integration leaf); T-015-7 (execution deny-floor + conservative/bare templates + removable-with-warning) has landed and bound its three scenarios to spec/015-policy-engine/acceptance/acceptance_test.go — the floor is an EXECUTION floor (the proposal is produced identically in every mode and preserved; only the auto-execute verdict is floored to deny, REQ-1511), the conservative template carries the predecessor safe-exec argv deny-patterns + a 30/min governor (REQ-1512), and a floor removal / bare allow-all is permitted-but-loud behind a distinct red double-confirmation that is audited while the constitutional mechanical never-auto floor (core/safety, INV-09) still clamps floor-class ops beneath the removed policy layer (REQ-1513); T-015-3 (min_confidence clamp + rate_limit governor) has landed and bound its two scenarios to spec/015-policy-engine/acceptance/acceptance_test.go — a below-min_confidence auto is clamped auto→approve by the pure ClampConfidence (REQ-1507) and the (N+1)th auto in the trailing window is clamped auto→approve by the concurrency-safe, clock-seam RateGovernor (REQ-1508); both clamps ONLY tighten (verdictRank(out) >= verdictRank(in), property-tested) and neither lifts the constitutional never-auto floor (core/safety, INV-09) beneath the engine; T-015-9 (local principals+groups + approve_by enforcement on /v1/vote, REQ-1516) has landed and bound its two vote scenarios (member admitted, non-member rejected) to spec/015-policy-engine/acceptance/acceptance_test.go — MayApprove admits a vote ONLY WHEN the voter's principal id or group is in the pending decision's approve_by set, resolving through the shared local-and-credential-human-plane PrincipalResolver (no forked identity store); empty approve_by and any resolver error fail closed; the third REQ-1516 scenario 'A federated principal resolves through the configured provider' stays pending until the federated LDAP/OIDC resolver leaf T-015-10 lands behind the same interface; T-015-1's Engine.Decide now COMPOSES the full most-restrictive-first decision procedure (design.md 'Mode/verdict decision procedure') — Rego deny-overrides base (a deny short-circuits) → EffectiveParams inheritance → confidence+rate clamps → band composition (with the inviolable INV-09 never-auto floor) → graduation → execution deny-floor → approve_by — and returns the REQUIRED-FIELD PolicyDecision (Verdict/MatchedRuleID/ComposedBand/ApproveBy/Mode + a non-secret audit projection), built only via NewPolicyDecision so a missing field is a compile error (the type-level half of REQ-1518's persistence contract, INV-19); the REQ-1503 (rules-as-data) and REQ-1507 (below-min-confidence clamp) scenarios now bind THROUGH the composed Engine.Decide (the confidence clamp resolves min_confidence via EffectiveParams and fires inside Decide, not an external Refine), and the full ordered chain is proven end-to-end by core/policy/engine_compose_test.go; the 'policy_decision table is append-only' scenario stays pending because the pgx migration is persistence (T-015-12); T-015-11 (warn-don't-block guard + audit-every-decision + admin engine toggle) has now landed and bound its three scenarios to spec/015-policy-engine/acceptance/acceptance_test.go — audit-every-decision is realized by AuditedEngine, which wraps (never alters) Engine.Decide and emits EXACTLY ONE non-secret decision record per evaluation (auto/approve/deny AND the engine-off deferral) to an AuditSink; a sink failure is best-effort but traced, never silently swallowed, and a missing sink is loud (REQ-1518, and the 'appended to the tamper-evident ledger' scenario binds through LedgerAuditSink onto the real hash-chained core/audit ledger); the warn-don't-block guard surfaces non-blocking PolicyWarnings for an allow-all rule / a removed floor / Full-auto and NEVER refuses the operator's chosen posture — a single allow-all is reachable behind the distinct red double-confirmation (REQ-1517); and the admin EngineToggle (authority-gated via the shared AuthorityChecker seam, every override audited to the governance ledger) records a warning when forcing the engine on in Shadow/HITL and a double-confirmation warning when disabling it in Semi-auto/Full-auto (REQ-1519), while engine-OFF defers to the mechanical floors (verdict approve, never auto; the constitutional never-auto floor still clamps beneath — engine-off is not a bypass); T-015-5 (identical-pipeline invariant guard — the mode governs ONLY the actuation branch, REQ-1501) has now landed and bound its scenario ('The investigation pipeline is identical across all four modes') to spec/015-policy-engine/acceptance/acceptance_test.go — core/policy.AssertModeInvariant re-runs the composed Engine.Decide across all four modes (varying only in.Mode) and requires the resolved verdict / composed band / approve_by to be IDENTICAL, permitting ONLY PolicyDecision.Mode (the recorded active-mode audit field) to differ; the invariant holds because Decide never branches on in.Mode (it composes the never-auto floor + Rego deny-overrides + confidence/rate clamps + band composition + graduation + execution deny-floor, all functions of the ACTION and the operator rule DATA, and merely CARRIES in.Mode into the decision for the audit — the mode's actuation semantics live at the chokepoint, T-015-13, strictly after Decide); the scenario's Then also drives a deliberately mode-dependent stub decider through the SAME guard and asserts it is DETECTED with the typed ErrPipelineModeDependent (a negative control proving the guard is not a vacuous no-op), and policy.SelfTest is the boot hook the preflight calls to REFUSE to start a worker whose pipeline is mode-dependent (fail closed, mirroring core/actuate.Interceptor.SelfTest); the remaining scenarios stay pending until their owning leaf (T-015-10, T-015-12, T-015-13) lands. T-015-13 (SAFETY-CORE REFACTOR: absorb MutationGate + TG_MUTATION_ENABLED into the mode chokepoint + wire policy.Engine.Decide into the actuation interceptor) has now landed and bound its two scenarios (REQ-1520 'the mode is the sole actuation chokepoint that absorbs the retired gate' and REQ-1521 'absorbing the mutation gate is a deliberate audited safety-core refactor') to spec/015-policy-engine/acceptance/acceptance_test.go — the retired core/safety.MutationGate object, the TG_MUTATION_ENABLED env knob, and the standalone console toggle are RETIRED and absorbed into core/safety.Chokepoint, whose sole authority safety.MayActuate(mode, preflightGreen) = mode in {Semi-auto,Full-auto} && preflightGreen answers 'may this actuate?' from the ONE source of truth (the mode); the zero/unknown mode is Shadow (fail-closed read-only), ProvePreflight marks the boot preflight green WITHOUT enabling (enabling is an authenticated, authority-checked, ledger-audited ModeController transition gated on that green preflight), and a deviation-breaker trip / POST /halt call Chokepoint.ForceShadow -> ModeController.ForceShadow (the absorbed gate.Disable); the interceptor's Do chain now consults policy.Engine.Decide (via the AuditedEngine) BEFORE the mode chokepoint as an INDEPENDENT control layer beneath which the never-auto floor (INV-09) and the mode chokepoint each fail closed (the negative control: no code path actuates at Shadow, proven in core/actuate/policy_wire_test.go and the REQ-1520 scenario's grep-style assertGateFullyRetired negative control that walks the runtime Go source and fails if any live MutationGate/TG_MUTATION_ENABLED definition remains); the absorption is re-expressed in mode-chokepoint terms across docs/adr/0013-mode-is-the-actuation-chokepoint.md, docs/CONSTITUTION.md, spec/013-actuation-interceptor/requirements.md, and .lockstep.lock, and mutation STAYS OFF (mode defaults Shadow). REQ-1522 (policy decision-surface hardening) has landed on the T-015-1 evaluator: every PolicyDecision now carries the loaded rule-bundle version (a deterministic content fingerprint of the rules-as-data, DecisionAudit.BundleVersion, surfaced via PolicyDecision.BundleVersion() and persisted into the governance-ledger row's serialized detail by LedgerAuditSink with NO new column or migration) and the FULL bounded/typed matched-rule list (DecisionAudit.MatchedRules — each matched rule id + its verdict, deny-overrides provenance, outcome unchanged); and a fixed-Rego evaluator ERROR now fails closed to `deny` (refuse), never to a permissive verdict and never to `auto` — the auditable bundle-version + matched-rule-list legs bind present through core/policy/acceptance's 'Every decision records the bundle version and the full matched-rule list' scenario, and the fail-to-deny-on-evaluator-error leg is locked white-box in core/policy/hardening_test.go (TestDecide_EvaluatorError_FailsClosedToDeny), which injects a failing evaluator through the unexported baseEvaluator seam because there is deliberately no public path from input to an evaluator error.",
+  "scenarios": [
+    {
+      "name": "Operator rules enter the fixed Rego module as data only",
+      "req": "REQ-1503",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "A matching deny wins regardless of rule order",
+      "req": "REQ-1504",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "A rule resolves an action to one of auto approve or deny",
+      "req": "REQ-1506",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "An unset rule param inherits from the global-default rule",
+      "req": "REQ-1507",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "A below-min-confidence action is clamped to approve",
+      "req": "REQ-1507",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "An over-rate-limit action is clamped to approve",
+      "req": "REQ-1508",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "Exactly one of the four modes is active",
+      "req": "REQ-1500",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "A mode transition is gated and audited to the ledger",
+      "req": "REQ-1502",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "The wired RBAC admits a flip-authorized operator to escalate with a green preflight",
+      "req": "REQ-1502",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "The wired RBAC denies and audits an unauthorized operator's flip",
+      "req": "REQ-1502",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "A flip is refused when the boot preflight is not green",
+      "req": "REQ-1502",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "An absent persisted mode fails closed to Shadow",
+      "req": "REQ-1519",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "The mode is the sole actuation chokepoint that absorbs the retired gate",
+      "req": "REQ-1520",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go"
+    },
+    {
+      "name": "Absorbing the mutation gate is a deliberate audited safety-core refactor",
+      "req": "REQ-1521",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go"
+    },
+    {
+      "name": "The investigation pipeline is identical across all four modes",
+      "req": "REQ-1501",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "Respect band_mode emits the more-restrictive of verdict and risk band",
+      "req": "REQ-1509",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "Force band_mode overrides the risk band and double-warns",
+      "req": "REQ-1510",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "A floor-class action is still proposed with rationale in every mode",
+      "req": "REQ-1511",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "The conservative template loads the predecessor deny-patterns and governor",
+      "req": "REQ-1512",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "Removing the conservative template warns but is not blocked",
+      "req": "REQ-1513",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "An op-class promotes to auto after N clean verified runs",
+      "req": "REQ-1514",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "An op-class demotes to approve on the first deviation",
+      "req": "REQ-1514",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "An auto verdict still runs predict execute verify breaker",
+      "req": "REQ-1515",
+      "status": "pending"
+    },
+    {
+      "name": "A vote from an approve_by member is admitted",
+      "req": "REQ-1516",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "A vote from a non-member is rejected",
+      "req": "REQ-1516",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "A federated principal resolves through the configured provider",
+      "req": "REQ-1516",
+      "status": "pending"
+    },
+    {
+      "name": "A single allow-all policy is permitted behind a red double-confirmation",
+      "req": "REQ-1517",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "Every policy decision is appended to the governance ledger",
+      "req": "REQ-1518",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "Forcing the engine on in Shadow warns and disabling it in Semi-auto double-warns",
+      "req": "REQ-1519",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "The console edits rules as data and renders the packet-tracer explanation",
+      "req": "REQ-1505",
+      "status": "pending"
+    },
+    {
+      "name": "The policy_decision table is append-only with no runtime UPDATE or DELETE",
+      "req": "REQ-1518",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    },
+    {
+      "name": "Every decision records the bundle version and the full matched-rule list",
+      "req": "REQ-1522",
+      "status": "present",
+      "test": "spec/015-policy-engine/acceptance/acceptance_test.go:TestPolicyEngineAcceptance"
+    }
+  ]
+}

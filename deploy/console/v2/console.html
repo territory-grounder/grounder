@@ -1,0 +1,1596 @@
+<meta charset="utf-8" />
+<title>Territory Grounder — Operator Console</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+/*FONTS*/
+
+/* ============================================================================
+   THE GROUNDING INSTRUMENT — token system
+   A metrology bench for a probabilistic actor. Two epistemic channels:
+   TERRITORY (ground truth, steel) vs MAP (the AI's claims, indigo) — never
+   the same hue, so the eye separates "what is" from "what the model asserts"
+   pre-attentively. Verdict + band + hazard are reserved semantic colors,
+   always paired with label/shape. Color is a channel, never decoration.
+   ========================================================================== */
+:root {
+  --g0:#0a0e11; --g1:#0f1519; --g2:#131b20; --g3:#18222839; --g3s:#182228;
+  --line:#202b32; --line2:#2b3a42; --line3:#3a4c56;
+  --ink:#d8e2e8; --ink2:#8fa0ab; --ink3:#5d6e78; --ink4:#43525b;
+
+  --territory:#8ea0ac; --territory-dim:#8ea0ac2e;   /* steel — observed ground truth   */
+  --map:#7488ec;       --map-dim:#7488ec26;         /* indigo — the AI's map / prediction */
+
+  --match:#33a891;     --partial:#d7a03a;  --deviation:#f0492f;
+  --auto:#48b978;      --notice:#dcab3a;   --pause:#ec6a72;
+  --hazard:#f2872a;    --hazard-bar:#3a2a12;
+  --accent:#32cfd6;    --accent-dim:#32cfd61f;       /* cyan — interaction ONLY, never data */
+
+  --sans:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --radius:5px; --radius-s:3px;
+  --rail-w:212px; --bar-h:52px; --sub-h:46px;
+  --shadow:0 12px 40px -8px #000000cc, 0 0 0 1px var(--line);
+  color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --g0:#e4e9ed; --g1:#f5f8fa; --g2:#fcfdfe; --g3:#e5ebef7a; --g3s:#eaeff2;
+  --line:#cdd8de; --line2:#bccad2; --line3:#9fb0b9;
+  --ink:#152229; --ink2:#485963; --ink3:#728591; --ink4:#95a5ae;
+  --territory:#5a6d78; --territory-dim:#5a6d7822;
+  --map:#4256d0; --map-dim:#4256d016;
+  --match:#1c8a74; --partial:#a9761a; --deviation:#d33417;
+  --auto:#2f9c5c; --notice:#a9791b; --pause:#cf4b56;
+  --hazard:#c96a12; --hazard-bar:#f5e2c8;
+  --accent:#0e9ba6; --accent-dim:#0e9ba614;
+  --shadow:0 14px 40px -10px #64778840, 0 0 0 1px var(--line);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme]){
+    --g0:#e9edf0; --g1:#f4f7f9; --g2:#fbfcfd; --g3:#e5ebef7a; --g3s:#eaeff2;
+    --line:#d3dce1; --line2:#c2ced5; --line3:#a9b8c0;
+    --ink:#17242c; --ink2:#4b5c66; --ink3:#778992; --ink4:#9aa9b2;
+    --territory:#5a6d78; --territory-dim:#5a6d7822;
+    --map:#4256d0; --map-dim:#4256d016;
+    --match:#1c8a74; --partial:#a9761a; --deviation:#d33417;
+    --auto:#2f9c5c; --notice:#a9791b; --pause:#cf4b56;
+    --hazard:#c96a12; --hazard-bar:#f5e2c8;
+    --accent:#0e9ba6; --accent-dim:#0e9ba614;
+    color-scheme:light;
+  }
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:var(--g0); color:var(--ink);
+  font-family:var(--sans); font-size:13px; line-height:1.45;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  font-variant-numeric:tabular-nums;
+  overflow:hidden;
+}
+/* faint calibration field — schematic substrate, not decoration: a measuring grid */
+body::before{
+  content:""; position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.5;
+  background:
+    linear-gradient(var(--line) 1px, transparent 1px) 0 0/100% 46px,
+    linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0/46px 100%;
+  -webkit-mask-image:radial-gradient(120% 90% at 70% 0%, #000 30%, transparent 78%);
+          mask-image:radial-gradient(120% 90% at 70% 0%, #000 30%, transparent 78%);
+  opacity:.14;
+}
+::selection{background:var(--accent-dim); color:var(--ink)}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;font-size:inherit;color:inherit;cursor:pointer;background:none;border:none}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:2px}
+.mono{font-family:var(--mono)}
+h1,h2,h3,h4{margin:0;font-weight:600;letter-spacing:-.01em}
+
+/* micro-label: tracked uppercase mono — the instrument-panel legend voice */
+.lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3);font-weight:500}
+
+/* ============================ SHELL ============================ */
+.app{position:relative;z-index:1;display:grid;grid-template-columns:var(--rail-w) 1fr;grid-template-rows:var(--bar-h) 1fr;height:100vh;height:100dvh}
+/* fail-closed: while unauthenticated the console shell is not just visually covered, it is not
+   rendered at all — [hidden] must win over the .app{display:grid} rule above. */
+.app[hidden]{display:none}
+
+/* posture bar — the persistent safety chrome */
+.posture{grid-column:1/3;display:flex;align-items:center;gap:18px;padding:0 16px 0 18px;
+  background:color-mix(in srgb,var(--g1) 82%, transparent);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);z-index:30}
+:root{--logo:url(data:image/png;base64,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)}
+/* themed custom scrollbars — thin, palette-matched, both engines */
+*{scrollbar-width:thin;scrollbar-color:var(--line3) transparent}
+::-webkit-scrollbar{width:11px;height:11px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line3);border-radius:7px;border:3px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:var(--ink3);border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-corner{background:transparent}
+/* account menu (topbar) */
+.acct{position:relative;flex:none}
+.acct-menu{position:absolute;top:calc(100% + 9px);right:0;min-width:212px;background:var(--g1);border:1px solid var(--line2);border-radius:var(--radius);box-shadow:var(--shadow);padding:6px;z-index:60;display:flex;flex-direction:column;gap:2px}
+.acct-menu[hidden]{display:none}
+.acct-head{padding:9px 10px 7px}
+.acct-head .lbl{display:block;font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)}
+.acct-head b{font-size:13px;color:var(--ink)}
+.acct-meta{padding:0 10px 9px;font-size:10.5px;color:var(--ink3);border-bottom:1px solid var(--line);margin-bottom:4px}
+.acct-item{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:8px 10px;border-radius:var(--radius-s);color:var(--ink);font-size:12.5px;background:none;border:none;cursor:pointer}
+.acct-item:hover{background:var(--g2)}
+.acct-item.danger{color:var(--deviation)}
+.acct-item.danger:hover{background:color-mix(in srgb,var(--deviation) 10%,transparent)}
+.acct-item svg{flex:none;color:var(--ink3)}
+.acct-item.danger svg{color:var(--deviation)}
+.brand{display:flex;align-items:baseline;gap:9px;flex:none}
+.brand .mk{width:23px;height:24px;padding:0;background:var(--logo) center/contain no-repeat;border-radius:5px;flex:none}
+:root[data-theme="dark"] .brand .mk{background-color:rgba(255,255,255,.92);padding:2px}
+.brand b{font-weight:600;font-size:13.5px;letter-spacing:-.02em}
+.brand span{color:var(--ink3);font-size:11px}
+.posture .sep{width:1px;height:24px;background:var(--line2);flex:none}
+.posture .grow{flex:1}
+
+/* the mutation breaker — signature control, kept from the instrument DNA */
+.breaker{display:inline-flex;align-items:stretch;height:30px;border:1px solid var(--line3);border-radius:var(--radius);overflow:hidden;font-family:var(--mono);font-size:10px;letter-spacing:.09em;background:var(--g0);flex:none}
+.breaker .k{display:flex;align-items:center;padding:0 9px;color:var(--ink3);text-transform:uppercase;border-right:1px solid var(--line)}
+.breaker .sw{display:flex;align-items:center;gap:7px;padding:0 11px;text-transform:uppercase;font-weight:600}
+.breaker .nub{width:24px;height:13px;border-radius:7px;position:relative;flex:none;border:1px solid var(--line3);background:var(--g2)}
+.breaker .nub::after{content:"";position:absolute;top:1px;left:1px;width:9px;height:9px;border-radius:50%;background:var(--ink3);transition:transform .35s cubic-bezier(.6,0,.2,1),background .35s}
+.breaker[data-mode="read-only"] .sw{color:var(--auto)}
+.breaker[data-mode="read-only"] .nub{border-color:color-mix(in srgb,var(--auto) 55%,var(--line3));background:color-mix(in srgb,var(--auto) 16%,var(--g2))}
+.breaker[data-mode="read-only"] .nub::after{background:var(--auto)}
+.breaker[data-mode="operational"] .sw{color:var(--hazard)}
+.breaker[data-mode="operational"] .nub::after{transform:translateX(11px);background:var(--hazard)}
+/* posture-unknown — the worker has not published a fresh mutation posture; show it as unverified rather
+   than a confident OFF the read-only grounder cannot vouch for */
+.breaker[data-mode="unknown"] .sw{color:var(--notice)}
+.breaker[data-mode="unknown"] .nub{border-color:color-mix(in srgb,var(--notice) 55%,var(--line3));background:color-mix(in srgb,var(--notice) 16%,var(--g2))}
+.breaker[data-mode="unknown"] .nub::after{transform:translateX(5px);background:var(--notice)}
+
+/* band annunciator lights */
+.annun{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:10px}
+.annun .a{display:flex;align-items:center;gap:5px;color:var(--ink2)}
+.annun .a i{width:7px;height:7px;border-radius:2px;display:inline-block}
+.annun .a b{color:var(--ink);font-weight:600}
+
+.chip-ok,.chip-warn,.chip-bad{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;letter-spacing:.04em;padding:4px 8px;border-radius:var(--radius-s);border:1px solid}
+.chip-ok{color:var(--match);border-color:color-mix(in srgb,var(--match) 40%,transparent);background:color-mix(in srgb,var(--match) 9%,transparent)}
+.chip-warn{color:var(--partial);border-color:color-mix(in srgb,var(--partial) 40%,transparent);background:color-mix(in srgb,var(--partial) 9%,transparent)}
+.chip-bad{color:var(--deviation);border-color:color-mix(in srgb,var(--deviation) 45%,transparent);background:color-mix(in srgb,var(--deviation) 9%,transparent)}
+
+.who{display:flex;flex-direction:column;line-height:1.25;text-align:right}
+.who .lbl{font-size:8.5px}
+.who b{font-size:11px}
+.clock{font-family:var(--mono);font-size:11px;color:var(--ink2);letter-spacing:.02em;min-width:64px;text-align:right}
+.conn{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--ink2)}
+.conn .dot{width:7px;height:7px;border-radius:50%;background:var(--match);box-shadow:0 0 0 0 color-mix(in srgb,var(--match) 70%,transparent);animation:pulse 2.6s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--match) 55%,transparent)}70%{box-shadow:0 0 0 6px transparent}100%{box-shadow:0 0 0 0 transparent}}
+
+.iconbtn{width:30px;height:30px;border:1px solid var(--line2);border-radius:var(--radius);display:inline-flex;align-items:center;justify-content:center;color:var(--ink2)}
+.iconbtn:hover{border-color:var(--line3);color:var(--ink);background:var(--g2)}
+.kill{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px 0 10px;border-radius:var(--radius);
+  border:1px solid color-mix(in srgb,var(--deviation) 55%,transparent);color:var(--deviation);
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;font-weight:600;text-transform:uppercase;
+  background:repeating-linear-gradient(-45deg,transparent 0 7px,color-mix(in srgb,var(--deviation) 7%,transparent) 7px 14px)}
+.kill:hover{background:color-mix(in srgb,var(--deviation) 14%,transparent);border-color:var(--deviation)}
+.kill .glyph{width:12px;height:12px;border:2px solid currentColor;border-radius:50%;position:relative}
+.kill .glyph::after{content:"";position:absolute;inset:-2px 4px;background:currentColor;transform:rotate(0)}
+
+/* ============================ NAV RAIL ============================ */
+.rail{grid-row:2;background:var(--g1);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:10px 10px 8px;overflow:hidden auto;gap:1px}
+.rail .grp{margin:12px 8px 5px}
+.navi{display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:var(--radius);color:var(--ink2);position:relative;border:1px solid transparent}
+.navi:hover{background:var(--g2);color:var(--ink)}
+.navi.on{background:color-mix(in srgb,var(--accent) 9%,var(--g2));color:var(--ink);border-color:color-mix(in srgb,var(--accent) 22%,transparent)}
+.navi.on::before{content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:2px;background:var(--accent);border-radius:2px}
+.navi .ic{width:16px;height:16px;flex:none;opacity:.9;color:var(--ink3)}
+.navi.on .ic,.navi:hover .ic{color:var(--accent)}
+.navi .t{flex:1;font-size:12.5px;font-weight:500}
+.navi .n{font-family:var(--mono);font-size:10px;color:var(--ink3);font-weight:600}
+.navi .n.hot{color:var(--pause)}
+.navi .n.dev{color:var(--deviation)}
+.rail .foot{margin-top:auto;padding:10px 8px 4px;border-top:1px solid var(--line);color:var(--ink4);font-size:10px;line-height:1.5}
+.rail .foot .mono{color:var(--ink3)}
+
+/* ============================ MAIN ============================ */
+.main{grid-row:2;grid-column:2;overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.subbar{height:var(--sub-h);flex:none;display:flex;align-items:center;gap:14px;padding:0 20px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--g1) 40%,transparent)}
+.subbar h2{font-size:15px;letter-spacing:-.02em}
+.subbar .desc{color:var(--ink3);font-size:11.5px}
+.subbar .grow{flex:1}
+.facets{display:flex;gap:6px;flex-wrap:wrap}
+.facet{font-family:var(--mono);font-size:10px;letter-spacing:.04em;padding:4px 9px;border-radius:20px;border:1px solid var(--line2);color:var(--ink2);text-transform:uppercase}
+.facet:hover{border-color:var(--line3);color:var(--ink)}
+.facet.on{color:var(--g0);background:var(--ink);border-color:var(--ink)}
+:root[data-theme="light"] .facet.on{color:var(--g1)}
+.facet.on[data-k="deviation"]{background:var(--deviation);border-color:var(--deviation);color:#fff}
+.facet.on[data-k="pause"]{background:var(--pause);border-color:var(--pause);color:#2a0e10}
+.view{flex:1;overflow:auto;padding:18px 20px 40px;scroll-behavior:smooth}
+.view.pad0{padding:0}
+
+/* section head */
+.sec{display:flex;align-items:baseline;gap:10px;margin:2px 2px 10px}
+.sec h3{font-size:12px;letter-spacing:.02em}
+.sec .lbl{font-size:9px}
+.sec .rule{flex:1;height:1px;background:var(--line);align-self:center}
+
+/* summary tiles */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(184px,1fr));gap:10px;margin-bottom:18px}
+.tile{background:var(--g1);border:1px solid var(--line);border-radius:var(--radius);padding:12px 13px;position:relative;overflow:hidden}
+.tile .lbl{margin-bottom:8px}
+.tile .big{font-size:26px;font-weight:600;letter-spacing:-.03em;line-height:1;font-family:var(--mono)}
+.tile .sub{color:var(--ink3);font-size:11px;margin-top:6px;font-family:var(--mono)}
+.tile.stripe::after{content:"";position:absolute;left:0;top:0;bottom:0;width:3px}
+.tile.stripe.dev::after{background:var(--deviation)} .tile.stripe.pause::after{background:var(--pause)}
+.tile.stripe.ok::after{background:var(--match)} .tile.stripe.map::after{background:var(--map)}
+.tile .big.dev{color:var(--deviation)} .tile .big.pause{color:var(--pause)} .tile .big.ok{color:var(--match)}
+
+.spark{display:flex;align-items:flex-end;gap:2px;height:22px;margin-top:8px}
+/* observed coverage is TERRITORY (steel), never map-indigo; solid enough to read as columns */
+.spark i{flex:1;background:color-mix(in srgb,var(--territory) 32%,transparent);border-top:2px solid var(--territory);min-height:2px;border-radius:1px}
+
+/* ============================ THE GROUNDING RIBBON ============================ */
+/* one spine per ActionManifest: classified→predicted→approved→executed→verified.
+   the predicted 'map' is a ghost layer; the observed 'territory' rides over it.
+   divergence is a visible gap. this is the atom the whole console is built from. */
+.ribbon-row{display:grid;grid-template-columns:var(--band-col,4px) 1fr auto;align-items:stretch;
+  background:var(--g1);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:8px;overflow:hidden;transition:border-color .15s,background .15s}
+.ribbon-row:hover{border-color:var(--line3);background:var(--g2)}
+.ribbon-row.sel{border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.ribbon-row .band{background:var(--auto)}
+.ribbon-row[data-band="auto"] .band{background:var(--auto)}
+.ribbon-row[data-band="notice"] .band{background:var(--notice)}
+.ribbon-row[data-band="pause"] .band{background:var(--pause)}
+.ribbon-row.deviated{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--deviation) 40%,transparent)}
+.ribbon-row.deviated .band{background:var(--deviation)}
+
+.rr-body{padding:11px 14px;min-width:0;display:flex;flex-direction:column;gap:9px}
+.rr-top{display:flex;align-items:center;gap:10px;min-width:0}
+.rr-title{font-size:13px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.rr-host{font-family:var(--mono);font-size:11px;color:var(--territory);white-space:nowrap}
+.rr-meta{display:flex;align-items:center;gap:12px;margin-left:auto;flex:none}
+.hashchip{font-family:var(--mono);font-size:10px;color:var(--ink3);border:1px solid var(--line2);border-radius:var(--radius-s);padding:2px 6px;white-space:nowrap}
+.hashchip b{color:var(--map)}
+
+/* the spine */
+.spine{display:flex;align-items:center;gap:0;height:26px;position:relative;user-select:none}
+.stage{display:flex;align-items:center;gap:0;flex:1;min-width:0}
+.stage:last-child{flex:0 0 12px} /* final node flush right so caps align under their dots */
+.stage .node{width:12px;height:12px;border-radius:50%;border:2px solid var(--line3);background:var(--g0);flex:none;position:relative;z-index:2}
+.stage .wire{flex:1;height:2px;background:var(--line2);position:relative}
+.stage.done .node{border-color:var(--map);background:var(--map)}
+.stage.done .wire{background:color-mix(in srgb,var(--map) 45%,var(--line2))}
+/* 'AI currently acting' is map-side activity — indigo, never cyan (cyan = interaction only) */
+.stage.active .node{border-color:var(--map);background:var(--g0);box-shadow:0 0 0 4px var(--map-dim);animation:breathe 1.8s ease-in-out infinite}
+.stage.active .wire{background:repeating-linear-gradient(90deg,var(--map) 0 5px,transparent 5px 10px);background-size:200% 100%;animation:flow 1s linear infinite}
+.stage.pending .node{opacity:.5}
+.stage.floor .node{border-radius:2px;border-color:var(--hazard);background:var(--hazard-bar)}
+.stage.verified-match .node{border-color:var(--match);background:var(--match)}
+.stage.verified-partial .node{border-color:var(--partial);background:var(--partial)}
+.stage.verified-dev .node{border-color:var(--deviation);background:var(--deviation);box-shadow:0 0 0 4px color-mix(in srgb,var(--deviation) 22%,transparent);animation:alarm 1.4s ease-in-out infinite}
+.spine .caps{position:absolute;inset:auto 0 -14px 0;display:flex;justify-content:space-between;pointer-events:none}
+.spine .caps span{font-family:var(--mono);font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink4);flex:1;text-align:left} /* left-aligned = under its dot */
+.spine .caps span:last-child{flex:0 0 auto;text-align:right}
+@keyframes breathe{0%,100%{box-shadow:0 0 0 3px var(--map-dim)}50%{box-shadow:0 0 0 6px transparent}}
+@keyframes flow{to{background-position:-20px 0}}
+@keyframes alarm{0%,100%{box-shadow:0 0 0 3px color-mix(in srgb,var(--deviation) 26%,transparent)}50%{box-shadow:0 0 0 7px transparent}}
+
+.rr-side{display:flex;flex-direction:column;justify-content:center;gap:8px;padding:11px 15px;border-left:1px solid var(--line);background:color-mix(in srgb,var(--g0) 30%,transparent);min-width:150px}
+.axes{display:flex;flex-direction:column;gap:7px}
+.axis{display:grid;grid-template-columns:38px 1fr 30px;align-items:center;gap:8px}
+.axis .lbl{font-size:8px}
+.axis .track{height:5px;background:var(--g3s);border-radius:3px;overflow:hidden;border:1px solid var(--line)}
+.axis .track i{display:block;height:100%;border-radius:3px}
+.axis .track i.risk{background:linear-gradient(90deg,var(--match),var(--partial),var(--deviation))}
+.axis .track i.conf{background:var(--map)}
+.axis .v{font-family:var(--mono);font-size:10px;color:var(--ink2);text-align:right}
+
+/* status pill */
+.pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:20px;border:1px solid var(--line2);color:var(--ink2);white-space:nowrap}
+.pill i{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.pill.investigating{color:var(--map);border-color:color-mix(in srgb,var(--map) 35%,transparent)}
+.pill.investigating i{animation:blink 1.2s steps(2) infinite}
+.pill.awaiting{color:var(--pause);border-color:color-mix(in srgb,var(--pause) 45%,transparent);background:color-mix(in srgb,var(--pause) 8%,transparent)}
+.pill.executing{color:var(--map);border-color:color-mix(in srgb,var(--map) 40%,transparent)}
+.pill.verified{color:var(--match);border-color:color-mix(in srgb,var(--match) 35%,transparent)}
+.pill.deviation{color:var(--deviation);border-color:color-mix(in srgb,var(--deviation) 50%,transparent);background:color-mix(in srgb,var(--deviation) 9%,transparent)}
+.pill.ready{color:var(--notice);border-color:color-mix(in srgb,var(--notice) 35%,transparent)}
+@keyframes blink{50%{opacity:.25}}
+
+.bandtag{font-family:var(--mono);font-size:9px;letter-spacing:.1em;font-weight:600;text-transform:uppercase;padding:2px 6px;border-radius:var(--radius-s)}
+.bandtag.auto{color:var(--auto);background:color-mix(in srgb,var(--auto) 12%,transparent)}
+.bandtag.notice{color:var(--notice);background:color-mix(in srgb,var(--notice) 12%,transparent)}
+.bandtag.pause{color:var(--pause);background:color-mix(in srgb,var(--pause) 12%,transparent)}
+
+/* ============================ TABLES ============================ */
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th{text-align:left;font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);font-weight:500;padding:7px 12px;border-bottom:1px solid var(--line2);position:sticky;top:0;background:var(--g0);z-index:1}
+.tbl td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+.tbl tr:hover td{background:var(--g2)}
+.tbl .m{font-family:var(--mono);font-size:11px}
+.tbl .terr{color:var(--territory)}
+.dot-s{width:7px;height:7px;border-radius:50%;display:inline-block;vertical-align:middle;margin-right:7px}
+.sev-crit{color:var(--deviation)} .sev-warn{color:var(--partial)} .sev-info{color:var(--ink2)}
+.wrapcard{background:var(--g1);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:16px}
+.wrapcard .cap{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line)}
+.wrapcard .cap .lbl{font-size:9px}
+
+/* provenance / suppression trace */
+.prov{font-family:var(--mono);font-size:10px;color:var(--ink3)}
+.prov b{color:var(--territory);font-weight:500}
+.tag{font-family:var(--mono);font-size:9px;letter-spacing:.05em;text-transform:uppercase;padding:1px 6px;border-radius:20px;border:1px solid var(--line2);color:var(--ink2)}
+
+/* ============================ ESTATE GRAPH ============================ */
+.estate-wrap{display:grid;grid-template-columns:1fr 300px;gap:0;height:100%}
+.graph{position:relative;background:radial-gradient(120% 120% at 30% 10%, color-mix(in srgb,var(--g1) 60%,transparent), transparent 70%)}
+.graph svg{width:100%;height:100%;display:block}
+.legend{position:absolute;right:16px;bottom:14px;display:flex;flex-direction:column;gap:6px;background:color-mix(in srgb,var(--g0) 82%,transparent);backdrop-filter:blur(6px);border:1px solid var(--line2);border-radius:var(--radius);padding:10px 12px;max-width:240px}
+.legend .r{display:flex;align-items:center;gap:8px;font-size:10px;font-family:var(--mono);color:var(--ink2)}
+.legend .sw{width:12px;height:12px;border-radius:50%;flex:none}
+.legend .sw.ring{background:transparent;border:2px solid var(--map)}
+.est-side{border-left:1px solid var(--line);background:var(--g1);overflow:auto;padding:14px}
+.node-c{stroke-width:2}
+.edge{stroke:var(--line3);fill:none}
+
+/* ============================ REASONING (walled-off AI zone) ============================ */
+.ai-zone{border:1px solid color-mix(in srgb,var(--map) 32%,var(--line));border-radius:var(--radius);
+  background:linear-gradient(180deg,var(--map-dim),transparent 120px);position:relative;overflow:hidden}
+.ai-zone::before{content:"AI INFERENCE · MAP";position:absolute;right:0;top:0;font-family:var(--mono);font-size:8px;letter-spacing:.18em;
+  color:var(--map);background:color-mix(in srgb,var(--map) 12%,var(--g1));padding:3px 9px;border-bottom-left-radius:var(--radius);border-left:1px solid color-mix(in srgb,var(--map) 30%,transparent);border-bottom:1px solid color-mix(in srgb,var(--map) 30%,transparent)}
+.chain{padding:20px 18px 16px;display:flex;flex-direction:column;gap:0}
+.cnode{display:grid;grid-template-columns:26px 1fr;gap:12px;padding-bottom:16px;position:relative}
+.cnode::before{content:"";position:absolute;left:12px;top:24px;bottom:-2px;width:1px;background:color-mix(in srgb,var(--map) 30%,var(--line))}
+.cnode:last-child::before{display:none}
+.cnode .k{width:24px;height:24px;border-radius:50%;border:1px solid color-mix(in srgb,var(--map) 45%,transparent);background:var(--g1);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:9px;color:var(--map);z-index:1}
+.cnode.evidence .k{border-style:dashed;border-color:var(--territory);color:var(--territory)}
+.cnode .kind{font-size:9px}
+.cnode .txt{font-size:12.5px;margin:3px 0 0;color:var(--ink)}
+.cnode .cite{margin-top:6px;display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10px;color:var(--territory);border:1px solid color-mix(in srgb,var(--territory) 30%,var(--line));border-radius:var(--radius-s);padding:3px 8px}
+.cnode .cite:hover{border-color:var(--territory);background:var(--territory-dim)}
+.cnode .cite::before{content:"↳ ground truth";color:var(--ink4)}
+.conf-traj{display:flex;align-items:center;gap:2px;margin-top:5px}
+.conf-traj i{width:4px;border-radius:1px;background:var(--map)}
+
+/* ============================ DRAWER ============================ */
+.scrim{position:fixed;inset:0;background:#04070999;backdrop-filter:blur(2px);z-index:40;opacity:0;pointer-events:none;transition:opacity .2s}
+.scrim.open{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;height:100vh;height:100dvh;width:min(680px,94vw);background:var(--g1);border-left:1px solid var(--line2);z-index:50;
+  transform:translateX(100%);transition:transform .28s cubic-bezier(.5,0,.2,1);display:flex;flex-direction:column;box-shadow:var(--shadow)}
+.drawer.open{transform:translateX(0)}
+.drawer .dh{display:flex;align-items:flex-start;gap:12px;padding:16px 18px;border-bottom:1px solid var(--line)}
+.drawer .dh .x{margin-left:auto}
+.drawer .db{overflow:auto;padding:18px;flex:1}
+.dsec{margin-bottom:22px}
+.dsec .sec{margin-bottom:10px}
+
+.kv{display:grid;grid-template-columns:120px 1fr;gap:6px 14px;font-size:12px}
+.kv dt{color:var(--ink3);font-family:var(--mono);font-size:10px;letter-spacing:.04em;text-transform:uppercase;padding-top:1px}
+.kv dd{margin:0;color:var(--ink)}
+.kv dd.m{font-family:var(--mono);font-size:11px}
+
+/* map-vs-territory overlay panel */
+.mvt{background:var(--g0);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+.mvt .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.mvt-field{position:relative;height:150px;border:1px dashed var(--line2);border-radius:var(--radius-s);background:
+  linear-gradient(var(--line) 1px,transparent 1px) 0 0/100% 25px,
+  linear-gradient(90deg,var(--line) 1px,transparent 1px) 0 0/25px 100%;overflow:hidden}
+.mvt-node{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:3px}
+.mvt-node .g{width:14px;height:14px;border-radius:50%}
+.mvt-node.pred .g{border:2px solid var(--map);background:transparent}
+.mvt-node.obs .g{background:var(--territory)}
+.mvt-node.match .g{background:var(--match);border:2px solid var(--map)}
+.mvt-node.dev .g{background:var(--deviation);box-shadow:0 0 0 4px color-mix(in srgb,var(--deviation) 22%,transparent);animation:alarm 1.5s infinite}
+.mvt-node .t{font-family:var(--mono);font-size:8px;color:var(--ink3);white-space:nowrap}
+.mvt-legend{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap}
+.mvt-legend .r{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:9.5px;color:var(--ink2)}
+
+.plan{font-family:var(--mono);font-size:11.5px;background:var(--g0);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.plan .ln{display:flex;gap:10px;padding:6px 12px;border-bottom:1px solid var(--line)}
+.plan .ln:last-child{border-bottom:none}
+.plan .op{font-weight:600;width:52px;flex:none}
+.plan .ln.add .op{color:var(--match)} .plan .ln.change .op{color:var(--partial)} .plan .ln.destroy .op{color:var(--deviation)}
+.plan .ln.destroy{background:color-mix(in srgb,var(--deviation) 6%,transparent)}
+
+.btn{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 15px;border-radius:var(--radius);border:1px solid var(--line3);color:var(--ink);font-weight:500;font-size:12px}
+.btn:hover{background:var(--g2);border-color:var(--line3)}
+.btn.primary{background:var(--accent);color:#04181a;border-color:var(--accent);font-weight:600}
+.btn.primary:hover{background:color-mix(in srgb,var(--accent) 88%,#fff)}
+.btn.danger{color:var(--deviation);border-color:color-mix(in srgb,var(--deviation) 45%,transparent)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.gate-note{display:flex;gap:10px;align-items:flex-start;font-size:11.5px;color:var(--ink2);background:var(--hazard-bar);
+  border:1px solid color-mix(in srgb,var(--hazard) 40%,transparent);border-radius:var(--radius);padding:10px 12px;margin-top:12px}
+.gate-note .lk{color:var(--hazard);flex:none;margin-top:1px}
+
+/* hazard wall (never-auto floor) */
+.hazard-wall{background:repeating-linear-gradient(-45deg,var(--hazard-bar) 0 10px,transparent 10px 20px);
+  border:1px solid color-mix(in srgb,var(--hazard) 45%,transparent);border-radius:var(--radius);padding:12px 14px;display:flex;gap:12px;align-items:center}
+.hazard-wall .ic{color:var(--hazard);flex:none}
+.hazard-wall .txt b{color:var(--hazard)}
+
+/* governance layers */
+.layers{display:flex;flex-direction:column;gap:8px}
+.layer{display:grid;grid-template-columns:1fr auto;align-items:center;gap:14px;background:var(--g1);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+.layer .nm{font-weight:600;font-size:12.5px}
+.layer .ds{color:var(--ink3);font-size:11px;margin-top:2px}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:var(--radius);overflow:hidden;font-family:var(--mono);font-size:9.5px;letter-spacing:.06em}
+.seg span{padding:5px 11px;color:var(--ink3);border-right:1px solid var(--line)}
+.seg span:last-child{border-right:none}
+.seg span.on{color:var(--g0);font-weight:600}
+:root[data-theme="light"] .seg span.on{color:var(--g1)}
+.seg span.on[data-s="dark"]{background:var(--ink3)}
+.seg span.on[data-s="shadow"]{background:var(--map);color:#fff}
+.seg span.on[data-s="enforce"]{background:var(--auto);color:#04140a}
+
+/* command palette */
+.pal-scrim{position:fixed;inset:0;background:#03070988;z-index:60;display:none;align-items:flex-start;justify-content:center;padding-top:12vh}
+.pal-scrim.open{display:flex}
+.pal{width:min(560px,92vw);background:var(--g1);border:1px solid var(--line2);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.pal input{width:100%;background:none;border:none;padding:15px 18px 15px 40px;color:var(--ink);font-size:13.5px;font-family:var(--mono);border-bottom:1px solid var(--line);outline:none}
+.pal .glyph{position:absolute;left:16px;top:17px;color:var(--ink3);pointer-events:none}
+.pal{position:relative}
+.pal .hints{display:flex;gap:16px;padding:8px 14px;border-top:1px solid var(--line);font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;color:var(--ink4)}
+.pal .hints b{color:var(--ink3);font-weight:500}
+.pal .res{max-height:340px;overflow:auto;padding:6px}
+.pal .r{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:var(--radius);color:var(--ink2)}
+.pal .r.sel{background:color-mix(in srgb,var(--accent) 10%,var(--g2));color:var(--ink)}
+.pal .r .ic{width:15px;height:15px;color:var(--ink3)}
+.pal .r.sel .ic{color:var(--accent)}
+.pal .r .k{margin-left:auto;font-family:var(--mono);font-size:9px;color:var(--ink4);border:1px solid var(--line2);padding:1px 5px;border-radius:3px}
+.pal .r .sub{font-family:var(--mono);font-size:10px;color:var(--ink4)}
+
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--g2);border:1px solid var(--line3);
+  border-radius:var(--radius);padding:11px 16px;font-size:12px;box-shadow:var(--shadow);z-index:90;opacity:0;transition:.25s;display:flex;gap:10px;align-items:center;max-width:520px}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+/* with a right drawer open, toasts anchor bottom-left of the unobstructed region — never straddling the drawer edge */
+body:has(.drawer.open) .toast{left:24px;transform:translateY(20px)}
+body:has(.drawer.open) .toast.show{transform:translateY(0)}
+.drawer:focus{outline:none} /* programmatic focus target, not a visible ring */
+.drawer .dh{box-shadow:0 8px 14px -12px #000c}
+.toast .lk{color:var(--hazard)}
+
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:60px 20px;color:var(--ink3);text-align:center}
+.empty .big{font-size:15px;color:var(--ink2)}
+
+.preview-flag{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--ink3);border:1px dashed var(--line3);border-radius:20px;padding:3px 10px}
+.preview-flag i{width:6px;height:6px;border-radius:50%;background:var(--notice)}
+
+/* ============================ AUTH GATE ============================
+   Fail-closed full-screen sign-in — the ONLY thing rendered while unauthenticated. No modal, no
+   scrim over live content, no "browse without a session" escape hatch: until a session is verified,
+   this is the entire page. Themed after territorygrounder.com (same tokens: territory/map/match). */
+.authgate{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
+  padding:24px;
+  background:radial-gradient(125% 90% at 50% -12%, var(--map-dim), transparent 58%),
+    radial-gradient(90% 70% at 50% 116%, var(--territory-dim), transparent 55%), var(--g0)}
+/* the calibration grid — same 72px hairlines as territorygrounder.com, masked to a soft radial so it
+   reads crisp behind the sign-in card and dissolves into the instrument ground at the edges. */
+.authgate::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:linear-gradient(var(--line) 1px, transparent 1px) 0 0/72px 72px,
+    linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0/72px 72px;
+  -webkit-mask-image:radial-gradient(118% 100% at 50% 42%, #000 28%, transparent 78%);
+          mask-image:radial-gradient(118% 100% at 50% 42%, #000 28%, transparent 78%)}
+.authgate .ag-card{position:relative;z-index:1}
+.authgate[hidden]{display:none}
+.ag-card{width:min(422px,100%);background:var(--g1);border:1px solid var(--line2);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:30px 28px 24px}
+.ag-brand{display:flex;align-items:center;gap:11px;margin-bottom:24px}
+.ag-brand .mk{width:34px;height:35px;padding:0;background:var(--logo) center/contain no-repeat;border-radius:7px;flex:none}
+:root[data-theme="dark"] .ag-brand .mk{background-color:rgba(255,255,255,.92);padding:3px}
+.ag-word{display:flex;flex-direction:column;line-height:1.3}
+.ag-word b{font-size:14.5px;font-weight:600;letter-spacing:-.01em;color:var(--ink)}
+.ag-word span{font-family:var(--mono);font-size:9.5px;color:var(--ink3);letter-spacing:.08em;text-transform:uppercase}
+.ag-eyebrow{color:var(--territory);margin-bottom:11px}
+.ag-thesis{font-size:19px;line-height:1.34;font-weight:600;letter-spacing:-.015em;color:var(--ink);margin:0 0 12px;max-width:27ch}
+.ag-desc{font-size:11.5px;line-height:1.6;color:var(--ink3);margin:0 0 22px}
+/* the signature: the same predict→act→verify grounding ribbon the product itself is built from,
+   recast as the login's own claim→verify→verdict — your identity claim is checked exactly like
+   every other claim this system acts on. */
+.ag-spine{margin:0 0 26px;position:relative;padding-bottom:14px}
+.ag-spine .stage .node{border-color:var(--line3)}
+.ag-spine[data-state="verifying"] .stage[data-s="claim"] .node{border-color:var(--territory);background:var(--territory)}
+.ag-spine[data-state="verifying"] .stage[data-s="claim"] .wire{background:color-mix(in srgb,var(--territory) 45%,var(--line2))}
+.ag-spine[data-state="verifying"] .stage[data-s="verify"] .node{border-color:var(--map);background:var(--g0);box-shadow:0 0 0 4px var(--map-dim);animation:breathe 1.8s ease-in-out infinite}
+.ag-spine[data-state="verifying"] .stage[data-s="verify"] .wire{background:repeating-linear-gradient(90deg,var(--map) 0 5px,transparent 5px 10px);background-size:200% 100%;animation:flow 1s linear infinite}
+.ag-spine[data-state="ok"] .stage .node{border-color:var(--match);background:var(--match)}
+.ag-spine[data-state="ok"] .stage .wire{background:color-mix(in srgb,var(--match) 55%,var(--line2))}
+.ag-spine[data-state="err"] .stage[data-s="claim"] .node,
+.ag-spine[data-state="err"] .stage[data-s="verify"] .node{border-color:var(--territory);background:var(--territory)}
+.ag-spine[data-state="err"] .stage[data-s="verdict"] .node{border-color:var(--deviation);background:var(--deviation);
+  box-shadow:0 0 0 4px color-mix(in srgb,var(--deviation) 22%,transparent);animation:alarm 1.4s ease-in-out infinite}
+.ag-form{display:flex;flex-direction:column;gap:13px}
+.ag-field{display:flex;flex-direction:column;gap:6px}
+.ag-field .lbl{color:var(--ink3)}
+.ag-field input{background:var(--g3s);border:1px solid var(--line2);border-radius:var(--radius);
+  padding:10px 12px;color:var(--ink);font-size:13px;font-family:var(--mono)}
+.ag-field input::placeholder{color:var(--ink4)}
+.ag-field input:disabled{opacity:.55}
+.ag-err{min-height:15px;color:var(--deviation);font-size:11px;line-height:1.4}
+.ag-submit{width:100%;justify-content:center;margin-top:1px}
+.ag-foot{margin-top:19px;text-align:center;font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;color:var(--ink4)}
+.ag-foot a{color:inherit;text-decoration:none}
+.ag-foot a:hover{color:var(--territory);text-decoration:underline}
+@media (max-width:480px){.ag-card{padding:24px 18px 20px}.ag-thesis{font-size:17px}}
+
+@media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important}}
+
+/* ============================================================================
+   TYPE SYSTEM v2 — readability pass (cascade override block)
+   A named scale; AA-contrast inks at the sizes actually used; micro-labels
+   floored at 10.5px with calmer tracking; consistent dense-table rhythm.
+   ========================================================================== */
+:root{
+  /* type scale */
+  --fs-2xs:10.5px;  /* mono micro-labels, eyebrows          */
+  --fs-xs:11.5px;   /* aux data, provenance, chips          */
+  --fs-sm:12.5px;   /* body, table cells                    */
+  --fs-md:13.5px;   /* row titles, emphasized body          */
+  --fs-lg:15.5px;   /* view titles                          */
+  --fs-xl:17px;     /* drawer titles                        */
+  --fs-2xl:27px;    /* instrument big numbers               */
+  /* contrast-raised inks (dark): ink3 was #5d6e78 (~3.5:1) — lift to AA at small sizes */
+  --ink2:#9db0bb; --ink3:#7e929e; --ink4:#556770;
+}
+:root[data-theme="light"]{
+  --ink2:#42525c; --ink3:#546771; --ink4:#8a99a3;  /* ink3 4.83:1 on --g0 (was #5d707b = 4.22:1, AA fail) */
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme]){ --ink2:#42525c; --ink3:#546771; --ink4:#8a99a3; }
+}
+body{font-size:var(--fs-sm);line-height:1.5}
+.lbl{font-size:var(--fs-2xs);letter-spacing:.07em;font-weight:500}  /* mono sidebearings already space caps */
+.rail .foot{color:var(--ink3)}  /* --ink4 is non-text-only (3.1:1) */
+.sec h3{font-size:var(--fs-sm);letter-spacing:.01em}
+.sec .lbl{font-size:var(--fs-2xs)}
+.subbar h2{font-size:var(--fs-lg)}
+.subbar .desc{font-size:var(--fs-xs)}
+.tile .lbl{font-size:var(--fs-2xs)}
+.tile .big{font-size:var(--fs-2xl)}
+.tile .sub{font-size:var(--fs-xs)}
+.rr-title{font-size:var(--fs-md)}
+.rr-host{font-size:var(--fs-xs)}
+.hashchip{font-size:var(--fs-2xs)}
+.pill{font-size:var(--fs-2xs);letter-spacing:.05em}
+.bandtag{font-size:var(--fs-2xs);letter-spacing:.08em}
+.spine .caps span{font-size:9.5px;letter-spacing:.07em;color:var(--ink3)}
+.axis .lbl{font-size:9.5px}
+.axis .v{font-size:var(--fs-2xs)}
+.tbl{font-size:var(--fs-sm)}
+.tbl th{font-size:var(--fs-2xs);letter-spacing:.09em}
+.tbl td{padding:9.5px 12px;line-height:1.45}
+.tbl .m{font-size:var(--fs-xs)}
+.prov{font-size:var(--fs-2xs)}
+.tag{font-size:var(--fs-2xs)}
+.kv{font-size:var(--fs-sm)}
+.kv dt{font-size:var(--fs-2xs)}
+.kv dd.m{font-size:var(--fs-xs)}
+.cnode .kind{font-size:var(--fs-2xs)}
+.cnode .txt{font-size:var(--fs-md);line-height:1.5}
+.cnode .cite{font-size:var(--fs-2xs)}
+.plan{font-size:var(--fs-xs);line-height:1.5}
+.navi .t{font-size:var(--fs-sm)}
+.navi .n{font-size:var(--fs-2xs)}
+.rail .foot{font-size:var(--fs-2xs);line-height:1.55}
+.breaker{font-size:var(--fs-2xs);letter-spacing:.07em}
+.annun{font-size:var(--fs-2xs)}
+.chip-ok,.chip-warn,.chip-bad{font-size:var(--fs-2xs)}
+.who b{font-size:var(--fs-xs)}
+.who .lbl{font-size:9.5px}
+.clock{font-size:var(--fs-xs)}
+.conn{font-size:var(--fs-2xs)}
+.kill{font-size:var(--fs-2xs);letter-spacing:.08em}
+.facet{font-size:var(--fs-2xs);letter-spacing:.05em}
+.legend .r{font-size:var(--fs-2xs)}
+.mvt-legend .r{font-size:var(--fs-2xs)}
+.mvt-node .t{font-size:9.5px}
+.drawer .dh h3{font-size:var(--fs-xl)}
+.empty .big{font-size:var(--fs-lg)}
+.gate-note{font-size:var(--fs-sm);line-height:1.5}
+.layer .nm{font-size:var(--fs-md)}
+.layer .ds{font-size:var(--fs-xs)}
+.seg{font-size:var(--fs-2xs)}
+.preview-flag{font-size:var(--fs-2xs)}
+.spine .caps span{font-size:9.5px}
+
+/*EXT_CSS*/
+
+/* responsive */
+@media (max-width:1100px){
+  .rr-side{display:none}
+  .estate-wrap{grid-template-columns:1fr}
+  .est-side{display:none}
+}
+@media (max-width:820px){
+  :root{--rail-w:0px}
+  .app{grid-template-columns:0 1fr}
+  .rail{position:fixed;left:0;top:var(--bar-h);bottom:0;width:230px;z-index:35;transform:translateX(-100%);transition:transform .2s}
+  .rail.open{transform:translateX(0)}
+  .posture{gap:11px;padding:0 12px}
+  .posture .annun,.posture .who,.posture .conn,.posture .sep,.posture .chip-ok,.posture .clock,.posture #themeBtn,.brand b,.brand span{display:none}
+  .menu-btn{display:inline-flex !important}
+  .subbar{height:auto;min-height:var(--sub-h);flex-wrap:wrap;padding:7px 14px;row-gap:6px}
+  .subbar .desc{display:none}
+  .view{padding:14px}
+  /* triage rows: the TITLE always survives; host is secondary; pills wrap instead of clipping */
+  .rr-top{flex-wrap:wrap;row-gap:5px}
+  .rr-title{flex:1 1 auto;min-width:12ch}
+  .rr-host{display:none}
+  .rr-meta{gap:8px;margin-left:0;flex-wrap:wrap}
+  .breaker .k{display:none}
+  .rr-top .hashchip{display:none}
+  .kill{padding:0 10px 0 9px}
+  #palOpen{display:none} /* ⌘K is dead weight on touch */
+  .facets{flex-wrap:nowrap;overflow-x:auto;flex-basis:100%;order:9;padding-bottom:2px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .spine .caps span:nth-child(2),.spine .caps span:nth-child(4){visibility:hidden} /* de-crowd stage caps at 390px */
+  /* the auth-gate ribbon has only 3 stages (Claim/Verify/Verdict) — the 5-stage de-crowd rule above
+     would otherwise blank its middle "Verify" label too; #agSpine (ID specificity) wins it back. */
+  #agSpine .caps span:nth-child(2){visibility:visible}
+}
+.menu-btn{display:none}
+/*EXT_CSS_LATE*/</style>
+
+<div class="app" id="appRoot" hidden>
+  <!-- ============ POSTURE BAR ============ -->
+  <header class="posture">
+    <button class="iconbtn menu-btn" id="menuBtn" aria-label="Toggle navigation">
+      <svg viewBox="0 0 16 16" width="15" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h12"/></svg>
+    </button>
+    <div class="brand"><span class="mk" role="img" aria-label="Territory Grounder logo"></span><b>Territory&nbsp;Grounder</b><span>Operator Console</span></div>
+    <div class="sep"></div>
+    <button class="breaker" data-mode="read-only" id="breaker" title="Mutation posture — the one-way switch between watch and act">
+      <span class="k">Mutation</span><span class="sw"><span class="nub"></span> Off · Read-only</span>
+    </button>
+    <div class="annun" id="annun">
+      <span class="a"><i style="background:var(--auto)"></i>AUTO <b>—</b></span>
+      <span class="a"><i style="background:var(--notice)"></i>NOTICE <b>—</b></span>
+      <span class="a"><i style="background:var(--pause)"></i>PAUSE <b>—</b></span>
+    </div>
+    <div class="grow"></div>
+    <span class="chip-ok" id="chainChip" title="Governance ledger hash-chain verified client-side">
+      <svg viewBox="0 0 16 16" width="11" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 8.5l1.6 1.6L11 6.5"/><rect x="2.5" y="2.5" width="11" height="11" rx="2"/></svg>
+      CHAIN OK · <span class="mono" id="chainSeq">—</span>
+    </span>
+    <div class="who"><span class="lbl">On the switch</span><b id="whoName">—</b></div>
+    <div class="sep"></div>
+    <span class="conn"><span class="dot"></span><span id="connTxt">—</span></span>
+    <span class="clock mono" id="clock">--:--:--</span>
+    <button class="iconbtn" id="themeBtn" aria-label="Toggle light and dark theme">
+      <svg viewBox="0 0 16 16" width="15" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="3.2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></svg>
+    </button>
+    <div class="acct" id="acct">
+      <button class="iconbtn acct-btn" id="acctBtn" aria-haspopup="menu" aria-expanded="false" aria-label="Account menu">
+        <svg viewBox="0 0 16 16" width="15" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="5.2" r="2.6"/><path d="M2.9 13.4a5.2 5.2 0 0 1 10.2 0"/></svg>
+      </button>
+      <div class="acct-menu" id="acctMenu" role="menu" hidden>
+        <div class="acct-head"><span class="lbl">Signed in as</span><b id="acctWho">operator</b></div>
+        <div class="acct-meta">Read-only operator session · every route authenticated</div>
+        <button class="acct-item" id="acctThemeItem" role="menuitem" type="button">
+          <svg viewBox="0 0 16 16" width="14" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="3.2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></svg>
+          Toggle theme
+        </button>
+        <button class="acct-item danger" id="logoutBtn" role="menuitem" type="button">
+          <svg viewBox="0 0 16 16" width="14" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 2.5H3.5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1H6"/><path d="M9.5 11l3-3-3-3M12.5 8H6.2"/></svg>
+          Sign out
+        </button>
+      </div>
+    </div>
+    <button class="kill" id="killBtn" title="Scoped emergency stop"><span class="glyph"></span>KILL</button>
+  </header>
+
+  <!-- ============ NAV RAIL ============ -->
+  <nav class="rail" id="rail">
+    <div class="lbl grp">Supervise</div>
+    <a class="navi" data-view="command"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 3h5v5H2zM9 3h5v3H9zM9 9h5v4H9zM2 11h5v2H2z"/></svg><span class="t">Command</span><span class="n hot" data-badge="awaiting">—</span></a>
+    <a class="navi" data-view="workflows"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="4.5" cy="3.5" r="1.7"/><circle cx="4.5" cy="12.5" r="1.7"/><path d="M4.5 5.2v5.6M8.5 3.5H14M8.5 8H12M8.5 12.5H14M4.5 8h1.5"/></svg><span class="t">Workflows</span><span class="n" data-badge="wf_live">—</span></a>
+    <a class="navi" data-view="reasoning"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2a4 4 0 0 0-4 4c0 1.5.8 2.3.8 3.5V11h6.4V9.5C11.2 8.3 12 7.5 12 6a4 4 0 0 0-4-4zM6 13h4M6.5 15h3"/></svg><span class="t">Reasoning</span></a>
+    <div class="lbl grp">Evidence</div>
+    <a class="navi" data-view="estate"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="4" r="2"/><circle cx="3.5" cy="12" r="2"/><circle cx="12.5" cy="12" r="2"/><path d="M8 6v2M8 8L4 10.5M8 8l4 2.5"/></svg><span class="t">Estate</span><span class="n" data-badge="estate">—</span></a>
+    <a class="navi" data-view="estatedepth"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 2.6v2.2M8 11.2v2.2M2.6 8h2.2M11.2 8h2.2"/><circle cx="8" cy="8" r="5.7" stroke-dasharray="2 2.4"/></svg><span class="t">Estate Depth</span><span class="n" data-badge="estatedepth">—</span></a>
+    <a class="navi" data-view="alerts"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2a3.5 3.5 0 0 0-3.5 3.5c0 3-1.5 4-1.5 4h10s-1.5-1-1.5-4A3.5 3.5 0 0 0 8 2zM6.5 13.5a1.5 1.5 0 0 0 3 0"/></svg><span class="t">Alerts</span><span class="n" data-badge="alerts">—</span></a>
+    <a class="navi" data-view="signals"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 8.5h3.2l1.8-5 3 9.5 2-4.5h3"/><circle cx="13" cy="3.5" r="1.2"/></svg><span class="t">Signals</span><span class="n" data-badge="signals">—</span></a>
+    <a class="navi" data-view="logs"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.5" y="2.5" width="13" height="11" rx="1"/><path d="M4 6l2.2 2L4 10"/><path d="M8 10.5h4"/></svg><span class="t">Logs · Evidence</span><span class="n" data-badge="logs">—</span></a>
+    <a class="navi" data-view="knowledge"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.5 3.5h4a2 2 0 0 1 1.5.7 2 2 0 0 1 1.5-.7h4v9h-4a2 2 0 0 0-1.5.7 2 2 0 0 0-1.5-.7h-4z"/><path d="M8 4.2v8.3"/></svg><span class="t">Knowledge</span><span class="n" data-badge="knowledge">—</span></a>
+    <a class="navi" data-view="wiki"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 1.8h5.5L12.5 5v9.2H4z"/><path d="M9.5 1.8V5h3"/><path d="M6.3 8h4M6.3 10.5h4"/></svg><span class="t">Wiki</span><span class="n" data-badge="wiki">—</span></a>
+    <div class="lbl grp">Record</div>
+    <a class="navi" data-view="actions"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 8h3M11 8h3M5 8a3 3 0 0 1 6 0 3 3 0 0 1-6 0z"/></svg><span class="t">Actions</span><span class="n dev" data-badge="dev">—</span></a>
+    <a class="navi" data-view="ledger"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="2" width="8" height="4" rx="1"/><rect x="4" y="7" width="8" height="4" rx="1"/><path d="M8 6v1M8 11v2M6 13h4"/></svg><span class="t">Ledger</span></a>
+    <a class="navi" data-view="governance"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2l5 2v4c0 3-2.5 5-5 6-2.5-1-5-3-5-6V4z"/></svg><span class="t">Governance</span></a>
+    <a class="navi" data-view="policy"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.5 4.5h11M2.5 8h7M2.5 11.5h5"/><path d="M11 11l1.4 1.4L15 9.6"/></svg><span class="t">Policy</span><span class="n" data-badge="policy">—</span></a>
+    <a class="navi" data-view="regime"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.5 3.5h3l4 4.5h4M2.5 12.5h3l4-4.5"/><circle cx="13.5" cy="8" r="1.4"/><circle cx="2.5" cy="3.5" r="1"/><circle cx="2.5" cy="12.5" r="1"/></svg><span class="t">Actuation Regimes</span><span class="n" data-badge="regime">—</span></a>
+    <a class="navi" data-view="grounding"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M5.4 8.2 7.1 10 10.6 6"/></svg><span class="t">Grounding</span><span class="n" data-badge="grounding">—</span></a>
+    <div class="lbl grp">Configure</div>
+    <a class="navi" data-view="models"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4.5" y="4.5" width="7" height="7" rx="1"/><path d="M6.5 1.5v3M9.5 1.5v3M6.5 11.5v3M9.5 11.5v3M1.5 6.5h3M1.5 9.5h3M11.5 6.5h3M11.5 9.5h3"/></svg><span class="t">Models</span><span class="n" data-badge="models">—</span></a>
+    <a class="navi" data-view="modules"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="5" height="5"/><rect x="9" y="2" width="5" height="5"/><rect x="2" y="9" width="5" height="5"/><path d="M9 11.5h5M11.5 9v5"/></svg><span class="t">Modules</span><span class="n" data-badge="modules">—</span></a>
+    <a class="navi" data-view="skills"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2.2 14 5 8 7.8 2 5z"/><path d="M2 8l6 2.8L14 8M2 11l6 2.8L14 11"/></svg><span class="t">Skills</span><span class="n" data-badge="skills">—</span></a>
+    <a class="navi" data-view="secrets"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="5" cy="11" r="2.8"/><path d="M7.2 8.8 13.5 2.5"/><path d="M11 5l2.2 2.2"/><path d="M8.8 7.2l1.6 1.6"/></svg><span class="t">Config · Secrets</span><span class="n" data-badge="secretsMissing">—</span></a>
+    <a class="navi" data-view="credentials"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="7" width="11" height="7" rx="1"/><path d="M5 7V4.5a3 3 0 0 1 6 0V7"/><circle cx="8" cy="10.5" r="1.1"/></svg><span class="t">Credentials</span><span class="n" data-badge="credentials">—</span></a>
+    <div class="foot">
+      <div class="preview-flag"><i></i>DESIGN PREVIEW</div>
+      <div style="margin-top:8px">Representative data · mutation <span class="mono">OFF</span>.<br>Every value shown is a fixture, not live telemetry.</div>
+    </div>
+  </nav>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+    <div class="subbar">
+      <h2 id="vTitle">Command</h2>
+      <span class="desc" id="vDesc"></span>
+      <div class="grow"></div>
+      <div class="facets" id="facets"></div>
+      <button class="facet" id="palOpen" style="border-color:var(--line3)"><span class="mono">⌘K</span></button>
+    </div>
+    <div class="view" id="view"></div>
+  </main>
+</div>
+
+<!-- ============ AUTH GATE — fail-closed: rendered by default, the console shell above is [hidden]
+     until a session is verified. No panel, no fixture, no /api/v1/* data call happens before this
+     resolves. ============ -->
+<div class="authgate" id="authGate">
+  <div class="ag-card">
+    <div class="ag-brand">
+      <span class="mk" role="img" aria-label="Territory Grounder logo"></span>
+      <div class="ag-word"><b>Territory&nbsp;Grounder</b><span>Operator Console</span></div>
+    </div>
+    <p class="ag-desc">Sign in to the operator console.</p>
+
+    <div class="spine ag-spine" id="agSpine" data-state="idle" aria-hidden="true">
+      <div class="stage" data-s="claim"><div class="node"></div><div class="wire"></div></div>
+      <div class="stage" data-s="verify"><div class="node"></div><div class="wire"></div></div>
+      <div class="stage" data-s="verdict"><div class="node"></div></div>
+      <div class="caps"><span>Claim</span><span>Verify</span><span>Verdict</span></div>
+    </div>
+
+    <form id="agForm" class="ag-form" autocomplete="on" aria-label="Operator sign-in">
+      <div class="ag-field">
+        <label class="lbl" for="agOp">Username</label>
+        <input id="agOp" name="username" autocomplete="username" autocapitalize="none"
+          autocorrect="off" spellcheck="false" required />
+      </div>
+      <div class="ag-field">
+        <label class="lbl" for="agTok">Password</label>
+        <input id="agTok" name="password" type="password" autocomplete="current-password" required />
+      </div>
+      <div id="agErr" class="ag-err" role="alert" aria-live="assertive"></div>
+      <button class="btn primary ag-submit" type="submit" id="agSubmit">Sign in</button>
+    </form>
+    <p class="ag-foot"><a href="https://territorygrounder.com" target="_blank" rel="noopener">territorygrounder.com</a> · <a href="https://github.com/territory-grounder/grounder" target="_blank" rel="noopener">GitHub</a></p>
+  </div>
+</div>
+
+<!-- drawer -->
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true"></aside>
+
+<!-- command palette -->
+<div class="pal-scrim" id="palScrim">
+  <div class="pal" role="dialog" aria-label="Command palette">
+    <svg class="glyph" viewBox="0 0 16 16" width="15" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
+    <input id="palInput" placeholder="Jump to a view, session, host, or action…" autocomplete="off" />
+    <div class="res" id="palRes"></div>
+    <div class="hints"><span><b>↑↓</b> navigate</span><span><b>↵</b> open</span><span><b>esc</b> close</span></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =====================================================================================
+   Territory Grounder — Operator Console (design preview, self-contained)
+   Representative fixtures reusing the real typed shapes (Band, Verdict, ActionManifest,
+   PendingDecision, LedgerEntry). Mutation is OFF — every actuation control is gated.
+   ===================================================================================== */
+"use strict";
+const $ = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+const h = (tag, attrs={}, ...kids)=>{
+  const e = tag==="svg" ? document.createElementNS("http://www.w3.org/2000/svg","svg") : document.createElement(tag);
+  for(const[k,v]of Object.entries(attrs||{})){
+    if(k==="class")e.setAttribute("class",v); else if(k==="html")e.innerHTML=v;
+    else if(k.startsWith("on")&&typeof v==="function")e.addEventListener(k.slice(2),v);
+    else if(v!=null&&v!==false)e.setAttribute(k,v===true?"":v);
+  }
+  for(const k of kids.flat()){if(k==null||k===false)continue;e.append(k.nodeType?k:document.createTextNode(k));}
+  return e;
+};
+const pct = v => Math.round(v*100);
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------------- fixtures ---------------- */
+const HOSTS = {
+  "dc1k8s-w3":{site:"dc1", role:"k8s worker", health:"crit"},
+  "dc1k8s-w1":{site:"dc1", role:"k8s worker", health:"ok"},
+  "dc1k8s-cp1":{site:"dc1", role:"k8s control-plane", health:"ok"},
+  "dc2nas01":{site:"dc2", role:"synology nas", health:"warn"},
+  "dc1fw01":{site:"dc1", role:"cisco asa", health:"ok"},
+  "dc2pve02":{site:"dc2", role:"proxmox node", health:"ok"},
+  "dc1db01":{site:"dc1", role:"postgres primary", health:"ok"},
+};
+const SESSIONS = [
+  { id:"s-8f31", ref:"librenms:22194", title:"Disk pressure eviction cascade", host:"dc1k8s-w3", site:"dc1",
+    band:"pause", status:"awaiting", risk:0.82, conf:0.91, age:"4m", owner:"unassigned", live:true,
+    exec_class:"k8s-drain", reversible:true,
+    alerts:["k8s node w3 DiskPressure","3 pods Evicted (payments-api)","kubelet imagefs 92%"],
+    stage:{classified:1,predicted:1,approved:0,executed:0,verified:0},
+    action:{ id:"a3e91c4f8b207d16", summary:"Cordon + drain dc1k8s-w3, evict rebalance-safe pods to w1/w2",
+      target:"dc1k8s-w3", plan:[{op:"change",t:"node/dc1k8s-w3 spec.unschedulable = true"},{op:"change",t:"drain --ignore-daemonsets --delete-emptydir-data"},{op:"add",t:"cordon annotation tg/reason=disk-pressure"}] },
+    predicted:{ hosts:["dc1k8s-w1","dc1k8s-cp1"], rules:["dc1k8s-w1:PodSchedulingLatency"] },
+    reason:[
+      {kind:"alert",t:"DiskPressure on dc1k8s-w3; imagefs at 92%, 3 evictions in 6 min.",cite:"librenms:22194"},
+      {kind:"hypothesis",t:"Image layer bloat from a crash-looping pod is filling imagefs, not a data-volume leak.",conf:.55},
+      {kind:"evidence",t:"kubelet_volume_stats show imagefs growth tracks payments-api restart count (47 in 1h).",cite:"prom: kubelet_imagefs_used"},
+      {kind:"evidence",t:"Data PVs flat at 34%. Rules out storage-specialist escalation.",cite:"prom: kubelet_volume_stats_used"},
+      {kind:"diagnosis",t:"Node-local imagefs exhaustion from restart churn. Draining relieves pressure; GC reclaims layers.",conf:.91,cite:"prom: imagefs ~ restart corr 0.93"},
+      {kind:"proposal",t:"Cordon + drain w3; scheduler rebalances to w1/w2 (headroom 38%). Reversible via uncordon.",conf:.91,cite:"estate: w1/w2 headroom 38%"},
+    ] },
+  { id:"s-7b02", ref:"crowdsec:nl-4471", title:"Repeated auth failures → ASA", host:"dc1fw01", site:"dc1",
+    band:"pause", status:"awaiting", risk:0.74, conf:0.63, age:"11m", owner:"unassigned", live:false,
+    exec_class:"firewall-acl", reversible:false,
+    alerts:["CrowdSec: ssh bruteforce 12 IPs","ASA %ASA-4-733100 drop","geo: 3 new ASNs"],
+    stage:{classified:1,predicted:1,approved:0,executed:0,verified:0}, floored:true,
+    action:{ id:"c17ba9034ee5f280", summary:"Add deny ACE for 12 source IPs on outside interface",
+      target:"dc1fw01", plan:[{op:"add",t:"access-list OUTSIDE_IN line 4 deny ip <12 hosts> any"},{op:"destroy",t:"clear conn address <12 hosts>"}] },
+    predicted:{ hosts:["dc1fw01"], rules:[] },
+    reason:[
+      {kind:"alert",t:"CrowdSec flags ssh bruteforce from 12 IPs across 3 ASNs; ASA logging drops.",cite:"crowdsec:nl-4471"},
+      {kind:"hypothesis",t:"Low-rate distributed credential stuffing, not a targeted breach — no successful auth observed.",conf:.6},
+      {kind:"evidence",t:"No 4-733101 (built) events; all attempts pre-auth. auth.log shows 0 accepted.",cite:"asa: syslog"},
+      {kind:"diagnosis",t:"Nuisance-tier. An ACL deny is irreversible on a security device → never-auto floor applies.",conf:.63,cite:"asa: syslog · 0 accepted"},
+      {kind:"proposal",t:"Propose deny ACE for the 12 IPs. HELD: security + irreversible ⇒ POLL_PAUSE, human required.",conf:.63,cite:"crowdsec: decision list nl-4471"},
+    ] },
+  { id:"s-6c55", ref:"prometheus:skg-1180", title:"NAS volume 88% → cleanup", host:"dc2nas01", site:"dc2",
+    band:"notice", status:"verifying", risk:0.41, conf:0.88, age:"1m", owner:"tg-agent", live:true,
+    exec_class:"ssh-command", reversible:true,
+    alerts:["volume1 usage 88%","PBS namespace grew 140GB/24h"],
+    stage:{classified:1,predicted:1,approved:1,executed:1,verified:0},
+    action:{ id:"9d2f10e6a7c4bb35", summary:"Prune PBS backups older than retention on dc2nas01",
+      target:"dc2nas01", plan:[{op:"destroy",t:"proxmox-backup-client prune --keep-last 7 --keep-daily 14"},{op:"change",t:"garbage-collect namespace pbs-nl"}] },
+    predicted:{ hosts:["dc2nas01","dc2pve02"], rules:["dc2pve02:BackupJobLatency"] },
+    reason:[
+      {kind:"alert",t:"volume1 at 88%; PBS namespace grew 140GB in 24h.",cite:"prometheus:skg-1180"},
+      {kind:"diagnosis",t:"Retention drift — prune job disabled 2026-06. Reversible cleanup within AUTO_NOTICE band.",conf:.88,cite:"pbs: prune task log 2026-06"},
+      {kind:"proposal",t:"Prune to policy + GC. Notify #ops. Predict transient BackupJobLatency on pve02.",conf:.88,cite:"prom: volume1 trend +1.1%/d"},
+    ] },
+  { id:"s-5a12", ref:"librenms:22160", title:"Interface flap dc2pve02", host:"dc2pve02", site:"dc2",
+    band:"auto", status:"verified", verdict:"match", risk:0.18, conf:0.94, age:"22m", owner:"tg-agent", live:false,
+    exec_class:"none", reversible:true,
+    alerts:["ifOperStatus flap eno2","BGP session reset"],
+    stage:{classified:1,predicted:1,approved:1,executed:1,verified:1},
+    action:{ id:"2b7e44f1c9a0d883", summary:"Suppress correlated flap alerts; no mutation (self-recovered)",
+      target:"dc2pve02", plan:[{op:"add",t:"suppression: dedup+flap-window 5m for eno2"}] },
+    predicted:{ hosts:["dc2pve02"], rules:["dc2pve02:BGPSessionDown"] },
+    observed:[{host:"dc2pve02",rule:"BGPSessionDown"}],
+    reason:[
+      {kind:"alert",t:"eno2 flapped 4× in 5m; BGP reset once.",cite:"librenms:22160"},
+      {kind:"diagnosis",t:"Transient link flap, self-recovered. Reversible/no-op ⇒ AUTO. Suppress the correlated storm.",conf:.94,cite:"librenms: ifOperStatus history"},
+      {kind:"proposal",t:"AUTO: dedup + flap-window suppression. No estate mutation.",conf:.94,cite:"suppress: flap-window 5m"},
+    ] },
+  { id:"s-4d90", ref:"librenms:22101", title:"Payments-api p99 regression", host:"dc1k8s-w3", site:"dc1",
+    band:"pause", status:"deviation", verdict:"deviation", risk:0.79, conf:0.86, age:"38m", owner:"K. Papadopoulos", live:false,
+    exec_class:"k8s-rollout", reversible:true,
+    alerts:["payments-api p99 1.8s","error-rate 4%"],
+    stage:{classified:1,predicted:1,approved:1,executed:1,verified:1},
+    action:{ id:"e5c8a1229f6b7704", summary:"Roll back payments-api to previous revision",
+      target:"dc1k8s-w3", plan:[{op:"change",t:"rollout undo deploy/payments-api → rev 118"}] },
+    predicted:{ hosts:["dc1k8s-w3"], rules:["dc1k8s-w3:PodRestart"] },
+    observed:[{host:"dc1k8s-w3",rule:"PodRestart"},{host:"dc1db01",rule:"ConnectionPoolSaturation"}],
+    reason:[
+      {kind:"alert",t:"payments-api p99 1.8s, error-rate 4% after deploy rev 119.",cite:"librenms:22101"},
+      {kind:"diagnosis",t:"Regression in rev 119. Roll back to 118. Predict a brief PodRestart on w3 only.",conf:.86,cite:"k8s: rollout history rev118/119"},
+      {kind:"proposal",t:"Rollback deploy. Predicted blast radius: w3 PodRestart.",conf:.86,cite:"predict: commit e5c8a122"},
+      {kind:"verdict",t:"DEVIATION: db01 ConnectionPoolSaturation fired — a host the model never predicted. Never auto-resolves.",conf:1},
+    ] },
+];
+const ALERTS = [
+  {id:"al-9920",src:"librenms",host:"dc1k8s-w3",rule:"DiskPressure",sev:"crit",ts:"14:31:02",state:"active",session:"s-8f31",prov:"correlated · 3 alerts · same host + imagefs edge"},
+  {id:"al-9921",src:"librenms",host:"dc1k8s-w3",rule:"PodEvicted",sev:"crit",ts:"14:31:40",state:"grouped",session:"s-8f31",prov:"grouped → s-8f31 · dependency edge (pod→node)"},
+  {id:"al-9922",src:"prometheus",host:"dc1k8s-w3",rule:"imagefs>90%",sev:"warn",ts:"14:29:55",state:"grouped",session:"s-8f31",prov:"grouped → s-8f31 · same host"},
+  {id:"al-9910",src:"crowdsec",host:"dc1fw01",rule:"ssh-bruteforce",sev:"warn",ts:"14:20:11",state:"active",session:"s-7b02",prov:"burst · 12 sources / 3 ASNs in 4m"},
+  {id:"al-9903",src:"prometheus",host:"dc2nas01",rule:"volume1>85%",sev:"warn",ts:"14:30:20",state:"active",session:"s-6c55",prov:"single"},
+  {id:"al-9880",src:"librenms",host:"dc2pve02",rule:"ifOperStatus flap",sev:"warn",ts:"14:09:30",state:"suppressed",session:"s-5a12",prov:"suppressed · flap-window 5m · valid_until 14:14"},
+  {id:"al-9875",src:"alertmanager",host:"dc1k8s-cp1",rule:"Watchdog",sev:"info",ts:"14:31:00",state:"suppressed",session:null,prov:"suppressed · known-pattern (heartbeat)"},
+  {id:"al-9860",src:"librenms",host:"dc2nas01",rule:"SmartWear",sev:"info",ts:"13:58:12",state:"active",session:null,prov:"single · below triage threshold"},
+];
+const LEDGER = [
+  {seq:1428,ts:"14:31:12",actor:"ai",kind:"prediction.commit",ref:"s-8f31",action:"a3e91c4f",hash:"7f3c…a19b",prev:"91be…c40d"},
+  {seq:1427,ts:"14:30:50",actor:"ai",kind:"risk.classify → PAUSE",ref:"s-8f31",action:"a3e91c4f",hash:"91be…c40d",prev:"20a8…7711"},
+  {seq:1426,ts:"14:30:22",actor:"ai",kind:"execute.begin",ref:"s-6c55",action:"9d2f10e6",hash:"20a8…7711",prev:"cc41…9e02"},
+  {seq:1425,ts:"14:30:19",actor:"human",kind:"approve",ref:"s-6c55",action:"9d2f10e6",hash:"cc41…9e02",prev:"e7d0…1a55",who:"K. Papadopoulos"},
+  {seq:1424,ts:"14:20:40",actor:"ai",kind:"floor.hold (never-auto)",ref:"s-7b02",action:"c17ba903",hash:"e7d0…1a55",prev:"4b19…88fa"},
+  {seq:1423,ts:"13:55:03",actor:"system",kind:"verdict.deviation",ref:"s-4d90",action:"e5c8a122",hash:"4b19…88fa",prev:"a0c2…3d71"},
+  {seq:1422,ts:"13:31:44",actor:"ai",kind:"verdict.match → resolved",ref:"s-5a12",action:"2b7e44f1",hash:"a0c2…3d71",prev:"88d5…0b6e"},
+  {seq:1421,ts:"13:12:09",actor:"human",kind:"kill-switch.arm (scope: session)",ref:"s-4d90",action:"—",hash:"88d5…0b6e",prev:"1f77…c223",who:"K. Papadopoulos"},
+];
+const ESTATE = {
+  nodes:[
+    // clustered by site so the graph reads as a territory map: dc1 (left region), dc2 (right region)
+    {id:"dc1k8s-cp1",x:.30,y:.22,health:"ok",r:"k8s cp"},
+    {id:"dc1k8s-w1",x:.14,y:.48,health:"ok",r:"worker"},
+    {id:"dc1k8s-w3",x:.36,y:.55,health:"crit",r:"worker"},
+    {id:"dc1db01",x:.51,y:.34,health:"ok",r:"postgres"},
+    {id:"dc1fw01",x:.30,y:.80,health:"ok",r:"asa"},
+    {id:"dc2pve02",x:.81,y:.24,health:"ok",r:"proxmox"},
+    {id:"dc2nas01",x:.81,y:.56,health:"warn",r:"nas"},
+  ],
+  edges:[
+    ["dc1k8s-cp1","dc1k8s-w1",1.0],["dc1k8s-cp1","dc1k8s-w3",1.0],
+    ["dc1k8s-w3","dc1db01",.9],["dc1k8s-w1","dc1db01",.9],
+    ["dc1k8s-cp1","dc1fw01",.85],["dc2pve02","dc2nas01",.95],
+    ["dc1db01","dc2pve02",.75],
+  ],
+};
+const bandName = {auto:"AUTO",notice:"AUTO_NOTICE",pause:"POLL_PAUSE"};
+const statusName = {awaiting:"Awaiting approval",executing:"Executing",verifying:"Verifying",verified:"Verified",deviation:"Deviation",investigating:"Investigating",ready:"Proposal ready"};
+
+/* ---------------- ribbon ---------------- */
+const STAGES = ["classified","predicted","approved","executed","verified"];
+function spine(s){
+  const wrap = h("div",{class:"spine"});
+  STAGES.forEach((name,i)=>{
+    const st = h("div",{class:"stage"});
+    let cls="pending", done = s.stage[name];
+    if(done) cls="done";
+    // active = first not-done stage of a live session
+    const firstPending = STAGES.find(n=>!s.stage[n]);
+    if(s.live && name===firstPending) cls="active";
+    if(name==="verified" && s.stage.verified){
+      cls = s.verdict==="match"?"verified-match":s.verdict==="partial"?"verified-partial":"verified-dev";
+    }
+    if(name==="approved" && s.floored && !s.stage.approved) cls="floor";
+    st.className="stage "+cls;
+    st.append(h("div",{class:"node",title:name+(done?" · done":"")}));
+    if(i<STAGES.length-1) st.append(h("div",{class:"wire"}));
+    wrap.append(st);
+  });
+  wrap.append(h("div",{class:"caps"},...STAGES.map(n=>h("span",{},n))));
+  return wrap;
+}
+function axes(s){
+  return h("div",{class:"axes"},
+    h("div",{class:"axis"}, h("span",{class:"lbl"},"Risk"),
+      // gradient spans the FULL track and is clipped to the value — the visible tip color truthfully encodes risk
+      h("div",{class:"track"}, h("i",{class:"risk",style:`width:100%;clip-path:inset(0 ${100-pct(s.risk)}% 0 0)`})), h("span",{class:"v"},s.risk.toFixed(2))),
+    h("div",{class:"axis"}, h("span",{class:"lbl"},"Conf"),
+      h("div",{class:"track"}, h("i",{class:"conf",style:`width:${pct(s.conf)}%`})), h("span",{class:"v"},s.conf.toFixed(2))),
+  );
+}
+function statusPill(s){
+  const map={awaiting:"awaiting",executing:"executing",verifying:"executing",verified:"verified",deviation:"deviation",investigating:"investigating",ready:"ready"};
+  return h("span",{class:"pill "+(map[s.status]||"")},h("i"),statusName[s.status]||s.status);
+}
+function ribbonRow(s,{compact=false}={}){
+  const row = h("div",{class:"ribbon-row"+(s.verdict==="deviation"?" deviated":""),"data-band":s.band, tabindex:"0", role:"button",
+    onclick:()=>openSession(s), onkeydown:e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openSession(s);}}});
+  row.append(h("div",{class:"band"}));
+  const body = h("div",{class:"rr-body"});
+  body.append(h("div",{class:"rr-top"},
+    h("span",{class:"bandtag "+s.band},bandName[s.band]),
+    s.floored?h("span",{class:"bandtag",style:"color:var(--hazard);background:color-mix(in srgb,var(--hazard) 12%,transparent)",title:"never-auto floor — a human is required by construction"},"FLOOR"):null,
+    h("span",{class:"rr-title"},s.title),
+    h("span",{class:"rr-host mono"},s.host),
+    h("div",{class:"rr-meta"}, statusPill(s),
+      h("span",{class:"hashchip"},"action ",h("b",{},s.action.id.slice(0,8))),
+      h("span",{class:"lbl",style:"font-size:9px;text-transform:none"},s.age)), // 4m not 4M — uppercase M reads as months
+  ));
+  body.append(spine(s));
+  row.append(body);
+  if(!compact) row.append(h("div",{class:"rr-side"}, axes(s),
+    h("div",{class:"lbl",style:"font-size:8px"},s.exec_class==="none"?"no mutation":s.exec_class)));
+  return row;
+}
+
+/* ---------------- views ---------------- */
+const FACETS = {
+  command:[["all","All"],["pause","Needs me"],["deviation","Deviations"],["auto","Auto"]],
+  actions:[["all","All"],["deviation","Deviations"],["match","Match"],["floor","Floored"]],
+};
+let facetState = {command:"all", actions:"all"};
+
+const views = {
+  command(){
+    const wrap=h("div");
+    // posture tiles
+    const bands={auto:0,notice:0,pause:0};
+    SESSIONS.forEach(s=>bands[s.band]++);
+    const awaiting=SESSIONS.filter(s=>s.status==="awaiting").length;
+    const devs=SESSIONS.filter(s=>s.verdict==="deviation").length;
+    wrap.append(h("div",{class:"tiles"},
+      h("div",{class:"tile stripe pause"}, h("div",{class:"lbl"},"Awaiting a human"),
+        h("div",{class:"big pause"},String(awaiting)), h("div",{class:"sub"},"POLL_PAUSE holds — yours to decide")),
+      h("div",{class:"tile stripe dev"}, h("div",{class:"lbl"},"Open deviations"),
+        h("div",{class:"big dev"},String(devs)), h("div",{class:"sub"},"map ≠ territory · never auto-resolve")),
+      h("div",{class:"tile stripe ok"}, h("div",{class:"lbl"},"Auto-resolved · 24h"),
+        h("div",{class:"big ok"},"37"), h("div",{class:"sub"},"reversible work, silently handled")),
+      h("div",{class:"tile stripe map"}, h("div",{class:"lbl"},"Estate coverage"),
+        h("div",{class:"big"},"98.2%"), h("div",{class:"sub"},"142 nodes · 2 dark components"),
+        h("div",{class:"spark"}, ...[6,7,5,8,7,9,8,9,7,8,9,9].map(v=>h("i",{style:`height:${v*2.2}px`})))),
+    ));
+    wrap.append(h("div",{class:"sec"},h("span",{class:"lbl"},"Triage queue"),
+      h("h3",{},"What the AI needs from you"),
+      h("span",{class:"rule"}),
+      h("span",{class:"lbl",style:"font-size:9px"},"ranked · loudest first")));
+    const f=facetState.command;
+    let list=SESSIONS.slice().sort((a,b)=>score(b)-score(a));
+    if(f==="pause")list=list.filter(s=>s.band==="pause");
+    else if(f==="deviation")list=list.filter(s=>s.verdict==="deviation");
+    else if(f==="auto")list=list.filter(s=>s.band==="auto");
+    if(!list.length) wrap.append(emptyState("A quiet estate is a healthy estate","No holds match this filter. The AI is handling reversible work silently."));
+    list.forEach(s=>wrap.append(ribbonRow(s)));
+    return wrap;
+  },
+  sessions(){
+    const wrap=h("div");
+    wrap.append(h("div",{class:"sec"},h("span",{class:"lbl"},"Runs"),h("h3",{},"AI sessions — live and recent"),h("span",{class:"rule"})));
+    SESSIONS.forEach(s=>wrap.append(ribbonRow(s)));
+    return wrap;
+  },
+  actions(){
+    const wrap=h("div");
+    wrap.append(h("div",{class:"sec"},h("span",{class:"lbl"},"ActionManifest ledger"),
+      h("h3",{},"Every proposal as a grounding ribbon"),h("span",{class:"rule"}),
+      h("span",{class:"lbl",style:"font-size:9px"},"prediction (map) vs outcome (territory)"),
+      h("span",{class:"sig-fix mono"},"fixture · representative, not live")));
+    const f=facetState.actions;
+    let list=SESSIONS.slice();
+    if(f==="deviation")list=list.filter(s=>s.verdict==="deviation");
+    else if(f==="match")list=list.filter(s=>s.verdict==="match");
+    else if(f==="floor")list=list.filter(s=>s.floored);
+    list.forEach(s=>wrap.append(ribbonRow(s)));
+    return wrap;
+  },
+  reasoning(){
+    const s=SESSIONS[0];
+    const wrap=h("div");
+    wrap.append(h("div",{class:"sec"},h("span",{class:"lbl"},"Trust, but verify"),
+      h("h3",{},"AI reasoning — "+s.title),h("span",{class:"rule"}),
+      h("span",{class:"desc"},"Session "),h("span",{class:"mono",style:"color:var(--map);font-size:11px"},s.id),
+      h("span",{class:"sig-fix mono"},"fixture · representative, not live")));
+    wrap.append(reasoningZone(s));
+    wrap.append(h("p",{class:"desc",style:"margin:14px 2px 0;font-size:11.5px"},
+      "The map is walled off from the territory. Every AI claim resolves in one click to the ground-truth signal the orchestrator itself captured — a conclusion is never a terminal node."));
+    return wrap;
+  },
+  estate(){
+    const wrap=h("div",{class:"estate-wrap"});
+    wrap.append(estateGraph());
+    const side=h("div",{class:"est-side"});
+    side.append(h("div",{class:"sec"},h("span",{class:"lbl"},"Inventory"),h("h3",{},"Nodes"),h("span",{class:"rule"})));
+    ESTATE.nodes.forEach(n=>{
+      side.append(h("div",{style:"display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--line)"},
+        h("span",{class:"dot-s",style:`background:${healthColor(n.health)}`}),
+        h("div",{style:"flex:1;min-width:0"},
+          h("div",{class:"mono",style:"font-size:11px;color:var(--territory)"},n.id),
+          h("div",{class:"lbl",style:"font-size:8.5px;margin-top:2px"},n.r)),
+        h("span",{class:"tag"},n.health)));
+    });
+    side.append(h("div",{class:"hazard-wall",style:"margin-top:14px"},
+      lockIcon(),h("div",{class:"txt"},h("b",{},"2 dark components"),h("br"),
+        h("span",{class:"desc",style:"font-size:11px"},"dc2sw02, dc1ups01 — no liveness signal. Treated as a problem, not silence."))));
+    wrap.append(side);
+    return wrap;
+  },
+  alerts(){
+    const wrap=h("div");
+    wrap.append(h("div",{class:"sec"},h("span",{class:"lbl"},"Raw ingest tier"),h("h3",{},"Alerts — how signals fold into sessions"),h("span",{class:"rule"})));
+    const card=h("div",{class:"wrapcard"});
+    const t=h("table",{class:"tbl"});
+    t.append(h("thead",{},h("tr",{},...["","Source","Host","Rule","Sev","Time","State","Provenance","Session"].map(x=>h("th",{},x)))));
+    const tb=h("tbody");
+    ALERTS.forEach(a=>{
+      tb.append(h("tr",{style:"cursor:pointer",onclick:()=>a.session&&openSession(SESSIONS.find(s=>s.id===a.session))},
+        // the leading dot encodes SEVERITY for live signals (state is its own labeled column) — never red-for-active
+        h("td",{},h("span",{class:"dot-s",style:`background:${a.state==="suppressed"?"var(--ink4)":a.sev==="crit"?"var(--deviation)":a.sev==="warn"?"var(--partial)":"var(--territory)"}`})),
+        h("td",{class:"m"},a.src),
+        h("td",{class:"m terr"},a.host),
+        h("td",{class:"m"},a.rule),
+        h("td",{class:"m "+(a.sev==="crit"?"sev-crit":a.sev==="warn"?"sev-warn":"sev-info")},a.sev.toUpperCase()),
+        h("td",{class:"m",style:"color:var(--ink3)"},a.ts),
+        h("td",{},h("span",{class:"tag"},a.state)),
+        h("td",{class:"prov"},a.prov),
+        h("td",{class:"m"},a.session?h("span",{style:"color:var(--map)"},a.session):h("span",{style:"color:var(--ink4)"},"—"))));
+    });
+    t.append(tb); card.append(t); wrap.append(card);
+    wrap.append(h("p",{class:"desc",style:"font-size:11.5px;margin:2px"},
+      "The supervisor never approves at the raw-alert tier. Alerts are evidence attached to a Session; grouping always shows its reason."));
+    return wrap;
+  },
+  logs(){
+    const wrap=h("div");
+    wrap.append(h("div",{class:"sec"},h("span",{class:"lbl"},"Evidence · drill target"),h("h3",{},"Live tail"),
+      h("span",{class:"rule"}),h("span",{class:"conn"},h("span",{class:"dot"}),"streaming")));
+    const box=h("div",{class:"plan",style:"font-size:11px"});
+    const lines=[
+      ["14:31:12","ai","prediction.commit action=a3e91c4f hosts=[w1,cp1] rules=[w1:PodSchedulingLatency]"],
+      ["14:31:02","system","ingest librenms:22194 DiskPressure host=dc1k8s-w3 → correlate"],
+      ["14:30:55","ai","tool.call prometheus q=kubelet_imagefs_used{node=w3} → 0.92"],
+      ["14:30:50","ai","risk.classify band=POLL_PAUSE risk=0.82 conf=0.91 reversible=true"],
+      ["14:30:22","ai","execute.begin action=9d2f10e6 (dc2nas01 prune)"],
+      ["14:30:19","human","approve action=9d2f10e6 who=K.Papadopoulos"],
+      ["14:20:40","ai","floor.hold action=c17ba903 reason=never-auto(security,irreversible)"],
+    ];
+    lines.forEach(([t,who,msg])=>box.append(h("div",{class:"ln"},
+      h("span",{style:"color:var(--ink4);width:58px;flex:none"},t),
+      h("span",{class:"tag",style:`width:56px;flex:none;color:${who==="ai"?"var(--map)":who==="human"?"var(--accent)":"var(--territory)"}`},who),
+      h("span",{style:"color:var(--ink2)"},msg))));
+    wrap.append(box);
+    return wrap;
+  },
+  ledger(){
+    const wrap=h("div");
+    wrap.append(h("div",{class:"sec"},h("span",{class:"lbl"},"Tamper-evident record"),h("h3",{},"Governance ledger"),
+      h("span",{class:"rule"}),h("span",{class:"chip-ok"},"SHA-256 chain verified · client-side")));
+    const card=h("div",{class:"wrapcard"});
+    const t=h("table",{class:"tbl"});
+    t.append(h("thead",{},h("tr",{},...["Seq","Time","Actor","Event","Session","Action","Hash","Prev"].map(x=>h("th",{},x)))));
+    const tb=h("tbody");
+    LEDGER.forEach(e=>{
+      const ac={ai:"var(--map)",human:"var(--ink)",system:"var(--territory)"}[e.actor]; // human is neutral-bright, never cyan (cyan = interaction only)
+      tb.append(h("tr",{},
+        h("td",{class:"m",style:"color:var(--ink3)"},e.seq),
+        h("td",{class:"m",style:"color:var(--ink3)"},e.ts),
+        h("td",{},h("span",{class:"tag",style:`color:${ac};border-color:${ac}55`},e.actor),e.who?h("span",{class:"lbl",style:"font-size:8px;margin-left:6px"},e.who):null),
+        h("td",{class:"m",style:e.kind.includes("deviation")?"color:var(--deviation)":e.kind.includes("verdict.match")?"color:var(--match)":e.kind.includes("floor")?"color:var(--hazard)":""},e.kind),
+        h("td",{class:"m",style:"color:var(--map)"},e.ref),
+        h("td",{class:"m",style:"color:var(--map)"},e.action), // action_id is always map-indigo, same as everywhere
+        h("td",{class:"m"},e.hash),
+        h("td",{class:"m",style:"color:var(--ink4)"},e.prev)));
+    });
+    t.append(tb); card.append(t);
+    card.append(h("div",{class:"lbl",style:"padding:8px 14px;border-top:1px solid var(--line);color:var(--ink4);text-transform:none;letter-spacing:.04em"},
+      "showing the latest 8 of 1428 entries · the hash chain is verified continuously back to seq 1"));
+    wrap.append(card);
+    return wrap;
+  },
+  governance(){
+    const wrap=h("div");
+    // master
+    wrap.append(h("div",{class:"hazard-wall",style:"margin-bottom:18px"},
+      lockIcon(),h("div",{class:"txt",style:"flex:1"},
+        h("b",{},"MUTATION: OFF"),"  — the estate is read-only. ",
+        h("span",{class:"desc",style:"font-size:11.5px"},"The one-way switch to autonomy is RBAC-gated, ledger-audited, and blocked from any autonomous flip. Phase-2 sign-off required.")),
+      h("span",{class:"chip-warn"},"sign-off gated")));
+    wrap.append(h("div",{class:"sec"},h("span",{class:"lbl"},"Graded autonomy"),h("h3",{},"Per-layer promotion"),h("span",{class:"rule"}),
+      h("span",{class:"lbl",style:"font-size:9px"},"dark → shadow → enforce")));
+    const layers=[
+      ["Alert suppression","dedup · flap · burst · known-pattern","enforce"],
+      ["Estate cleanup (reversible)","prune, GC, cordon/drain","shadow"],
+      ["Config remediation","ACL, rollout, restart","shadow"],
+      ["Irreversible / security","never-auto floor — always human","dark"],
+    ];
+    const lw=h("div",{class:"layers"});
+    layers.forEach(([nm,ds,on])=>{
+      lw.append(h("div",{class:"layer"},
+        h("div",{},h("div",{class:"nm"},nm),h("div",{class:"ds"},ds)),
+        h("div",{class:"seg","aria-disabled":"true",style:"cursor:not-allowed",
+          title:"layer promotion is a config write — gated while MUTATION is OFF",
+          onclick:()=>toast("Layer promotion (DARK → SHADOW → ENFORCE) is a config write — gated while MUTATION is OFF.","lock")},
+          h("span",{"data-s":"dark",class:on==="dark"?"on":""},"DARK"),
+          h("span",{"data-s":"shadow",class:on==="shadow"?"on":""},"SHADOW"),
+          h("span",{"data-s":"enforce",class:on==="enforce"?"on":""},"ENFORCE"))));
+    });
+    wrap.append(lw);
+    wrap.append(h("div",{class:"sec",style:"margin-top:22px"},h("span",{class:"lbl"},"Invariant"),h("h3",{},"Never-auto floor"),h("span",{class:"rule"})));
+    wrap.append(h("div",{class:"hazard-wall"},warnIcon(),
+      h("div",{class:"txt"},"Irreversible ops · security devices · data destruction · full-cluster scope ",
+        h("b",{},"can never reach AUTO"),". They are floored to POLL_PAUSE by construction, regardless of the model's confidence.")));
+    return wrap;
+  },
+};
+function score(s){ // triage ranking: deviations, then pauses, then risk
+  let x=s.risk*10;
+  if(s.verdict==="deviation")x+=100;
+  if(s.status==="awaiting")x+=50;
+  if(s.band==="pause")x+=20;
+  return x;
+}
+function healthColor(hs){return hs==="crit"?"var(--deviation)":hs==="warn"?"var(--partial)":"var(--match)";}
+function emptyState(big,sub){return h("div",{class:"empty"},
+  h("svg",{viewBox:"0 0 24 24",width:"28",fill:"none",stroke:"var(--ink4)","stroke-width":"1.3",html:'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9"/>'}),
+  h("div",{class:"big"},big),h("div",{class:"desc"},sub));}
+function lockIcon(){return h("svg",{class:"lk ic",viewBox:"0 0 16 16",width:"18",fill:"none",stroke:"var(--hazard)","stroke-width":"1.5",html:'<rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/>'});}
+function warnIcon(color){return h("svg",{class:"ic",viewBox:"0 0 16 16",width:"18",fill:"none",stroke:color||"var(--hazard)","stroke-width":"1.5",html:'<path d="M8 2l6 11H2z"/><path d="M8 6.5v3.5M8 11.5v.5"/>'});}
+
+/* estate graph (map vs territory: node = territory health, edge weight = infragraph confidence).
+   Percent-coordinate SVG (no stretched viewBox) keeps strokes uniform; sites render as labeled regions
+   so the estate reads as a territory map, not a scatter. */
+function estateGraph(){
+  const g=h("div",{class:"graph"});
+  const NS="http://www.w3.org/2000/svg";
+  const svg=document.createElementNS(NS,"svg");
+  svg.setAttribute("width","100%");svg.setAttribute("height","100%");
+  // site regions — dashed territory outlines behind the nodes
+  const region=(x,y,w,ht,label)=>{
+    const r=document.createElementNS(NS,"rect");
+    r.setAttribute("x",x+"%");r.setAttribute("y",y+"%");r.setAttribute("width",w+"%");r.setAttribute("height",ht+"%");
+    r.setAttribute("rx","10");r.setAttribute("fill","color-mix(in srgb, var(--g1) 40%, transparent)");
+    r.setAttribute("stroke","var(--line2)");r.setAttribute("stroke-dasharray","4 5");
+    const t=document.createElementNS(NS,"text");
+    t.setAttribute("x",(x+1.6)+"%");t.setAttribute("y",(y+5)+"%");
+    t.setAttribute("fill","var(--ink4)");t.setAttribute("style","font:600 10px var(--mono);letter-spacing:.14em");
+    t.textContent=label;
+    svg.append(r,t);
+  };
+  region(4,7,56,84,"dc1");
+  region(66,7,30,66,"dc2");
+  ESTATE.edges.forEach(([a,b,w])=>{
+    const na=ESTATE.nodes.find(n=>n.id===a),nb=ESTATE.nodes.find(n=>n.id===b);
+    const l=document.createElementNS(NS,"line");
+    l.setAttribute("x1",(na.x*100)+"%");l.setAttribute("y1",(na.y*100)+"%");
+    l.setAttribute("x2",(nb.x*100)+"%");l.setAttribute("y2",(nb.y*100)+"%");
+    l.setAttribute("stroke","var(--line3)");l.setAttribute("stroke-width",(0.8+w*1.2).toFixed(2));
+    l.setAttribute("stroke-dasharray",w<0.8?"3 4":"none");l.setAttribute("opacity",0.35+w*0.4);
+    svg.append(l);
+  });
+  g.append(svg);
+  // nodes as absolutely-positioned HTML for crisp labels
+  ESTATE.nodes.forEach(n=>{
+    const isTarget = n.id==="dc1k8s-w3";
+    const node=h("div",{style:`position:absolute;left:${n.x*100}%;top:${n.y*100}%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer`,
+      onclick:()=>{const s=SESSIONS.find(x=>x.host===n.id);if(s)openSession(s);}});
+    const dot=h("div",{style:`width:${isTarget?22:16}px;height:${isTarget?22:16}px;border-radius:50%;background:${healthColor(n.health)};
+      box-shadow:0 0 0 ${isTarget?4:2}px ${isTarget?"color-mix(in srgb,var(--deviation) 30%,transparent)":"var(--g0)"};
+      ${isTarget&&!reduceMotion?"animation:alarm 1.6s infinite":""}`});
+    if(isTarget){
+      // clear of the dot (dot is 22px, centered): sits fully above, never clipping it
+      const ring=h("div",{style:"position:absolute;bottom:calc(50% + 18px);left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;color:var(--map);white-space:nowrap;border:1px solid color-mix(in srgb,var(--map) 45%,transparent);border-radius:10px;padding:1px 6px;background:var(--g0)"},"AI TARGET");
+      node.append(ring);
+    }
+    node.append(dot);
+    node.append(h("div",{class:"mono",style:"font-size:9.5px;color:var(--territory);white-space:nowrap;background:color-mix(in srgb,var(--g0) 70%,transparent);padding:0 3px;border-radius:2px"},n.id));
+    g.append(node);
+  });
+  g.append(h("div",{class:"legend"},
+    h("div",{class:"lbl",style:"margin-bottom:2px"},"Infragraph"),
+    h("div",{class:"r"},h("span",{class:"sw",style:"background:var(--match)"}),"healthy (territory)"),
+    h("div",{class:"r"},h("span",{class:"sw",style:"background:var(--partial)"}),"warning"),
+    h("div",{class:"r"},h("span",{class:"sw",style:"background:var(--deviation)"}),"critical"),
+    h("div",{class:"r"},h("span",{class:"sw ring"}),"AI-proposed target"),
+    h("div",{class:"r"},h("span",{style:"width:16px;border-top:2px dashed var(--line3)"}),"edge = dependency · confidence-weighted"),
+  ));
+  return g;
+}
+
+/* reasoning zone */
+function reasoningZone(s){
+  const z=h("div",{class:"ai-zone"});
+  const chain=h("div",{class:"chain"});
+  const glyph={alert:"AL",hypothesis:"H?",evidence:"EV",diagnosis:"DX",proposal:"PR",verdict:"VF"};
+  s.reason.forEach(step=>{
+    const isEv = step.kind==="evidence";
+    const node=h("div",{class:"cnode"+(isEv?" evidence":"")});
+    node.append(h("div",{class:"k"},glyph[step.kind]||"··"));
+    const body=h("div");
+    body.append(h("div",{class:"lbl kind"},step.kind + (step.conf!=null?" · conf "+step.conf.toFixed(2):"")));
+    body.append(h("p",{class:"txt"},step.t));
+    if(step.conf!=null && step.kind!=="verdict"){
+      const tr=h("div",{class:"conf-traj"});
+      for(let i=0;i<20;i++){const on=i/20<step.conf;tr.append(h("i",{style:`height:${6+ (on?step.conf*14:2)}px;opacity:${on?1:.25}`}));}
+      body.append(tr);
+    }
+    if(step.cite) body.append(h("button",{class:"cite",onclick:e=>{e.stopPropagation();toast("Pivoting to ground truth: "+step.cite,"terr");}}," "+step.cite));
+    if(step.kind==="verdict") body.querySelector(".txt").style.color="var(--deviation)";
+    node.append(body);
+    chain.append(node);
+  });
+  z.append(chain);
+  return z;
+}
+
+/* ---------------- session drawer ---------------- */
+let currentSel=null;
+function openSession(s){
+  if(!s)return;
+  currentSel=s;
+  const d=$("#drawer"); d.innerHTML="";
+  // header
+  d.append(h("div",{class:"dh"},
+    h("div",{style:"flex:1;min-width:0"},
+      h("div",{style:"display:flex;align-items:center;gap:9px;margin-bottom:6px"},
+        h("span",{class:"bandtag "+s.band},bandName[s.band]), statusPill(s),
+        s.floored?h("span",{class:"chip-warn"},"never-auto floor"):null),
+      h("h3",{style:"font-size:16px"},s.title),
+      h("div",{style:"display:flex;gap:12px;margin-top:6px;align-items:center"},
+        h("span",{class:"rr-host mono"},s.host),
+        h("span",{class:"lbl",style:"font-size:9px"},s.site),
+        h("span",{class:"hashchip"},"session ",h("b",{style:"color:var(--map)"},s.id)))),
+    h("button",{class:"iconbtn x",onclick:closeDrawer,"aria-label":"Close"},
+      h("svg",{viewBox:"0 0 16 16",width:"14",fill:"none",stroke:"currentColor","stroke-width":"1.6",html:'<path d="M4 4l8 8M12 4l-8 8"/>'}))));
+  const b=h("div",{class:"db"});
+
+  // grounding ribbon (full)
+  b.append(dsec("Grounding ribbon","classified → predicted → approved → executed → verified", (()=>{
+    const box=h("div",{class:"mvt"});
+    box.append(h("div",{style:"padding:6px 2px 14px"},spine(s)));
+    if(s.stage.executed){
+      box.append(mvtField(s));
+    } else {
+      box.append(h("div",{class:"desc",style:"font-size:11.5px;padding:8px 2px 0;border-top:1px solid var(--line)"},
+        s.floored?"Held at the gate by the never-auto floor. No prediction is laid over reality until a human approves.":
+        "Prediction committed; execution pending. The map is drawn — reality has not yet been measured against it."));
+    }
+    return box;
+  })()));
+
+  // incident master-clock (module-provided; one shared time axis for events + the metric)
+  if(typeof incidentTimeline==="function"){
+    b.append(dsec("Incident clock","events and the session metric on one shared time axis",incidentTimeline(s)));
+  }
+
+  // the action / plan
+  b.append(dsec("Proposed action","what will run — reviewed == executed, bound by action_id",(()=>{
+    const box=h("div");
+    box.append(h("div",{class:"kv",style:"margin-bottom:12px"},
+      h("dt",{},"action_id"), h("dd",{class:"m",style:"color:var(--map)"},s.action.id),
+      h("dt",{},"target"), h("dd",{class:"m terr"},s.action.target),
+      h("dt",{},"exec class"), h("dd",{class:"m"},s.exec_class),
+      h("dt",{},"reversible"), h("dd",{},s.reversible?h("span",{style:"color:var(--match)"},"yes · one-way-door: no"):h("span",{style:"color:var(--deviation)"},"NO · one-way door"))));
+    const plan=h("div",{class:"plan"});
+    s.action.plan.forEach(p=>plan.append(h("div",{class:"ln "+p.op},h("span",{class:"op"},p.op),h("span",{},p.t))));
+    box.append(plan);
+    return box;
+  })()));
+
+  // decision controls
+  if(s.status==="awaiting"){
+    b.append(dsec("Decision","you are the circuit-breaker",(()=>{
+      const box=h("div");
+      box.append(h("div",{style:"display:flex;gap:8px;flex-wrap:wrap"},
+        h("button",{class:"btn primary",disabled:true},"Approve"),
+        h("button",{class:"btn",disabled:true},"Modify & approve"),
+        h("button",{class:"btn danger",disabled:true},"Deny")));
+      box.append(h("div",{class:"gate-note"},lockIcon(),
+        h("div",{},h("b",{style:"color:var(--hazard)"},"Mutation is OFF."),
+          " Approval is disabled in this read-only preview. When the estate is live, approving writes a signed ledger entry and releases exactly this action_id to execute — nothing else.")));
+      return box;
+    })()));
+  }
+
+  // reasoning
+  b.append(dsec("Reasoning","every claim, one click from ground truth",reasoningZone(s)));
+
+  // evidence
+  b.append(dsec("Evidence","raw signals attached to this session",(()=>{
+    const box=h("div",{style:"display:flex;flex-direction:column;gap:6px"});
+    s.alerts.forEach(a=>box.append(h("div",{style:"display:flex;gap:9px;align-items:center;font-family:var(--mono);font-size:11px;color:var(--ink2);padding:6px 10px;background:var(--g0);border:1px solid var(--line);border-radius:var(--radius-s)"},
+      h("span",{class:"dot-s",style:"background:var(--territory)"}),a)));
+    return box;
+  })()));
+
+  d.append(b);
+  $("#scrim").classList.add("open");
+  d.classList.add("open"); d.setAttribute("aria-hidden","false");
+  d.setAttribute("tabindex","-1"); d.focus({preventScroll:true});
+}
+function dsec(label,desc,content){
+  return h("div",{class:"dsec"},
+    h("div",{class:"sec"},h("span",{class:"lbl"},label),desc?h("span",{class:"desc",style:"font-size:11px"},desc):null,h("span",{class:"rule"})),
+    content);
+}
+function mvtField(s){
+  const box=h("div");
+  box.append(h("div",{class:"mvt-head",style:"display:flex;justify-content:space-between;align-items:center;margin:6px 0 10px"},
+    h("span",{class:"lbl"},"Map laid over territory"),
+    h("span",{class:s.verdict==="match"?"chip-ok":s.verdict==="deviation"?"chip-bad":"chip-warn"},
+      (s.verdict||"pending").toUpperCase())));
+  const field=h("div",{class:"mvt-field"});
+  // predicted (map) hosts
+  const pred=s.predicted.hosts, obs=(s.observed||[]).map(o=>o.host);
+  const all=[...new Set([...pred,...obs])];
+  const positions=[[.2,.35],[.5,.6],[.78,.3],[.4,.8],[.7,.75]];
+  all.forEach((host,i)=>{
+    const p=positions[i%positions.length];
+    const isPred=pred.includes(host), isObs=obs.includes(host);
+    let cls="pred",label="PREDICTED";
+    if(isPred&&isObs){cls="match";label="CONFIRMED";}
+    else if(!isPred&&isObs){cls="dev";label="DEVIATION";}   // one vocabulary — matches the legend and the verdict
+    else if(isPred&&!isObs){cls="pred";label="PREDICTED · QUIET";}
+    field.append(h("div",{class:"mvt-node "+cls,style:`left:${p[0]*100}%;top:${p[1]*100}%`},
+      h("div",{class:"g"}),h("div",{class:"t"},host.replace(/^[a-z]{5}\d{2}-?/,"")),h("div",{class:"t",style:`color:${cls==="dev"?"var(--deviation)":cls==="match"?"var(--match)":"var(--map)"}`},label)));
+  });
+  box.append(field);
+  box.append(h("div",{class:"mvt-legend"},
+    h("div",{class:"r"},h("span",{class:"mvt-node pred",style:"position:static"},h("span",{class:"g"})),"map · predicted (indigo)"),
+    h("div",{class:"r"},h("span",{class:"mvt-node obs",style:"position:static"},h("span",{class:"g"})),"territory · observed (steel)"),
+    h("div",{class:"r"},h("span",{class:"mvt-node match",style:"position:static"},h("span",{class:"g"})),"confirmed"),
+    h("div",{class:"r"},h("span",{class:"mvt-node dev",style:"position:static"},h("span",{class:"g"})),"deviation — never auto-resolves"),
+  ));
+  if(s.verdict==="deviation")
+    box.append(h("div",{class:"gate-note",style:"margin-top:12px;background:color-mix(in srgb,var(--deviation) 8%,transparent);border-color:color-mix(in srgb,var(--deviation) 40%,transparent)"},
+      warnIcon("var(--deviation)"),h("div",{},h("b",{style:"color:var(--deviation)"},"The territory diverged from the map."),
+        " An alert fired on dc1db01 — a host the prediction never named. The deterministic verifier authored this deviation; the acting model can never overturn it.")));
+  return box;
+}
+function closeDrawer(){$("#scrim").classList.remove("open");const d=$("#drawer");d.classList.remove("open");d.setAttribute("aria-hidden","true");}
+
+/* ---------------- router ---------------- */
+const VIEW_META={
+  command:["Command","the AI's requests, ranked — does it need me, is the estate OK"],
+  sessions:["Sessions","live and recent AI runs, alert → verify"],
+  reasoning:["Reasoning","the AI's causal chain, walled off from ground truth"],
+  estate:["Estate","the confidence-graded infragraph the gate reasons over"],
+  alerts:["Alerts","raw ingest — how signals fold into sessions"],
+  logs:["Logs · Evidence","the terminal drill target, with freshness"],
+  actions:["Actions","every ActionManifest as a grounding ribbon"],
+  ledger:["Ledger","tamper-evident, hash-chained, actor-typed"],
+  governance:["Governance","the autonomy envelope and how to steer it"],
+};
+function route(name){
+  name = views[name]?name:"command";
+  $$(".navi").forEach(n=>n.classList.toggle("on",n.dataset.view===name));
+  const [t,desc]=VIEW_META[name];
+  $("#vTitle").textContent=t; $("#vDesc").textContent="— "+desc;
+  const view=$("#view"); view.className="view"+((name==="estate")?" pad0":"");
+  view.innerHTML=""; view.append(views[name]());
+  // facets
+  const fb=$("#facets"); fb.innerHTML="";
+  if(FACETS[name]){
+    FACETS[name].forEach(([k,lab])=>{
+      fb.append(h("button",{class:"facet"+(facetState[name]===k?" on":""),"data-k":k,
+        onclick:()=>{facetState[name]=k;route(name);}},lab));
+    });
+  }
+  view.scrollTop=0;
+  if(innerWidth<=820)$("#rail").classList.remove("open");
+  location.hash=name;
+}
+$$(".navi").forEach(n=>n.addEventListener("click",e=>{e.preventDefault();route(n.dataset.view);}));
+
+/* ---------------- command palette ---------------- */
+const PAL_ITEMS=()=>[
+  ...Object.entries(VIEW_META).map(([k,[t,d]])=>({type:"view",id:k,title:t,sub:d})),
+  ...SESSIONS.map(s=>({type:"session",id:s.id,title:s.title,sub:s.host+" · "+bandName[s.band]})),
+];
+let palSel=0, palList=[];
+function openPal(){$("#palScrim").classList.add("open");const i=$("#palInput");i.value="";renderPal("");i.focus();}
+function closePal(){$("#palScrim").classList.remove("open");}
+function renderPal(q){
+  q=q.toLowerCase();
+  palList=PAL_ITEMS().filter(it=>(it.title+it.sub+it.id).toLowerCase().includes(q));
+  palSel=0;
+  const r=$("#palRes");r.innerHTML="";
+  palList.forEach((it,i)=>{
+    r.append(h("div",{class:"r"+(i===palSel?" sel":""),onclick:()=>execPal(it),onmouseenter:()=>{palSel=i;paint();}},
+      h("span",{class:"ic"},it.type==="view"?"▸":"◆"),
+      h("div",{style:"flex:1"},h("div",{},it.title),h("div",{class:"sub"},it.sub)),
+      h("span",{class:"k"},it.type)));
+  });
+  if(!palList.length)r.append(h("div",{class:"r"},h("div",{style:"padding:6px"},
+    h("div",{},"No matches for “"+q+"”"),
+    h("div",{class:"sub",style:"margin-top:4px"},"try “deviation”, “modules”, “secrets”, a host, or a session id"))));
+}
+function paint(){$$(".pal .r").forEach((el,i)=>el.classList.toggle("sel",i===palSel));}
+function execPal(it){closePal();if(it.type==="view")route(it.id);else{const s=SESSIONS.find(x=>x.id===it.id);route("sessions");setTimeout(()=>openSession(s),120);}}
+$("#palInput").addEventListener("input",e=>renderPal(e.target.value));
+$("#palInput").addEventListener("keydown",e=>{
+  if(e.key==="ArrowDown"){e.preventDefault();palSel=Math.min(palSel+1,palList.length-1);paint();}
+  else if(e.key==="ArrowUp"){e.preventDefault();palSel=Math.max(palSel-1,0);paint();}
+  else if(e.key==="Enter"&&palList[palSel])execPal(palList[palSel]);
+  else if(e.key==="Escape")closePal();
+});
+$("#palOpen").addEventListener("click",openPal);
+$("#palScrim").addEventListener("click",e=>{if(e.target===$("#palScrim"))closePal();});
+
+/* ---------------- posture bar wiring ---------------- */
+function toast(msg,kind){const t=$("#toast");t.innerHTML="";if(kind==="lock")t.append(lockIcon());t.append(h("span",{},msg));t.classList.add("show");clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove("show"),3400);}
+// setBreaker paints the topbar mutation breaker from the WORKER's reported posture. A stale/unpublished
+// posture (the worker has not published a fresh row) shows "unverified" — an honest unknown, never a
+// confident OFF the read-only grounder cannot vouch for. mutation is the last-known reading.
+function setBreaker(mutation, stale, source){
+  const brk=$("#breaker"); if(!brk) return;
+  const sw=brk.querySelector(".sw"), txt=sw && sw.childNodes[1];
+  if(stale){
+    brk.dataset.mode="unknown";
+    if(txt) txt.textContent=" Posture unverified";
+    brk.title="Worker mutation posture is stale or unpublished ("+(source||"unknown")+") — showing last-known "+(mutation?"ON":"OFF")+". The control plane cannot currently vouch for the live posture.";
+  } else {
+    brk.dataset.mode = mutation ? "operational" : "read-only";
+    if(txt) txt.textContent = mutation ? " On · Operational" : " Off · Read-only";
+    brk.title="Mutation posture — the one-way switch between watch and act (source: "+(source||"worker")+")";
+  }
+}
+// theme
+function applyTheme(mode){document.documentElement.setAttribute("data-theme",mode);try{localStorage.setItem("tg-theme",mode);}catch(e){}}
+(function initTheme(){let m;try{m=localStorage.getItem("tg-theme");}catch(e){}if(m)document.documentElement.setAttribute("data-theme",m);})();
+$("#themeBtn").addEventListener("click",()=>{const cur=document.documentElement.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");applyTheme(cur==="dark"?"light":"dark");});
+$("#killBtn").addEventListener("click",()=>toast("Mutation is OFF — no autonomy is running to halt. When live, KILL scopes to: this proposal · this session · freeze ALL, and writes a ledger entry.","lock"));
+$("#breaker").addEventListener("click",()=>toast("The mutation switch is one-way and sign-off gated. It cannot be flipped from the console autonomously.","lock"));
+$("#menuBtn").addEventListener("click",()=>$("#rail").classList.toggle("open"));
+// account menu: operator identity, theme, sign-out (session logout endpoint)
+(function(){
+  const acct=$("#acct"), btn=$("#acctBtn"), menu=$("#acctMenu");
+  if(!acct||!btn||!menu) return;
+  const close=()=>{menu.hidden=true;btn.setAttribute("aria-expanded","false");};
+  btn.addEventListener("click",e=>{e.stopPropagation();const open=menu.hidden;
+    const w=$("#acctWho"); if(w){ const who=(typeof liveState!=="undefined"&&liveState.operator)||($("#whoName")&&$("#whoName").textContent)||"operator"; w.textContent=who; }
+    menu.hidden=!open; btn.setAttribute("aria-expanded",String(open));});
+  document.addEventListener("click",e=>{ if(!acct.contains(e.target)) close(); });
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape") close(); });
+  const ti=$("#acctThemeItem"); if(ti) ti.addEventListener("click",()=>{ $("#themeBtn").click(); close(); });
+  const lo=$("#logoutBtn"); if(lo) lo.addEventListener("click",async()=>{
+    lo.disabled=true;
+    try{ await fetch("/api/v1/session/logout",{method:"POST",credentials:"same-origin"}); }catch(e){}
+    close(); location.reload();
+  });
+})();
+// annunciator counts: NOT derived from the SESSIONS fixture — that band mix (AUTO/AUTO_NOTICE)
+// cannot exist live (mutation is OFF, the estate is entirely POLL_PAUSE). The markup's own "—"
+// placeholders (#annun) stand until liveAdopt() recomputes real counts from
+// liveState.governance.bands (see modules/_live/js.txt).
+// nav badges
+(function(){const bd={awaiting:SESSIONS.filter(s=>s.status==="awaiting").length,live:SESSIONS.filter(s=>s.live).length,dev:SESSIONS.filter(s=>s.verdict==="deviation").length,alerts:ALERTS.filter(a=>a.state==="active").length,estate:ESTATE.nodes.length};
+  $$("[data-badge]").forEach(el=>{const k=el.dataset.badge;if(bd[k]!=null)el.textContent=bd[k];});})();
+
+/* ---------------- clock + liveness sim ---------------- */
+let t=new Date(2026,6,16,14,31,12);
+function tick(){t=new Date(t.getTime()+1000);$("#clock").textContent=t.toTimeString().slice(0,8);}
+tick();setInterval(tick,1000);
+// diegetic liveness: advance the executing session through its stages
+if(!reduceMotion){
+  let phase=0;
+  setInterval(()=>{
+    const s=SESSIONS.find(x=>x.id==="s-6c55");
+    if(!s)return;
+    phase++;
+    if(phase===3&&!s.stage.verified){s.stage.verified=1;s.status="verified";s.verdict="match";s.live=false;
+      if(location.hash.replace("#","")==="command"||!location.hash)route("command");
+      toast("s-6c55 verified: MATCH — prune completed, no cascade beyond the predicted map.","");}
+  },4200);
+}
+
+/* ---------------- global keys ---------------- */
+addEventListener("keydown",e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"){e.preventDefault();openPal();}
+  else if(e.key==="Escape"){closeDrawer();closePal();}
+  else if(!/input|textarea/i.test(document.activeElement.tagName)){
+    const map={g:null};
+    if(e.key==="g"){/* two-key nav could go here */}
+  }
+});
+$("#scrim").addEventListener("click",closeDrawer);
+
+/* ---------------- module registration (extension point) ---------------- */
+// addNav(group, viewKey, label, iconInner, badgeKey?) — appends a nav entry into the named rail
+// group (creating the group label if new), wired into route(). Modules also do:
+//   views[key]=fn; VIEW_META[key]=[title,desc]; FACETS[key]=[…] (optional)
+function addNav(group, viewKey, label, iconInner, badgeKey){
+  const rail=$("#rail"); const foot=rail.querySelector(".foot");
+  let grp=[...rail.querySelectorAll(".lbl.grp")].find(g=>g.textContent.trim().toLowerCase()===group.toLowerCase());
+  let anchor=foot;
+  if(!grp){ grp=h("div",{class:"lbl grp"},group); rail.insertBefore(grp,foot); }
+  else{
+    anchor=grp.nextElementSibling;
+    while(anchor && anchor!==foot && !anchor.classList.contains("grp")) anchor=anchor.nextElementSibling;
+    if(!anchor) anchor=foot;
+  }
+  const a=h("a",{class:"navi","data-view":viewKey,href:"#"+viewKey,
+    onclick:e=>{e.preventDefault();route(viewKey);}},
+    h("svg",{class:"ic",viewBox:"0 0 16 16",fill:"none",stroke:"currentColor","stroke-width":"1.4",html:iconInner}),
+    h("span",{class:"t"},label),
+    badgeKey?h("span",{class:"n","data-badge":badgeKey},"—"):null);
+  rail.insertBefore(a,anchor);
+}
+
+/*EXT_JS*/
+
+/* ---------------- boot: fail-closed ----------------
+   revealConsole is the ONLY place #appRoot is unhidden, #authGate is hidden, and route() first runs —
+   called from liveAdopt() (defined earlier, wrapped by skills/wiki above) once a session is verified.
+   Nothing reaches it speculatively: on a 401, liveAdopt calls liveLoginOverlay() instead and returns.
+   The hashchange listener is guarded the same way — a hash edited before auth just waits; it cannot
+   populate #view (and thus the DOM) ahead of authentication. */
+let __consoleRevealed = false;
+function revealConsole(){
+  __consoleRevealed = true;
+  const appEl=$("#appRoot"); if(appEl) appEl.hidden=false;
+  const gate=$("#authGate"); if(gate) gate.hidden=true;
+  route((location.hash||"#command").replace("#",""));
+}
+addEventListener("hashchange",()=>{
+  if(!__consoleRevealed) return;
+  const n=location.hash.replace("#","");if(views[n])route(n);
+});
+
+/* boot: only ever engages against a real backend — file:// and static hosting skip silently (the
+   gate then simply has no backend to verify against and stays up, same as an unreachable one). */
+if(location.protocol!=="file:"){
+  liveAdopt().catch(()=>{ /* stay on the gate */ });
+}
+</script>

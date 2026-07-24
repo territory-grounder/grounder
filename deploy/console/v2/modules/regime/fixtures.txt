@@ -1,0 +1,39 @@
+/* REGIME module (rgm-) — the Actuation Regime Engine's operator surface (spec/017 T-017-7, REQ-1716).
+   Answers "which lane did the engine route this target to?", "what did each lane launch and under which
+   op-class?", "how did the deferred verify resolve?", and "which lanes carry any traffic?" — all from the
+   REAL persisted 0020 projections served by the read-only /v1/regime read surface (RegimePage: the
+   append-only regime_resolution / regime_actuation / deferred_verdict tails + a per-lane coverage
+   roll-up). Grounded field-for-field in core/httpapi/regime.go — no invented field.
+   NON-SECRET by construction (INV-13): target/regime/lane slugs, rule ids, op-classes, AWX job ids,
+   verdict/graduation slugs, and the AWX token only as a SecretRef REFERENCE (token_ref, e.g.
+   "store:awx.token") — never a token value.
+   Honesty contract (the skills-surface pattern): a clearly-labeled FIXTURE renders the shape in preview;
+   on a live session the four served arrays replace it; a 503 fail-closed endpoint renders an honest
+   error state (never the fixture — fabricating actuation-audit rows is exactly what INV-15 forbids); an
+   empty spine (Shadow keeps the audits EMPTY by design, before the flip) renders honest empty states.
+   The /v1/regime payload carries NO mode enum — posture is DERIVED honestly from the worker mutation
+   gate (liveState.mutation) + the documented Shadow-empties-the-audits contract, never asserted live. */
+const RGM_FIX = (() => {
+  const t = (min) => new Date(Date.now() - min * 60000).toISOString();
+  return {
+    resolutions: [
+      { target: "librespeed01", regime: "native", lane: "native-ssh", rule_id: "host:librespeed01", outcome: "resolved", created_at: t(6) },
+      { target: "dc1k8s-cp1", regime: "gitops", lane: "gitops-mr", rule_id: "class:kubernetes", outcome: "resolved", created_at: t(23) },
+      { target: "awx-managed-web", regime: "awx-job", lane: "awx-job", rule_id: "group:awx-web", outcome: "resolved", created_at: t(51) },
+      { target: "dc2fw01", regime: "", lane: "", rule_id: "", outcome: "refused", created_at: t(74) },
+    ],
+    actuations: [
+      { action_id: "a1c3e5f7b9d02468", lane: "native-ssh", job_template_id: "", op_class: "service-restart", job_id: "", token_ref: "file:/secrets/one_key", created_at: t(6) },
+      { action_id: "b2d4f6a8c0e13579", lane: "awx-job", job_template_id: "42", op_class: "package-update", job_id: "1187", token_ref: "store:awx.token", created_at: t(51) },
+    ],
+    deferred_verdicts: [
+      { action_id: "b2d4f6a8c0e13579", job_id: "1187", status: "successful", verdict: "match", graduation: "verified_clean", created_at: t(48) },
+      { action_id: "c3e5a7b9d1f24680", job_id: "1190", status: "failed", verdict: "deviation", graduation: "deviated", created_at: t(120) },
+    ],
+    lane_coverage: [
+      { lane: "native-ssh", resolutions: 1, actuations: 1 },
+      { lane: "awx-job", resolutions: 1, actuations: 1 },
+      { lane: "gitops-mr", resolutions: 1, actuations: 0 },
+    ],
+  };
+})();

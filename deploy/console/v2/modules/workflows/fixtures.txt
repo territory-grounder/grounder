@@ -1,0 +1,191 @@
+/* WORKFLOWS fixtures — REPRESENTATIVE PREVIEW DATA (labeled in UI; not live). ts=HH:MM:SS, dur=ms, elapsed=s.
+   node: {t:type, lb:label, ts, dur, st:done|active|pending|waiting|floored, src:map|terr|haz, pay, plan[], kids[], gate, band, hash, verdict, cmp{map,terr}, retry, cta} */
+const WF_TOOL_POOL = [
+  {tool:'prometheus', q:'node_filesystem_files_free{instance="dc1k8s-w3",mountpoint="/var/lib/kubelet"}', res:'2.1e5 inodes free · trend −1.4e4/h', dur:520},
+  {tool:'kubectl',    q:'get events -n kube-system --field-selector involvedObject.name=dc1k8s-w3', res:'3× ImageGCFailed (last 14:01:52) · 1× EvictionThresholdMet', dur:940},
+  {tool:'librenms',   q:'health-snapshot dc1k8s-w3 sensors=disk,mem', res:'disk crit · mem ok (61%) · no new alerts in window', dur:310},
+  {tool:'prometheus', q:'predict_linear(node_filesystem_files_free{...}[1h], 4*3600)', res:'projects inode exhaustion in 3h41m at current rate', dur:610}
+];
+
+const WF_RUNS = [
+ { id:'wf-4189', ref:'#4189', title:'Inode exhaustion — kubelet imageGC tune', host:'dc1k8s-w3', site:'dc1',
+   band:'notice', status:'running', live:true, elapsed:754, risk:0.34, conf:0.81, exec_class:'k8s.workload',
+   reversible:true, blast:3, action:'a3f1c9e2', verdict:null,
+   nodes:[
+    {t:'ingest', lb:'ingested', ts:'14:02:11', dur:42, st:'done', src:'terr',
+     pay:'librenms #88231 disk_util CRIT · dc1k8s-w3 /var/lib/kubelet 97% inodes\nprometheus node_filesystem_files_free breach (2 windows) · crowdsec: none'},
+    {t:'correlate', lb:'correlate', ts:'14:02:12', dur:380, st:'done', src:'terr',
+     pay:'joined 3 alerts across 2 sources → incident window 14:00–14:02\ndedup key: host+mount · suppressed 2 duplicate librenms polls'},
+    {t:'rag', lb:'rag-context', ts:'14:02:12', dur:1900, st:'done', src:'terr',
+     pay:'estate graph: dc1k8s-w3 (role k8s-worker, site dc1) · 41 pods, 6 evictable, PDB headroom 5/6\nrunbook hits: RB-114 "kubelet imageGC thresholds" (0.87) · RB-078 "containerd snapshot leak" (0.61)'},
+    {t:'classify', lb:'classify', ts:'14:02:14', dur:2600, st:'done', src:'map', band:'notice',
+     pay:'band=AUTO_NOTICE — write op on shared worker · reversible · blast 3 ≤ notice ceiling\nconf 0.81 from 4 reasoners · never-auto floor: no match'},
+    {t:'commit', lb:'prediction.commit', ts:'14:02:15', dur:120, st:'done', src:'map', hash:'a3f1c9e2',
+     pay:'predicted end-state committed to ledger (seq pending):',
+     plan:[{op:'change',t:'kubelet: imageGCHighThresholdPercent 85 → 75'},
+           {op:'add',t:'cron: crictl rmi --prune @hourly (TTL 48h)'},
+           {op:'destroy',t:'orphaned containerd snapshots (est 11.2 GiB)'}]},
+    {t:'agent', lb:'agent-loop', ts:'14:02:15', dur:null, st:'active', src:'map',
+     pay:'investigating against live estate · budget 12 tool calls / 90s remaining',
+     kids:[
+      {tool:'prometheus', q:'rate(node_disk_io_time_seconds_total{instance="dc1k8s-w3"}[5m])', st:'done', dur:412, res:'0.93 io-util · sustained since 13:41', retry:0},
+      {tool:'librenms', q:'lookup port-health dc1k8s-w3 → sw1.dc1', st:'done', dur:288, res:'uplink ok · 0 errors 24h · not a network symptom', retry:0},
+      {tool:'kubectl', q:'get pods -A --field-selector spec.nodeName=dc1k8s-w3 -o wide', st:'done', dur:1300, res:'41 pods · 6 evictable · PDB headroom 5/6 (blocked: ingress-ctl)', retry:1},
+      {tool:'prometheus', q:'predict_linear(node_filesystem_files_free{...}[1h], 4*3600)', st:'active', dur:null, res:'projects inode exhaustion in 3h41m at current rate', retry:0}
+     ]},
+    {t:'screen', lb:'screen', ts:null, dur:null, st:'pending', src:'map', pay:null},
+    {t:'gate', lb:'prediction-gate', ts:null, dur:null, st:'pending', src:'map', pay:null},
+    {t:'execute', lb:'execute', ts:null, dur:null, st:'pending', src:'haz',
+     pay:'MUTATION OFF — will render as dry-run preview only'},
+    {t:'verify', lb:'verify', ts:null, dur:null, st:'pending', src:'terr', pay:null}
+   ]},
+
+ { id:'wf-4188', ref:'#4188', title:'BGP flap — dampening proposal upstream-b', host:'dc1fw01', site:'dc1',
+   band:'pause', status:'waiting', live:false, elapsed:5145, risk:0.71, conf:0.64, exec_class:'net.routing',
+   reversible:true, blast:12, action:'f7d20b11', verdict:null,
+   nodes:[
+    {t:'ingest', lb:'ingested', ts:'13:47:02', dur:38, st:'done', src:'terr',
+     pay:'librenms #88190 bgp-session WARN ×7 in 42m · peer upstream-b (hold-timer expiry)'},
+    {t:'correlate', lb:'correlate', ts:'13:47:02', dur:290, st:'done', src:'terr',
+     pay:'7 flap events collapsed → single incident · no config-change events in window'},
+    {t:'rag', lb:'rag-context', ts:'13:47:03', dur:1600, st:'done', src:'terr',
+     pay:'estate: dc1fw01 is site edge · 12 downstream hosts depend on this uplink\nrunbook RB-041 "BGP dampening policy" (0.79)'},
+    {t:'classify', lb:'classify', ts:'13:47:05', dur:3100, st:'done', src:'map', band:'pause',
+     pay:'band=POLL_PAUSE — routing change on site edge · blast 12 > notice ceiling · conf 0.64'},
+    {t:'commit', lb:'prediction.commit', ts:'13:47:05', dur:140, st:'done', src:'map', hash:'f7d20b11',
+     pay:'predicted end-state committed:',
+     plan:[{op:'add',t:'route-map DAMPEN-UPSTREAM-B (half-life 15m, reuse 750)'},
+           {op:'change',t:'peer upstream-b: soft-reconfig inbound'}]},
+    {t:'agent', lb:'agent-loop', ts:'13:47:06', dur:9400, st:'done', src:'map',
+     pay:'3 tool calls · hypothesis: provider-side instability, not local optics',
+     kids:[
+      {tool:'librenms', q:'bgp-peers dc1fw01 — state history 1h', st:'done', dur:340, res:'peer upstream-b flapped 7× in 42m · hold-timer expiry each time', retry:0},
+      {tool:'prometheus', q:'rate(bgp_session_transitions_total{peer="upstream-b"}[30m])', st:'done', dur:510, res:'0.16 transitions/min · above dampening threshold (0.10)', retry:0},
+      {tool:'netbox', q:'circuit lookup upstream-b → provider + maintenance refs', st:'done', dur:780, res:'CID GR-ATH-0117 · no open maintenance window on record', retry:0}
+     ]},
+    {t:'screen', lb:'screen', ts:'13:47:16', dur:620, st:'done', src:'map',
+     pay:'blast radius: 12 hosts downstream of dc1fw01 uplink · worst case: 40s reconvergence\nno never-auto floor match · reversibility: route-map removable'},
+    {t:'gate', lb:'prediction-gate', ts:'13:47:17', dur:180, st:'done', src:'map', gate:'pass',
+     pay:'gate PASS — predicted end-state internally consistent · ledger seq 10412 sealed'},
+    {t:'execute', lb:'execute', ts:null, dur:null, st:'waiting', src:'haz', cta:'approve & execute',
+     pay:'POLL_PAUSE — paused for human approval · page sent to on-call 13:47:18\nheld 1h 25m · re-poll every 300s · auto-expire at 19:47'},
+    {t:'verify', lb:'verify', ts:null, dur:null, st:'pending', src:'terr', pay:null}
+   ]},
+
+ { id:'wf-4186', ref:'#4186', title:'ZFS scrub anomaly — resilver priority', host:'dc2nas01', site:'dc2',
+   band:'auto', status:'done', live:false, elapsed:214, risk:0.12, conf:0.93, exec_class:'storage.zfs',
+   reversible:true, blast:1, action:'6b09dd4e', verdict:'match',
+   nodes:[
+    {t:'ingest', lb:'ingested', ts:'09:14:20', dur:36, st:'done', src:'terr',
+     pay:'librenms #88102 zpool-scrub WARN · tank paused at 41% · 2 cksum errors'},
+    {t:'correlate', lb:'correlate', ts:'09:14:20', dur:210, st:'done', src:'terr', pay:'single-source · no related alerts'},
+    {t:'rag', lb:'rag-context', ts:'09:14:21', dur:1400, st:'done', src:'terr',
+     pay:'estate: dc2nas01 (role nas) · no dependent services in maintenance window\nrunbook RB-129 "scrub/resilver contention" (0.91)'},
+    {t:'classify', lb:'classify', ts:'09:14:22', dur:1900, st:'done', src:'map', band:'auto',
+     pay:'band=AUTO — read-mostly tuning · blast 1 · reversible · conf 0.93'},
+    {t:'commit', lb:'prediction.commit', ts:'09:14:23', dur:96, st:'done', src:'map', hash:'6b09dd4e',
+     plan:[{op:'change',t:'zfs_resilver_min_time_ms 3000 → 5000 (tank)'},
+           {op:'change',t:'scrub: resume with io-priority idle'}]},
+    {t:'agent', lb:'agent-loop', ts:'09:14:23', dur:6200, st:'done', src:'map',
+     pay:'3 tool calls · cksum errors localized to raidz2-0, no data errors',
+     kids:[
+      {tool:'zfs', q:'zpool status -v tank', st:'done', dur:820, res:'scrub paused 41% · 2 cksum errs raidz2-0 · 0 data errors', retry:0},
+      {tool:'prometheus', q:'rate(node_disk_read_bytes_total{instance="dc2nas01"}[10m])', st:'done', dur:430, res:'212 MiB/s sustained — scrub io dominating array', retry:0},
+      {tool:'librenms', q:'sensor history dc2nas01 disk-temp 6h', st:'done', dur:290, res:'max 44°C · within envelope', retry:0}
+     ]},
+    {t:'screen', lb:'screen', ts:'09:14:30', dur:410, st:'done', src:'map',
+     pay:'blast: 1 host · exec_class storage.zfs ≤ AUTO ceiling · no floor match'},
+    {t:'gate', lb:'prediction-gate', ts:'09:14:30', dur:150, st:'done', src:'map', gate:'pass',
+     pay:'gate PASS · ledger seq 10398 sealed'},
+    {t:'execute', lb:'execute (dry-run)', ts:'09:14:31', dur:2300, st:'done', src:'haz',
+     pay:'MUTATION OFF — rendered, not applied:\n$ zfs set … && zpool scrub -p tank  (dry-run diff matched plan 2/2 ops)'},
+    {t:'verify', lb:'verify', ts:'09:17:54', dur:1800, st:'done', src:'terr', verdict:'match',
+     cmp:{map:'scrub resumes · cksum errors plateau ≤ 3 · resilver ETA 02:10 ±10m',
+          terr:'scrub resumed · plateau at 2 errors · ETA 02:06 (−4m) — within envelope'}}
+   ]},
+
+ { id:'wf-4185', ref:'#4185', title:'Conn-pool exhaustion — pgbouncer tune', host:'dc1db01', site:'dc1',
+   band:'notice', status:'floored', live:false, elapsed:96, risk:0.58, conf:0.77, exec_class:'db.config',
+   reversible:true, blast:6, action:'9c4e77aa', verdict:null,
+   nodes:[
+    {t:'ingest', lb:'ingested', ts:'11:32:40', dur:41, st:'done', src:'terr',
+     pay:'prometheus pgbouncer_pools_client_waiting CRIT · dc1db01 · 92 waiting'},
+    {t:'correlate', lb:'correlate', ts:'11:32:40', dur:260, st:'done', src:'terr',
+     pay:'joined with librenms #88144 (db latency WARN) → single incident'},
+    {t:'rag', lb:'rag-context', ts:'11:32:41', dur:1500, st:'done', src:'terr',
+     pay:'estate: dc1db01 tier=db · 6 dependent services\nrunbook RB-092 "idle-in-transaction storms" (0.84)'},
+    {t:'classify', lb:'classify', ts:'11:32:43', dur:2400, st:'done', src:'map', band:'notice',
+     pay:'proposed band=AUTO_NOTICE — pool-size + server_idle_timeout change · conf 0.77'},
+    {t:'commit', lb:'prediction.commit', ts:'11:32:43', dur:110, st:'done', src:'map', hash:'9c4e77aa',
+     plan:[{op:'change',t:'pgbouncer: default_pool_size 40 → 60'},
+           {op:'change',t:'pgbouncer: server_idle_timeout 600 → 120'}]},
+    {t:'agent', lb:'agent-loop', ts:'11:32:44', dur:5100, st:'done', src:'map',
+     pay:'2 tool calls · confirms idle-in-tx storm from app tier',
+     kids:[
+      {tool:'postgres', q:"SELECT count(*) FROM pg_stat_activity WHERE state='idle in transaction'", st:'done', dur:640, res:'318 idle-in-tx · pool exhaustion confirmed', retry:0},
+      {tool:'prometheus', q:'pgbouncer_pools_client_waiting{instance="dc1db01"}', st:'done', dur:380, res:'peak 92 waiting · still climbing', retry:0}
+     ]},
+    {t:'screen', lb:'screen', ts:'11:32:50', dur:520, st:'done', src:'map',
+     pay:'blast: 6 dependent services · reversible · risk 0.58'},
+    {t:'gate', lb:'prediction-gate', ts:'11:32:51', dur:190, st:'floored', src:'haz', gate:'floored',
+     pay:'NEVER-AUTO FLOOR F-03: config-write on tier=db — hard demotion to POLL_PAUSE\nfloor is not overridable by band or confidence · human required · ledger seq 10401 sealed'},
+    {t:'execute', lb:'execute', ts:null, dur:null, st:'pending', src:'haz', pay:'blocked by floor — awaiting human decision'},
+    {t:'verify', lb:'verify', ts:null, dur:null, st:'pending', src:'terr', pay:null}
+   ]},
+
+ { id:'wf-4181', ref:'#4181', title:'PVE memory ballooning drift', host:'dc2pve02', site:'dc2',
+   band:'auto', status:'done', live:false, elapsed:186, risk:0.21, conf:0.85, exec_class:'virt.tuning',
+   reversible:true, blast:4, action:'d18a3c50', verdict:'partial',
+   nodes:[
+    {t:'ingest', lb:'ingested', ts:'08:05:11', dur:44, st:'done', src:'terr',
+     pay:'prometheus balloon target drift > 15% on 4 guests · dc2pve02'},
+    {t:'correlate', lb:'correlate', ts:'08:05:11', dur:230, st:'done', src:'terr', pay:'no co-occurring alerts · isolated to pve02'},
+    {t:'rag', lb:'rag-context', ts:'08:05:12', dur:1300, st:'done', src:'terr',
+     pay:'estate: dc2pve02 (role pve) hosts 11 guests · 4 over balloon target\nrunbook RB-133 "balloon drift after live-migrate" (0.72)'},
+    {t:'classify', lb:'classify', ts:'08:05:13', dur:2100, st:'done', src:'map', band:'auto',
+     pay:'band=AUTO — guest-local tuning · blast 4 guests · conf 0.85'},
+    {t:'commit', lb:'prediction.commit', ts:'08:05:14', dur:100, st:'done', src:'map', hash:'d18a3c50',
+     plan:[{op:'change',t:'4 guests: balloon target re-assert to profile value'}]},
+    {t:'agent', lb:'agent-loop', ts:'08:05:14', dur:8800, st:'done', src:'map',
+     pay:'2 tool calls · api timeouts retried ×2 before clean read',
+     kids:[
+      {tool:'proxmox', q:'GET /nodes/dc2pve02/qemu (balloon info, 11 guests)', st:'done', dur:5200, res:'api timeout ×2 → ok · 4 guests over target (vm-203/207/214/221)', retry:2},
+      {tool:'prometheus', q:'pve_memory_actual_bytes / pve_memory_target_bytes by (vmid)', st:'done', dur:410, res:'drift 17–24% on the 4 flagged guests', retry:0}
+     ]},
+    {t:'screen', lb:'screen', ts:'08:05:24', dur:380, st:'done', src:'map', pay:'blast: 4 guests, no HA groups affected · ≤ AUTO ceiling'},
+    {t:'gate', lb:'prediction-gate', ts:'08:05:24', dur:140, st:'done', src:'map', gate:'pass', pay:'gate PASS · ledger seq 10377 sealed'},
+    {t:'execute', lb:'execute (dry-run)', ts:'08:05:25', dur:1900, st:'done', src:'haz',
+     pay:'MUTATION OFF — rendered, not applied: 4× qm set <vmid> --balloon <profile>'},
+    {t:'verify', lb:'verify', ts:'08:08:17', dur:1600, st:'done', src:'terr', verdict:'partial',
+     cmp:{map:'balloon targets settle ≤ 3.2 GiB on all 4 guests within 10m',
+          terr:'3/4 settled · vm-214 oscillating ±300 MiB — flagged for follow-up'}}
+   ]},
+
+ { id:'wf-4179', ref:'#4179', title:'CrowdSec ban wave — fw table sync', host:'dc1fw01', site:'dc1',
+   band:'auto', status:'done', live:false, elapsed:240, risk:0.18, conf:0.88, exec_class:'sec.blocklist',
+   reversible:true, blast:9, action:'52e6f0b7', verdict:'deviation',
+   nodes:[
+    {t:'ingest', lb:'ingested', ts:'06:58:03', dur:39, st:'done', src:'terr',
+     pay:'crowdsec CAPI push · 412 new decisions incl 3 /24 ranges'},
+    {t:'correlate', lb:'correlate', ts:'06:58:03', dur:240, st:'done', src:'terr', pay:'matched active scan pattern on 9 exposed hosts'},
+    {t:'rag', lb:'rag-context', ts:'06:58:04', dur:1200, st:'done', src:'terr',
+     pay:'estate: fw table sync path dc1fw01 · allowlist AL-office (2 /28 ranges)\nrunbook RB-018 "CAPI wave sync" (0.90)'},
+    {t:'classify', lb:'classify', ts:'06:58:05', dur:1800, st:'done', src:'map', band:'auto',
+     pay:'band=AUTO — blocklist sync is standing-approved class · conf 0.88'},
+    {t:'commit', lb:'prediction.commit', ts:'06:58:06', dur:90, st:'done', src:'map', hash:'52e6f0b7',
+     plan:[{op:'add',t:'412 decisions → fw table crowdsec-capi (TTL per decision)'}]},
+    {t:'agent', lb:'agent-loop', ts:'06:58:06', dur:4300, st:'done', src:'map',
+     pay:'2 tool calls · overlap check against allowlist reported clean (it was not — see verify)',
+     kids:[
+      {tool:'crowdsec', q:'cscli decisions list --origin CAPI --since 30m', st:'done', dur:610, res:'412 decisions · 3 /24 ranges · origins: scan/bruteforce', retry:0},
+      {tool:'prometheus', q:'rate(fw_dropped_packets_total{table="crowdsec-capi"}[10m])', st:'done', dur:340, res:'baseline 4.1k/min before sync', retry:0}
+     ]},
+    {t:'screen', lb:'screen', ts:'06:58:11', dur:350, st:'done', src:'map', pay:'blast: 9 exposed hosts · allowlist overlap check: none found (predicted)'},
+    {t:'gate', lb:'prediction-gate', ts:'06:58:11', dur:130, st:'done', src:'map', gate:'pass', pay:'gate PASS · ledger seq 10361 sealed'},
+    {t:'execute', lb:'execute (dry-run)', ts:'06:58:12', dur:2700, st:'done', src:'haz',
+     pay:'MUTATION OFF — rendered, not applied: fw table replace crowdsec-capi (412 entries)'},
+    {t:'verify', lb:'verify', ts:'07:01:55', dur:2100, st:'done', src:'terr', verdict:'deviation',
+     cmp:{map:'decisions propagate to fw table ≤ 60s · zero collateral on allowlisted ranges',
+          terr:'propagated in 48s · 2 office IPs inside a /24 overblock — COLLATERAL · floor-rule proposal filed (F-07 draft)'}}
+   ]}
+];

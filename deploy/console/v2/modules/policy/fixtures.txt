@@ -1,0 +1,15 @@
+/* POLICY module (pol-) — the Policy Engine surface (spec/015 T-015-12, epic TG-94/TG-106).
+   HONESTY CONTRACT: this surface has NO fixture. Every value it shows is fetched live from the
+   read-only policy API (/v1/policy/{mode,rules,graduation,decisions}) at session adoption — there is
+   no representative/sample data to fall back to. Unauthenticated the console shows only the auth gate;
+   authenticated, an unavailable endpoint (503 fail-closed) renders an honest error state and an empty
+   spine renders an honest empty state, never a fabricated row (INV-15). The payload carries ONLY
+   non-secret metadata (modes, verdicts, bands, op-classes, selectors, counts) — no key material, no
+   argv, no host credential (INV-13). Read-only: mode-change and rule-edit are gated sealed writes wired
+   in a later slice; the packet-tracer needs a worker Decide endpoint that does not exist yet — both are
+   rendered truthfully as disabled/deferred, never fake-functional.
+   State held on liveState (populated by modules/_live/js.txt):
+     liveState.policyMode        — undefined (pre-adopt) | null (503) | PolicyMode
+     liveState.policyRules       — undefined (pre-adopt) | null (503) | PolicyRulesPage
+     liveState.policyGraduation  — undefined (pre-adopt) | null (503) | [PolicyGraduationClass]
+     liveState.policyDecisions   — undefined (pre-adopt) | null (503) | [PolicyDecision] */

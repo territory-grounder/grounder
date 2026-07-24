@@ -1,0 +1,263 @@
+/* ===================== WORKFLOWS module (wf*) ===================== */
+let wfSelId = null;
+let wfOpenSet = {};     // "runId:i" / "runId:i:k<ki>" -> bool (explicit user toggles)
+let wfTimer = null;     // 1s liveness interval (self-clears when view leaves DOM)
+let wfTickN = 0;
+let wfPoolI = 0;
+
+/* ---- live-source seam (T-020-12) ----
+   The beautiful render below is data-source-agnostic. When the live wiring (modules/_live) has adopted real
+   /v1/sessions rows it sets wfRunsSrc to that array (same run/node shape as WF_RUNS) and the whole inspector
+   renders REAL governed walks. Absent that, the representative WF_RUNS fixtures render (labeled design-preview).
+   wfOnSelect, when defined by the live wiring, lazy-loads the selected run's per-step walk from the detail
+   endpoint. This keeps ONE render — the fixture is never a separate, lesser page. */
+let wfRunsSrc = null;
+function wfAllRuns(){ return wfRunsSrc || WF_RUNS; }
+function wfIsLive(){ return !!wfRunsSrc; }
+function wfSelect(id, list, main){
+  wfSelId = id;
+  if(wfIsLive() && typeof wfOnSelect === 'function') wfOnSelect(id); // async: fetch+map the walk, then re-render
+  if(list) wfRenderList(list, main);
+  if(main) wfRenderMain(main);
+}
+
+const wfBandTok = { auto:'--auto', notice:'--notice', pause:'--pause' };
+const wfBandGlyph = { auto:'▣', notice:'◈', pause:'‖' };
+
+function wfDurF(ms){
+  if(ms == null) return '—';
+  if(ms < 1000) return ms + 'ms';
+  if(ms < 60000) return (ms/1000).toFixed(1) + 's';
+  return Math.floor(ms/60000) + 'm ' + String(Math.round(ms%60000/1000)).padStart(2,'0') + 's';
+}
+function wfElapsedF(sec){
+  if(sec < 60) return sec + 's';
+  if(sec < 3600) return Math.floor(sec/60) + 'm ' + String(sec%60).padStart(2,'0') + 's';
+  return Math.floor(sec/3600) + 'h ' + String(Math.floor(sec%3600/60)).padStart(2,'0') + 'm';
+}
+function wfIcon(t){
+  return ({
+    ingest:'<path d="M8 2v7"/><path d="M5 6.5 8 9.5l3-3"/><path d="M2.5 12.5V14h11v-1.5"/>',
+    correlate:'<circle cx="4" cy="4" r="1.7"/><circle cx="12" cy="5.5" r="1.7"/><circle cx="7" cy="12" r="1.7"/><path d="M5.6 4.4l4.7 1M11.2 7l-3.2 3.7M4.6 5.7l1.9 4.7"/>',
+    rag:'<ellipse cx="8" cy="3.5" rx="5" ry="1.8"/><path d="M3 3.5v9c0 1 2.2 1.8 5 1.8s5-.8 5-1.8v-9"/><path d="M3 8c0 1 2.2 1.8 5 1.8S13 9 13 8"/>',
+    classify:'<path d="M2.5 8 8 2.5h5.5V8L8 13.5z"/><circle cx="10.8" cy="5.2" r="1.1"/>',
+    commit:'<path d="M6 2.5 4.5 13.5M11.5 2.5 10 13.5M3 6h10.5M2.5 10H13"/>',
+    agent:'<path d="M13.5 8A5.5 5.5 0 1 1 11.6 3.9"/><path d="M11.5 1.5v2.6h2.6"/>',
+    screen:'<path d="M8 1.5l5.5 2v4.2c0 3.2-2.4 5.6-5.5 6.8-3.1-1.2-5.5-3.6-5.5-6.8V3.5z"/><path d="M5.5 8l1.8 1.8L11 6"/>',
+    gate:'<path d="M3 14V5.5M13 14V5.5M3 5.5 8 2l5 3.5"/><path d="M3 9h10M6 14v-3M10 14v-3"/>',
+    execute:'<path d="M5 3l8.5 5L5 13z"/>',
+    verify:'<path d="M2.5 8.5 6.5 12.5 13.5 4.5"/>'
+  })[t] || '<circle cx="8" cy="8" r="5"/>';
+}
+function wfIcEl(t){
+  return h('span',{class:'wf-ic', html:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">' + wfIcon(t) + '</svg>'});
+}
+function wfBandChip(b){
+  return h('span',{class:'wf-chip', style:'color:var(' + wfBandTok[b] + ')'}, h('span',{class:'g'}, wfBandGlyph[b]), bandName[b]);
+}
+function wfVerdictChip(v){
+  const m = {match:['MATCH','--match','✓'], partial:['PARTIAL','--partial','◐'], deviation:['DEVIATION','--deviation','✕']}[v];
+  return h('span',{class:'wf-chip', style:'color:var(' + m[1] + ')'}, h('span',{class:'g'}, m[2]), m[0]);
+}
+function wfGateChip(g){
+  return g === 'pass'
+    ? h('span',{class:'wf-chip', style:'color:var(--match)'}, h('span',{class:'g'},'✓'), 'PASS')
+    : h('span',{class:'wf-chip wf-mut'}, h('span',{class:'g'},'◆'), 'FLOORED');
+}
+function wfRunChip(r){
+  if(r.verdict) return wfVerdictChip(r.verdict);
+  const m = { running:['RUNNING','--map','▶'], waiting:['AWAITING APPROVAL','--pause','‖'],
+              floored:['FLOORED','--hazard','◆'], failed:['FAILED','--deviation','✕'],
+              done:['DONE','--ink3','✓'] }[r.status] || ['—','--ink4',''];
+  const cls = 'wf-chip' + (r.status === 'floored' ? ' wf-mut' : '');
+  return h('span',{class:cls, style: r.status === 'floored' ? null : 'color:var(' + m[1] + ')'}, h('span',{class:'g'}, m[2]), m[0]);
+}
+function wfFacet(){
+  return (typeof facetState !== 'undefined' && facetState.workflows) || 'all';
+}
+function wfFacetPass(r, k){
+  if(k === 'live') return r.live;
+  if(k === 'gated') return r.status === 'floored' || r.status === 'waiting';
+  if(k === 'verified') return !!r.verdict;
+  return true;
+}
+function wfVisibleRuns(){ return wfAllRuns().filter(r => wfFacetPass(r, wfFacet())); }
+
+/* ---------------- view root ---------------- */
+function wfView(){
+  if(wfTimer){ clearInterval(wfTimer); wfTimer = null; }
+  const vis = wfVisibleRuns();
+  if(!vis.some(r => r.id === wfSelId)) wfSelId = vis[0] ? vis[0].id : null;
+  const root = h('div', {class:'wf-wrap' + (reduceMotion ? '' : ' wf-anim')});
+  const list = h('div', {class:'wf-list'});
+  const main = h('div', {class:'wf-main'});
+  root.append(list, main);
+  wfRenderList(list, main);
+  wfRenderMain(main);
+  wfStartClock(root, main);
+  return root;
+}
+
+/* ---------------- left pane ---------------- */
+function wfRenderList(list, main){
+  list.replaceChildren();
+  const runs = wfVisibleRuns();
+  list.append(h('div',{class:'wf-lhead'},
+    'Runs · ' + runs.length + '/' + wfAllRuns().length,
+    wfIsLive()
+      ? h('span',{class:'wf-fix', style:'color:var(--match)', title:'Live — assembled from the governance spine (/v1/sessions)'}, 'live')
+      : h('span',{class:'wf-fix', title:'Design preview — representative fixtures, not live telemetry'}, 'fixture data')));
+  runs.forEach(r => {
+    list.append(h('div',{class:'wf-run' + (r.id === wfSelId ? ' sel' : ''),
+        onclick: () => wfSelect(r.id, list, main)},
+      h('span',{class:'wf-stripe', style:'background:var(' + wfBandTok[r.band] + ')'}),
+      h('div',{class:'wf-rmid'},
+        h('div',{class:'wf-rt'}, h('span',{class:'wf-ref'}, r.ref), h('span',{class:'wf-rtitle'}, r.title)),
+        h('div',{class:'wf-rb'}, h('span',{class:'wf-host'}, r.host), wfRunChip(r))),
+      h('div',{class:'wf-rright'},
+        h('span', Object.assign({class:'wf-el'}, r.live ? {'data-wf-clock': r.id} : {}), wfElapsedF(r.elapsed)),
+        h('span',{class:'wf-bandsm', style:'color:var(' + wfBandTok[r.band] + ')'}, bandName[r.band]))));
+  });
+  if(!runs.length) list.append(h('div',{class:'wf-empty'}, 'No runs match this facet.'));
+}
+
+/* ---------------- right pane ---------------- */
+function wfRenderMain(main){
+  if(!main) return; // a detached/rapidly-replaced node's onclick can pass a null container — no-op, never throw
+  const st = main.scrollTop;
+  main.replaceChildren();
+  const r = wfAllRuns().find(x => x.id === wfSelId);
+  if(!r){ main.append(h('div',{class:'wf-empty'}, 'Select a run.')); return; }
+  main.append(wfHead(r));
+  // Live runs lazy-load their walk from /v1/sessions/{ref}; reflect that honestly instead of an empty timeline.
+  if(r._err !== undefined && r._err !== null){
+    main.append(h('div',{class:'wf-empty'}, r._err === 404
+      ? 'That session was not found (unknown or unauthorized reference).'
+      : 'The trace endpoint is unavailable (' + r._err + ') — retry.'));
+  } else if(r._loading){
+    main.append(h('div',{class:'wf-empty'}, 'Loading the governed walk…'));
+  } else if(wfIsLive() && (!r.nodes || !r.nodes.length)){
+    main.append(h('div',{class:'wf-empty'}, 'This session recorded no decision boundaries yet.'));
+  } else {
+    main.append(wfTimeline(r));
+  }
+  main.scrollTop = st;
+}
+function wfMet(k, ...vals){ return h('div',{class:'wf-met'}, k ? h('span',{class:'wf-mk'}, k) : null, ...vals); }
+function wfMeter(v,kind){ const c = kind==='risk' ? (v<0.33?'var(--match)':v<0.66?'var(--partial)':'var(--deviation)') : 'var(--map)';
+  return h('span',{class:'wf-meter'}, h('span',{class:'wf-meterf', style:'width:' + pct(v) + '%;background:' + c})); }
+function wfHead(r){
+  return h('div',{class:'wf-head'},
+    h('div',{class:'wf-h1'},
+      wfBandChip(r.band),
+      h('span',{class:'wf-htitle'}, r.title),
+      h('span',{class:'wf-ref'}, r.ref + ' · ' + r.host),
+      h('span',{class:'wf-hclock'},
+        wfRunChip(r),
+        h('span',{class:'wf-mk'}, 'elapsed'),
+        h('span', Object.assign({class:'wf-el'}, r.live ? {'data-wf-clock': r.id} : {}), wfElapsedF(r.elapsed)))),
+    h('div',{class:'wf-h2'},
+      wfMet('exec', h('span',{class:'wf-mv'}, r.exec_class)),
+      wfMet('reversible', h('span',{class:'wf-mv' + (r.reversible ? '' : ' bad')}, r.reversible ? 'yes' : 'NO')),
+      wfMet('risk', wfMeter(r.risk,'risk'), h('span',{class:'wf-mv'}, r.risk.toFixed(2))),
+      wfMet('conf', wfMeter(r.conf), h('span',{class:'wf-mv'}, r.conf.toFixed(2))),
+      wfMet('blast', h('span',{class:'wf-mv'}, r.blast + (r.blast === 1 ? ' host' : ' hosts'))),
+      wfMet('action', h('span',{class:'wf-hash'}, r.action)),
+      wfMet('', h('span',{class:'wf-chip wf-mut', title:'One-way MUTATION switch is OFF — all actuation renders as dry-run / read-only preview'},
+        h('span',{class:'g'},'◆'), 'MUTATION OFF'))));
+}
+function wfTimeline(r){
+  const maxDur = Math.max(1, ...r.nodes.map(n => n.dur || 0));
+  return h('div',{class:'wf-tl'}, r.nodes.map((n, i) => wfNodeEl(r, n, i, maxDur)));
+}
+function wfPayEl(n){
+  if(!n.pay && !n.plan) return null;
+  const cls = 'wf-pay p-' + (n.src === 'haz' ? 'haz' : n.src === 'map' ? 'map' : 'terr');
+  const kids = [];
+  if(n.pay) kids.push(n.pay);
+  if(n.plan) kids.push(...n.plan.map(p =>
+    h('span',{class:'op op-' + p.op}, ({add:'+ ', change:'~ ', destroy:'− '})[p.op] + p.t)));
+  return h('div',{class:cls}, ...kids);
+}
+function wfCmpEl(n){
+  if(!n.cmp) return null;
+  return h('div',{class:'wf-cmp'},
+    h('span',{class:'ck map'}, 'MAP'), h('span',{class:'cv'}, n.cmp.map),
+    h('span',{class:'ck terr'}, 'TERRITORY'), h('span',{class:'cv'}, n.cmp.terr));
+}
+function wfKidEls(r, i, k, ki){
+  const key = r.id + ':' + i + ':k' + ki;
+  const open = !!wfOpenSet[key];
+  const canOpen = !!k.res && k.st !== 'active';
+  const row = h('div',{class:'wf-kid',
+      onclick: canOpen ? (e) => { wfOpenSet[key] = !open; wfRenderMain(e.currentTarget.closest('.wf-main')); } : null},
+    h('span',{class:'wf-ktool'}, k.tool),
+    h('span',{class:'wf-kq'}, k.q + (k.st === 'active' && !reduceMotion ? ' ▌' : '')),
+    k.retry ? h('span',{class:'wf-retry'}, 'retry ×' + k.retry) : null,
+    h('span',{class:'wf-kdur'}, k.st === 'active' ? '···' : wfDurF(k.dur)),
+    h('span',{class:'wf-kst k-' + k.st}, ({done:'✓', active:'●', failed:'✕'})[k.st] || ''));
+  const out = [row];
+  if(open) out.push(h('div',{class:'wf-kres'}, k.res));
+  return out;
+}
+function wfNodeEl(r, n, i, maxDur){
+  const key = r.id + ':' + i;
+  const open = key in wfOpenSet ? wfOpenSet[key] : (n.st === 'active' || n.st === 'waiting' || n.st === 'floored');
+  const hasPay = !!(n.pay || n.plan || n.cmp || n.cta);
+  const dotCls = 'wf-dot d-' + (n.t === 'verify' && n.verdict ? 'verdict-' + n.verdict : n.st);
+  const hdr = h('div', Object.assign({class:'wf-nh' + (hasPay ? ' click' : '')},
+      hasPay ? {onclick: (e) => { wfOpenSet[key] = !open; wfRenderMain(e.currentTarget.closest('.wf-main')); }} : {}),
+    wfIcEl(n.t),
+    h('span',{class:'wf-lb'}, n.lb),
+    n.band ? wfBandChip(n.band) : null,
+    n.hash ? h('span',{class:'wf-hash'}, n.hash) : null,
+    n.gate ? wfGateChip(n.gate) : null,
+    n.t === 'verify' && n.verdict ? wfVerdictChip(n.verdict) : null,
+    n.st === 'waiting' ? h('span',{class:'wf-chip', style:'color:var(--pause)'}, h('span',{class:'g'},'‖'), 'PAUSED') : null,
+    n.retry ? h('span',{class:'wf-retry'}, 'retry ×' + n.retry) : null,
+    h('span',{class:'wf-sp'}),
+    n.dur != null ? h('span',{class:'wf-db'},
+      h('span',{class:'wf-dbf', style:'width:' + Math.max(4, Math.round(100 * Math.sqrt(n.dur / maxDur))) + '%'})) : null,
+    h('span',{class:'wf-durv'}, n.st === 'active' ? '···' : wfDurF(n.dur)),
+    h('span',{class:'wf-ts'}, n.ts || ''),
+    h('span',{class:'wf-chev'}, hasPay ? (open ? '▾' : '▸') : ''));
+  return h('div',{class:'wf-node st-' + n.st},
+    h('div',{class:'wf-rail' + (n.st === 'active' ? ' wf-flow' : '')}, h('span',{class:dotCls})),
+    h('div',{class:'wf-card'},
+      hdr,
+      open ? wfPayEl(n) : null,
+      open ? wfCmpEl(n) : null,
+      n.kids ? h('div',{class:'wf-kids'}, n.kids.map((k, ki) => wfKidEls(r, i, k, ki)).flat()) : null,
+      open && n.cta ? h('div',{class:'wf-cta'},
+        h('button',{class:'wf-btn', disabled:true}, n.cta),
+        h('span',{class:'wf-gnote'}, 'MUTATION OFF — read-only preview')) : null));
+}
+
+/* ---------------- liveness: 1s clock + advancing run (reduceMotion-guarded) ---------------- */
+function wfStartClock(root, main){
+  wfTimer = setInterval(() => {
+    if(!document.contains(root)){ clearInterval(wfTimer); wfTimer = null; return; }
+    wfTickN++;
+    WF_RUNS.forEach(r => { if(r.live) r.elapsed++; });
+    $$('[data-wf-clock]').forEach(el => {
+      const r = WF_RUNS.find(x => x.id === el.getAttribute('data-wf-clock'));
+      if(r) el.textContent = wfElapsedF(r.elapsed);
+    });
+    if(!reduceMotion && wfTickN % 6 === 0) wfAdvance(main);
+  }, 1000);
+}
+function wfAdvance(main){
+  if(wfIsLive()) return; // live runs update from the real SSE step channel, never a client-side simulation
+  const r = WF_RUNS.find(x => x.live && !x._advDone);
+  if(!r) return;
+  const ag = r.nodes.find(n => n.t === 'agent' && n.st === 'active');
+  if(!ag || !ag.kids) return;
+  const act = ag.kids.find(k => k.st === 'active');
+  if(act){ act.st = 'done'; if(act.dur == null) act.dur = 300 + Math.round(Math.random() * 1400); }
+  if(ag.kids.length >= 9){ r._advDone = true; }
+  else {
+    const nx = WF_TOOL_POOL[wfPoolI % WF_TOOL_POOL.length]; wfPoolI++;
+    ag.kids.push({tool: nx.tool, q: nx.q, st:'active', dur: null, res: nx.res, retry: 0});
+  }
+  if(wfSelId === r.id) wfRenderMain(main);
+}

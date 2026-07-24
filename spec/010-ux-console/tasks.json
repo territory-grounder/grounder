@@ -1,0 +1,167 @@
+{
+  "spec": "010-ux-console",
+  "tasks": [
+    {
+      "id": "T-010-1",
+      "title": "frontend/ scaffold: Vite+React+TS+Tailwind+shadcn, generated OpenAPI client, TanStack Query, SSE client, a11y baseline, fail-safe guarded state",
+      "files_owned": [
+        "frontend/package.json",
+        "frontend/vite.config.ts",
+        "frontend/tailwind.config.ts",
+        "frontend/src/main.tsx",
+        "frontend/src/app.tsx",
+        "frontend/src/api/generated-client.ts",
+        "frontend/src/api/query-client.ts",
+        "frontend/src/api/sse.ts",
+        "frontend/src/a11y/baseline.ts",
+        "frontend/src/lib/guarded-state.ts"
+      ],
+      "deps": [],
+      "req_ids": ["REQ-601", "REQ-613", "REQ-614", "REQ-615", "REQ-616"],
+      "acceptance": {
+        "feature": "ux-console.feature",
+        "scenarios": [
+          "The console builds its API layer only from the generated OpenAPI client",
+          "A dropped SSE stream shows a disconnected indicator and reconnects",
+          "Interactive console components conform to WAI-ARIA",
+          "The console never enforces a safety decision client-side",
+          "An API error renders the restrictive state"
+        ]
+      },
+      "budget": { "max_loc_delta": 600, "max_wall_clock_minutes": 120 },
+      "status": "completed"
+    },
+    {
+      "id": "T-010-2",
+      "title": "Read-only-to-operational mode: mutation_enabled + per-caller capability gating",
+      "files_owned": [
+        "frontend/src/mode/mutation-mode.ts",
+        "frontend/src/mode/mode-provider.tsx"
+      ],
+      "deps": ["T-010-1"],
+      "req_ids": ["REQ-602", "REQ-603"],
+      "acceptance": {
+        "feature": "ux-console.feature",
+        "scenarios": [
+          "In read-only mode the console exposes no mutating control",
+          "When mutation is enabled an authorized operator gains operational controls"
+        ]
+      },
+      "budget": { "max_loc_delta": 250, "max_wall_clock_minutes": 60 },
+      "status": "completed"
+    },
+    {
+      "id": "T-010-3",
+      "title": "Approval console panel: pending-decision feed, RBAC-gated approve/veto/handoff with server re-check",
+      "files_owned": [
+        "frontend/src/panels/approval/approval-console.tsx",
+        "frontend/src/panels/approval/decision-card.tsx",
+        "frontend/src/panels/approval/approval-actions.ts"
+      ],
+      "deps": ["T-010-2"],
+      "req_ids": ["REQ-604", "REQ-605"],
+      "acceptance": {
+        "feature": "ux-console.feature",
+        "scenarios": [
+          "The approval console shows the plan, prediction, and reversibility signals for a pending decision",
+          "An approver action is gated by role and re-checked server-side",
+          "A non-approver cannot act on a pending decision"
+        ]
+      },
+      "budget": { "max_loc_delta": 450, "max_wall_clock_minutes": 90 },
+      "status": "completed"
+    },
+    {
+      "id": "T-010-4",
+      "title": "ActionManifest timeline + replay: one visual chain keyed by action_id, reconstruction-not-re-run",
+      "files_owned": [
+        "frontend/src/panels/manifest/manifest-timeline.tsx",
+        "frontend/src/panels/manifest/replay.ts"
+      ],
+      "deps": ["T-010-2"],
+      "req_ids": ["REQ-606", "REQ-607"],
+      "acceptance": {
+        "feature": "ux-console.feature",
+        "scenarios": [
+          "The ActionManifest timeline renders one chain keyed by the action id",
+          "Replaying a completed manifest reconstructs the chain without re-executing"
+        ]
+      },
+      "budget": { "max_loc_delta": 400, "max_wall_clock_minutes": 90 },
+      "status": "completed"
+    },
+    {
+      "id": "T-010-5",
+      "title": "Tamper-evident ledger view: server-computed chain-verification status surfaced verbatim",
+      "files_owned": [
+        "frontend/src/panels/ledger/ledger-view.tsx",
+        "frontend/src/panels/ledger/chain-status.ts"
+      ],
+      "deps": ["T-010-2"],
+      "req_ids": ["REQ-608"],
+      "acceptance": {
+        "feature": "ux-console.feature",
+        "scenarios": [
+          "The ledger view surfaces the server-computed chain verification status",
+          "A broken ledger chain is shown as tamper-detected"
+        ]
+      },
+      "budget": { "max_loc_delta": 350, "max_wall_clock_minutes": 75 },
+      "status": "completed"
+    },
+    {
+      "id": "T-010-6",
+      "title": "Explainability panel: retrieval context, banding signals, execution class, confidence trajectory, tool-result evidence",
+      "files_owned": [
+        "frontend/src/panels/explain/explainability-panel.tsx"
+      ],
+      "deps": ["T-010-2"],
+      "req_ids": ["REQ-609"],
+      "acceptance": {
+        "feature": "ux-console.feature",
+        "scenarios": [
+          "The explainability panel shows the banding signals, execution class, and tool-result evidence"
+        ]
+      },
+      "budget": { "max_loc_delta": 300, "max_wall_clock_minutes": 75 },
+      "status": "completed"
+    },
+    {
+      "id": "T-010-7",
+      "title": "Autonomy-band + per-layer kill-switch controls: policy-API writes, RBAC-gated, audited, confirm-before-disable",
+      "files_owned": [
+        "frontend/src/panels/controls/autonomy-controls.tsx",
+        "frontend/src/panels/controls/kill-switch.ts"
+      ],
+      "deps": ["T-010-2"],
+      "req_ids": ["REQ-610", "REQ-611"],
+      "acceptance": {
+        "feature": "ux-console.feature",
+        "scenarios": [
+          "Autonomy-band and kill-switch controls call the policy API and are RBAC-gated",
+          "A kill-switch reflects the disabled state only after the API confirms it"
+        ]
+      },
+      "budget": { "max_loc_delta": 350, "max_wall_clock_minutes": 90 },
+      "status": "completed"
+    },
+    {
+      "id": "T-010-8",
+      "title": "Admin panel: users, RBAC role assignments, on-call rotation/escalation, per-module enablement",
+      "files_owned": [
+        "frontend/src/panels/admin/admin-panel.tsx",
+        "frontend/src/panels/admin/rbac-forms.tsx"
+      ],
+      "deps": ["T-010-2"],
+      "req_ids": ["REQ-612"],
+      "acceptance": {
+        "feature": "ux-console.feature",
+        "scenarios": [
+          "The admin panel manages users, roles, on-call, and modules"
+        ]
+      },
+      "budget": { "max_loc_delta": 450, "max_wall_clock_minutes": 90 },
+      "status": "completed"
+    }
+  ]
+}

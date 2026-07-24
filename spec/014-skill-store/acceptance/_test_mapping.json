@@ -1,0 +1,143 @@
+{
+  "feature": "skill-store.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes (must name a test); pending = specified behavior whose implementation does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior, INV-22). All scenarios will drive the real core/skillstore state machine + store-backed composer + trial engine with in-memory fakes; pgx implementations are integration-tested under compose.",
+  "scenarios": [
+    {
+      "name": "A version row is created only with a rationale and a valid predicate",
+      "req": "REQ-1301",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "Every status transition goes through Transition and lands in the ledger",
+      "req": "REQ-1301",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "A second production version structurally supersedes the first",
+      "req": "REQ-1302",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "A draft targeting a pinned skill is rejected",
+      "req": "REQ-1305",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "Composition from the store is a pure function of typed signals",
+      "req": "REQ-1303",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "A store failure composes the compiled registry in full and records the fallback",
+      "req": "REQ-1304",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "A pinned skill composes its compiled body even when a store row targets it",
+      "req": "REQ-1305",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "The composed skill list is recorded so the seed is reconstructable",
+      "req": "REQ-1303",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "The library read surface exposes versions with rationale and scores",
+      "req": "REQ-1311",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "An unauthenticated skill read is refused",
+      "req": "REQ-1311",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "A machine principal has no write route",
+      "req": "REQ-1311",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "An operator write without a rationale is refused",
+      "req": "REQ-1301",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "Arm assignment is deterministic, idempotent, and rejects malformed refs",
+      "req": "REQ-1306",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "The finalizer sweeps timeouts before finalizing",
+      "req": "REQ-1308",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "Graduation requires samples, lift, the Welch test, and a healthy safety dimension",
+      "req": "REQ-1308",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "A trial that cannot complete at the observed session rate is refused",
+      "req": "REQ-1309",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "A tripped breaker auto-retires the graduate and restores the prior production version",
+      "req": "REQ-1310",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "A generated draft carries its rationale and has no effect until admitted",
+      "req": "REQ-1312",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "A draft that regresses the regression set is not admitted to a trial",
+      "req": "REQ-1307",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "The sealed holdout is not read during admission",
+      "req": "REQ-1307",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "The creation cron generates for a regressed dimension, admits, and starts one trial",
+      "req": "REQ-1314",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "The creation cron refuses to start a trial that traffic cannot complete",
+      "req": "REQ-1314",
+      "status": "present",
+      "test": "TestSkillStoreAcceptance"
+    },
+    {
+      "name": "The trial dashboard exposes arm health and assignment staleness",
+      "req": "REQ-1313",
+      "status": "pending"
+    }
+  ]
+}

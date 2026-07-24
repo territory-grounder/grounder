@@ -1,0 +1,302 @@
+{
+  "spec": "014-skill-store",
+  "tasks": [
+    {
+      "id": "T-014-1",
+      "title": "Migration + core/skillstore: four tables (CHECK'd enums, one-production + one-active-trial partial unique indexes), the single Transition state machine with mandatory rationale + ledger append, row validation (predicate vocabulary, pinned rejection, 8KiB body cap)",
+      "files_owned": [
+        "core/db/migrations/0009_skill_store.up.sql",
+        "core/db/migrations/0009_skill_store.down.sql",
+        "core/skillstore/skillstore.go",
+        "core/skillstore/transition.go",
+        "core/skillstore/validate.go",
+        "core/skillstore/mem.go",
+        "core/db/skillstore.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-1301",
+        "REQ-1302",
+        "REQ-1305"
+      ],
+      "acceptance": {
+        "feature": "skill-store.feature",
+        "scenarios": [
+          "A version row is created only with a rationale and a valid predicate",
+          "Every status transition goes through Transition and lands in the ledger",
+          "A second production version structurally supersedes the first",
+          "A draft targeting a pinned skill is rejected"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 900,
+        "max_wall_clock_minutes": 150
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-014-2",
+      "title": "Compose-from-store: agent/skills/store.go (NewFromStore, declarative predicate evaluation, compiled-order composition, pinned always-compiled, total compiled fallback with recorded reason), boot importer of the compiled library, ComposeSeed activity swap + per-session skill_load record",
+      "files_owned": [
+        "agent/skills/store.go",
+        "agent/skills/store_test.go",
+        "temporal/runner/compose_seed.go",
+        "core/db/skillstore_compose.go"
+      ],
+      "deps": [
+        "T-014-1"
+      ],
+      "req_ids": [
+        "REQ-1303",
+        "REQ-1304",
+        "REQ-1305"
+      ],
+      "acceptance": {
+        "feature": "skill-store.feature",
+        "scenarios": [
+          "Composition from the store is a pure function of typed signals",
+          "A store failure composes the compiled registry in full and records the fallback",
+          "A pinned skill composes its compiled body even when a store row targets it",
+          "The composed skill list is recorded so the seed is reconstructable"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 700,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-014-3",
+      "title": "Read surface: GET /v1/skills, /v1/skills/{name} (version history + rationale log + eval scores + ledger seqs + diffable bodies), /v1/skills/trials \u2014 AuthReadOnly, registered through the mandatory-auth router",
+      "files_owned": [
+        "core/httpapi/skills.go",
+        "core/httpapi/skills_test.go",
+        "core/db/skillstore_read.go"
+      ],
+      "deps": [
+        "T-014-1"
+      ],
+      "req_ids": [
+        "REQ-1311",
+        "REQ-1313"
+      ],
+      "acceptance": {
+        "feature": "skill-store.feature",
+        "scenarios": [
+          "The library read surface exposes versions with rationale and scores",
+          "An unauthenticated skill read is refused"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 500,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-014-4",
+      "title": "Write path: create-draft / admit-to-trial / promote / retire / abort routes on the operator-session principal; machine principals read-only; every write ledger-recorded via Transition",
+      "files_owned": [
+        "core/httpapi/skills_write.go",
+        "core/httpapi/skills_write_test.go",
+        "temporal/skillwrite/skillwrite.go",
+        "cmd/grounder/skills_write.go"
+      ],
+      "deps": [
+        "T-014-3"
+      ],
+      "req_ids": [
+        "REQ-1311",
+        "REQ-1301"
+      ],
+      "acceptance": {
+        "feature": "skill-store.feature",
+        "scenarios": [
+          "A machine principal has no write route",
+          "An operator write without a rationale is refused"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 500,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-014-5",
+      "title": "Trial engine: in-compose blake2b arm assignment (read-before-hash, malformed-ref counter, control-arm elision), WelchOneSided with golden-value tests pinned to the predecessor Python outputs, skill-trial-finalizer Temporal cron (timeout sweep then finalize), traffic-aware start refusal",
+      "files_owned": [
+        "core/skillstore/trial.go",
+        "core/skillstore/welch.go",
+        "core/skillstore/welch_test.go",
+        "core/skillstore/trial_test.go",
+        "core/skillstore/memtrial.go",
+        "core/db/skillstore_trial.go",
+        "temporal/skilltrial/finalizer.go"
+      ],
+      "deps": [
+        "T-014-2",
+        "T-014-4"
+      ],
+      "req_ids": [
+        "REQ-1306",
+        "REQ-1308",
+        "REQ-1309"
+      ],
+      "acceptance": {
+        "feature": "skill-store.feature",
+        "scenarios": [
+          "Arm assignment is deterministic, idempotent, and rejects malformed refs",
+          "The finalizer sweeps timeouts before finalizing",
+          "Graduation requires samples, lift, the Welch test, and a healthy safety dimension",
+          "A trial that cannot complete at the observed session rate is refused"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 900,
+        "max_wall_clock_minutes": 180
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-014-6",
+      "title": "Graduation guards + rollback: holdout-integrity rail (held promotion = row + escalation entry), post-graduation breaker regression watch with auto-retire + prior-production restore + ledger + escalation",
+      "files_owned": [
+        "core/skillstore/graduation.go",
+        "core/skillstore/graduation_test.go"
+      ],
+      "deps": [
+        "T-014-5"
+      ],
+      "req_ids": [
+        "REQ-1308",
+        "REQ-1310"
+      ],
+      "acceptance": {
+        "feature": "skill-store.feature",
+        "scenarios": [
+          "A tripped breaker auto-retires the graduate and restores the prior production version"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 600,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-014-7",
+      "title": "Candidate generation flywheel: eval-failure + resolved-incident draft sources (generate-only, rationale + source on every row, dedup, 8KiB cap), Temporal cron on by default",
+      "files_owned": [
+        "core/skillstore/generate.go",
+        "core/skillstore/flywheel_test.go"
+      ],
+      "deps": [
+        "T-014-4"
+      ],
+      "req_ids": [
+        "REQ-1312"
+      ],
+      "acceptance": {
+        "feature": "skill-store.feature",
+        "scenarios": [
+          "A generated draft carries its rationale and has no effect until admitted"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 600,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-014-8",
+      "title": "Offline admission gate: candidate-vs-production harness run wired to the eval sets (regression must hold, discovery must improve the target dimension, sealed holdout untouched), offline scores stored on the version row",
+      "files_owned": [
+        "core/skillstore/admission.go"
+      ],
+      "deps": [
+        "T-014-5"
+      ],
+      "req_ids": [
+        "REQ-1307"
+      ],
+      "acceptance": {
+        "feature": "skill-store.feature",
+        "scenarios": [
+          "A draft that regresses the regression set is not admitted to a trial",
+          "The sealed holdout is not read during admission"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 500,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-014-9",
+      "title": "Console panels + metrics: library list (fallback banner, status chips, sparklines), editor (predicate builder, mandatory rationale), version diff with ledger links, trial dashboard (dead-man indicator), flywheel feed; Prometheus metric set + runbook",
+      "files_owned": [
+        "frontend/src/panels/skills/library.tsx",
+        "frontend/src/panels/skills/editor.tsx",
+        "frontend/src/panels/skills/diff.tsx",
+        "frontend/src/panels/skills/trials.tsx",
+        "frontend/src/panels/skills/feed.tsx",
+        "core/skillstore/metrics.go",
+        "docs/runbooks/skill-store.md"
+      ],
+      "deps": [
+        "T-014-3",
+        "T-014-5"
+      ],
+      "req_ids": [
+        "REQ-1313"
+      ],
+      "acceptance": {
+        "feature": "skill-store.feature",
+        "scenarios": [
+          "The trial dashboard exposes arm health and assignment staleness"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 1200,
+        "max_wall_clock_minutes": 240
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-014-10",
+      "title": "Flywheel creation-half wiring: daily generator cron (regressed-dimension detection over the rolling judged means, generate-only + dedup), the production offline admission runner (candidate-vs-production on the skill's own recent judged incidents via the shared judge, sealed holdout untouched), and admit->start orchestration wired behind the worker DB block (competence-plane, mutation stays OFF)",
+      "files_owned": [
+        "core/skillstore/flywheel.go",
+        "core/skillstore/creation_test.go",
+        "core/db/skillstore_flywheel.go",
+        "temporal/skillgen/generator.go",
+        "temporal/skillgen/offline.go",
+        "temporal/skillgen/offline_test.go"
+      ],
+      "deps": [
+        "T-014-6",
+        "T-014-7",
+        "T-014-8"
+      ],
+      "req_ids": [
+        "REQ-1314"
+      ],
+      "acceptance": {
+        "feature": "skill-store.feature",
+        "scenarios": [
+          "The creation cron generates for a regressed dimension, admits, and starts one trial",
+          "The creation cron refuses to start a trial that traffic cannot complete"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 900,
+        "max_wall_clock_minutes": 240
+      },
+      "status": "completed"
+    }
+  ]
+}

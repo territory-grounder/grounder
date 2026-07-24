@@ -1,0 +1,344 @@
+/* ============================ SIGNALS view (sig-) ============================
+   Golden-signal telemetry. TERRITORY = observed series (steel, solid).
+   MAP = predicted envelopes/forecasts (indigo, dashed). Out-of-envelope is
+   shaded in the verdict tone. Event markers tie metrics to TG actions.       */
+
+/* svg helper — delegates to the chart-primitives global svgEl when present */
+function sigSvgEl(tag, attrs = {}, ...kids) {
+  if (typeof svgEl === "function") return svgEl(tag, attrs, ...kids);
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === "html") el.innerHTML = v;
+    else if (k.startsWith("on") && typeof v === "function") el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat(Infinity)) { if (k == null || k === false) continue; el.append(k.nodeType ? k : document.createTextNode(k)); }
+  return el;
+}
+const sigRM = (typeof reduceMotion !== "undefined") ? reduceMotion : matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---- deterministic fixture math ---- */
+const sigNoise  = (t, seed) => { const x = Math.sin(t * 12.9898 + seed * 78.233) * 43758.5453; return (x - Math.floor(x)) * 2 - 1; };
+const sigSmooth = u => u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u);
+const sigClamp  = (v, a, b) => Math.max(a, Math.min(b, v));
+const sigClock  = t => { let m = Math.round(sigNOWMIN + t * 60); m = ((m % 1440) + 1440) % 1440;
+  return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
+const sigFmtI   = v => Math.round(v).toLocaleString("en-US");
+const sigTone   = t => `var(--${t})`;
+
+/* ---- series generators (t = hours relative to now; negative = past) ---- */
+function sigP99(t) {
+  let v = 176 + 18 * Math.sin(t * 1.7) + 14 * sigNoise(t, 3);
+  if (t > -1.5 && t <= -0.75)       v += 1560 * sigSmooth((t + 1.5) / 0.28);   // rev 119 regression → ~1.8s
+  else if (t > -0.75 && t <= -0.62) v += 1560 * (1 - sigSmooth((t + 0.75) / 0.13)); // rollback recovery
+  if (t > -0.08)                    v += 150 * sigSmooth((t + 0.08) / 0.08);   // w3 eviction wobble
+  return v;
+}
+const sigP99Lo = t => 150 + 8 * Math.sin(t * 0.9);
+const sigP99Hi = t => 236 + 12 * Math.sin(t * 0.8);
+function sigErr(t) {
+  let v = 0.24 + 0.16 * Math.abs(sigNoise(t, 5));
+  if (t > -1.5 && t <= -0.75)       v += 3.9 * sigSmooth((t + 1.5) / 0.3);
+  else if (t > -0.75 && t <= -0.6)  v += 3.9 * (1 - sigSmooth((t + 0.75) / 0.15));
+  if (t > -0.08)                    v += 0.5 * sigSmooth((t + 0.08) / 0.08);
+  return v;
+}
+function sigThr(t) {
+  let v = 1750 + 220 * Math.sin((t + 2) * 0.26) + 70 * sigNoise(t, 9);
+  if (t > -1.5 && t <= -0.75)       v -= 540 * sigSmooth((t + 1.5) / 0.3);
+  else if (t > -0.75 && t <= -0.58) v -= 540 * (1 - sigSmooth((t + 0.75) / 0.17));
+  if (t > -0.08)                    v -= 170 * sigSmooth((t + 0.08) / 0.08);
+  return v;
+}
+const sigFsW1 = t => 51 + 2.4 * Math.sin(t * 0.4) + 1.2 * sigNoise(t, 11);
+const sigFsW2 = t => 58 + 0.09 * (t + 24) + 1.2 * sigNoise(t, 13);
+const sigFsW3 = t => (t <= -1.5 ? 66 + 0.45 * (t + 1.5) : 66 + 26 * Math.pow(sigClamp((t + 1.5) / 1.5, 0, 1), 1.6)) + 0.8 * sigNoise(t, 15);
+const sigCpuW1 = t => 34 + 9 * Math.sin(t * 1.3) + 6 * sigNoise(t, 17);
+const sigCpuW2 = t => 41 + 8 * Math.sin(t * 1.1 + 2) + 6 * sigNoise(t, 19);
+const sigCpuW3 = t => 47 + 7 * Math.sin(t * 1.6) + 5 * sigNoise(t, 21) + 18 * sigSmooth((t + 1.5) / 1.5);
+/* restart counters are per-bucket: rate/h × bucket width, so totals stay honest across ranges */
+const sigRstW3 = (t, dt) => t > -1.3 ? Math.max(0, Math.round((44 + 26 * sigNoise(t, 23)) * dt)) : (sigNoise(t, 23) > 0.96 ? 1 : 0);
+const sigRstOther = (t, dt) => (sigNoise(t, 29) > 0.92 ? Math.max(1, Math.round(3 * dt)) : 0) + (t > -9.2 && t < -8.9 ? 2 : 0);
+function sigVol(t) {
+  if (t <= -0.10) return 74.5 + ((t + 24) / 24) * 13.8 + 0.25 * sigNoise(t, 31);
+  return 88.2 - 77 * (t + 0.10);                                  // prune drop underway → 80.5 at now
+}
+const sigIops = t => 180 + 60 * Math.abs(sigNoise(t, 33)) + (t > -0.10 ? 720 * sigSmooth((t + 0.10) / 0.06) : 0);
+const sigPbs  = t => 42 + 8 * sigNoise(t, 37) + (t > -0.10 ? 14 * sigSmooth((t + 0.10) / 0.1) : 0);
+
+/* ---- panel catalogue ---- */
+function sigPanels() {
+  return [
+    /* payments-api — consistent domains across ranges so anomalies pop */
+    { id: "p99", sec: "pay", title: "p99 latency", host: "payments-api", unit: "ms", dom: [0, 2000], yt: [0, 500, 1000, 1500, 2000],
+      obs: sigP99, band: { lo: sigP99Lo, hi: sigP99Hi }, devTone: "deviation", fmt: sigFmtI, anom: true, live: true,
+      chips: [{ txt: "▲ DEVIATION — db01 unpredicted", tone: "deviation" }], session: "dc1k8s-w3::payment" },
+    { id: "err", sec: "pay", title: "error rate", host: "payments-api", unit: "%", dom: [0, 6], yt: [0, 2, 4, 6],
+      obs: sigErr, thresholds: [{ v: 1, label: "SLO 1%", tone: "partial" }], fmt: v => v.toFixed(2), anom: false, live: true },
+    { id: "thr", sec: "pay", title: "throughput", host: "payments-api", unit: "req/s", dom: [0, 2400], yt: [0, 800, 1600, 2400],
+      obs: sigThr, fmt: sigFmtI, goodUp: true },
+
+    /* k8s nodes — imagefs & cpu share the 0–100 domain (small-multiple discipline) */
+    { id: "fs", sec: "k8s", title: "imagefs used", host: "k8s w1·w2·w3", unit: "%", dom: [0, 100], yt: [0, 25, 50, 75, 100],
+      multi: [ { k: "w1", f: sigFsW1 }, { k: "w2", f: sigFsW2 }, { k: "w3", f: sigFsW3, hot: true } ],
+      thresholds: [{ v: 85, label: "85 DiskPressure", tone: "deviation" }],
+      forecast: [
+        { from: { t: 0, vf: sigFsW3 }, slope: 20,  label: "no action → 100% at +24m" },
+        { from: { t: 0, vf: sigFsW3 }, slope: -68, floor: 38, label: "after drain+GC → 38%" },
+      ],
+      fmt: v => v.toFixed(1), anom: true, live: true,
+      chips: [{ txt: "◌ POLL_PAUSE — drain a3e91c4f pending", tone: "pause" }], session: "dc1k8s-w3::disk" },
+    { id: "cpu", sec: "k8s", title: "cpu", host: "k8s w1·w2·w3", unit: "%", dom: [0, 100], yt: [0, 25, 50, 75, 100],
+      multi: [ { k: "w1", f: sigCpuW1 }, { k: "w2", f: sigCpuW2 }, { k: "w3", f: sigCpuW3, hot: true } ], fmt: v => v.toFixed(1) },
+    { id: "rst", sec: "k8s", title: "pod restarts", host: "payments-api → w3", unit: "/bucket", dom: [0, 10], yt: [0, 5, 10],
+      bars: { hot: sigRstW3, dim: sigRstOther }, fmt: sigFmtI, anom: true,
+      chips: [{ txt: "47 restarts / 1h — imagefs churn", tone: "ink" }] },
+
+    /* storage */
+    { id: "vol", sec: "stor", title: "volume1 used", host: "dc2nas01", unit: "%", dom: [0, 100], yt: [0, 25, 50, 75, 100],
+      obs: sigVol, fmt: v => v.toFixed(1), anom: true, live: true,
+      futureBand: { lo: t => Math.max(63.5, 80.5 - 26 * sigSmooth(t / 0.55)) - 2.5, hi: t => Math.max(66, 80.5 - 26 * sigSmooth(t / 0.55)) + 2.5, label: "map · settle 66±3%" },
+      chips: [{ txt: "◈ AUTO_NOTICE — verifying", tone: "notice" }], session: "dc2nas01" },
+    { id: "iops", sec: "stor", title: "disk iops", host: "dc2nas01", unit: "io/s", dom: [0, 1200], yt: [0, 400, 800, 1200],
+      obs: sigIops, fmt: sigFmtI, live: true },
+    { id: "pbs", sec: "stor", title: "backup job latency", host: "dc2pve02", unit: "s", dom: [0, 160], yt: [0, 40, 80, 120, 160],
+      obs: sigPbs, futureBand: { lo: t => 42 + 44 * sigSmooth(t / 0.3) - 24, hi: t => 48 + 52 * sigSmooth(t / 0.3) + 18, label: "map · transient predicted" },
+      chips: [{ txt: "◫ predicted blast radius", tone: "map" }], fmt: sigFmtI },
+  ];
+}
+
+/* ---- session lookup: hint is "host" or "host::keyword" ---- */
+function sigFindSession(hint) {
+  if (!hint || typeof SESSIONS === "undefined") return null;
+  const [host, kw] = hint.split("::");
+  return SESSIONS.find(s => s.host === host && (!kw || (s.title || "").toLowerCase().includes(kw))) ||
+         SESSIONS.find(s => s.host === host) || null;
+}
+
+/* ---- one metric panel: header + chart ---- */
+function sigMetricPanel(p, range) {
+  const R = sigRANGES[range], hrs = R.hrs, N = R.n;
+  const hasFut = !!(p.forecast || p.futureBand);
+  const x0 = -hrs, x1 = hasFut ? R.fut : 0;
+  const W = 460, H = 138, L = 34, Rt = W - 8 - (p.multi && !hasFut ? 18 : 0), T = 30, B = H - 16;
+  const X = t => L + (t - x0) / (x1 - x0) * (Rt - L);
+  const Y = v => T + (1 - (sigClamp(v, p.dom[0], p.dom[1]) - p.dom[0]) / (p.dom[1] - p.dom[0])) * (B - T);
+  const samp = f => Array.from({ length: N }, (_, i) => { const t = x0 + (0 - x0) * i / (N - 1); return { t, v: f(t) }; });
+  const path = pts => pts.map((q, i) => (i ? "L" : "M") + X(q.t).toFixed(1) + " " + Y(q.v).toFixed(1)).join("");
+  const svg = sigSvgEl("svg", { viewBox: `0 0 ${W} ${H}`, class: "sig-chart", role: "img",
+    "aria-label": `${p.title} — observed vs predicted, ${range} window` });
+
+  /* forecast zone */
+  if (hasFut) {
+    svg.append(sigSvgEl("rect", { x: X(0), y: T, width: X(x1) - X(0), height: B - T, class: "sig-futz" }),
+      sigSvgEl("text", { x: Rt - 2, y: B - 4, class: "sig-futlbl", "text-anchor": "end" }, "FORECAST · MAP"));
+  }
+  /* grid */
+  for (const v of p.yt) svg.append(
+    sigSvgEl("line", { x1: L, y1: Y(v), x2: Rt, y2: Y(v), class: "sig-grid" }),
+    sigSvgEl("text", { x: L - 4, y: Y(v) + 3, class: "sig-ax", "text-anchor": "end" }, String(v)));
+  for (let t = Math.ceil(x0 / R.step) * R.step; t <= x1 + 1e-9; t += R.step) {
+    svg.append(sigSvgEl("line", { x1: X(t), y1: T, x2: X(t), y2: B, class: "sig-grid sig-gridv" }));
+    if (!(hasFut && Math.abs(t) < 1e-9))  /* "now" label replaces the t=0 tick when a forecast zone exists */
+      svg.append(sigSvgEl("text", { x: X(t), y: H - 4, class: "sig-ax", "text-anchor": t >= x1 - 1e-9 ? "end" : "middle" }, sigClock(t)));
+  }
+  /* thresholds — labels sit left, clear of forecast/end labels on the right */
+  for (const th of p.thresholds || []) svg.append(
+    sigSvgEl("line", { x1: L, y1: Y(th.v), x2: Rt, y2: Y(th.v), class: "sig-thr", stroke: sigTone(th.tone) }),
+    sigSvgEl("text", { x: L + 3, y: Y(th.v) - 3, class: "sig-thrlbl", fill: sigTone(th.tone) }, th.label));
+
+  /* predicted envelope over the past (map) + deviation shading */
+  let obsPts = null;
+  if (p.obs) obsPts = samp(p.obs);
+  if (p.band && obsPts) {
+    const lo = samp(p.band.lo), hi = samp(p.band.hi);
+    svg.append(sigSvgEl("path", { d: path(hi) + lo.slice().reverse().map(q => "L" + X(q.t).toFixed(1) + " " + Y(q.v).toFixed(1)).join("") + "Z", class: "sig-env" }),
+      sigSvgEl("path", { d: path(hi), class: "sig-mapline" }), sigSvgEl("path", { d: path(lo), class: "sig-mapline" }));
+    /* out-of-envelope runs → shaded fill + hot stroke + ▲ tag at peak */
+    const out = obsPts.map((q, i) => q.v > hi[i].v ? 1 : q.v < lo[i].v ? -1 : 0);
+    let i = 0, tagged = false;
+    while (i < N) {
+      if (!out[i]) { i++; continue; }
+      let j = i; while (j < N && out[j] === out[i]) j++;
+      const seg = obsPts.slice(i, j), edge = (out[i] > 0 ? hi : lo).slice(i, j);
+      svg.append(sigSvgEl("path", { d: path(seg) + edge.slice().reverse().map(q => "L" + X(q.t).toFixed(1) + " " + Y(q.v).toFixed(1)).join("") + "Z",
+        class: "sig-dev", fill: sigTone(p.devTone || "deviation") }));
+      svg.append(sigSvgEl("path", { d: path(seg), class: "sig-devline", stroke: sigTone(p.devTone || "deviation") }));
+      if (!tagged && j - i > 2) {
+        const pk = seg.reduce((a, b) => (out[i] > 0 ? b.v > a.v : b.v < a.v) ? b : a);
+        svg.append(sigSvgEl("text", { x: X(pk.t), y: Y(pk.v) - 5, class: "sig-devtag", fill: sigTone(p.devTone || "deviation"),
+          "text-anchor": "middle" }, "▲ dev"));
+        tagged = true;
+      }
+      i = j;
+    }
+  }
+  /* future envelope (map) */
+  if (p.futureBand) {
+    const M = 24, fb = p.futureBand;
+    const fpts = f => Array.from({ length: M }, (_, i) => { const t = x1 * i / (M - 1); return { t, v: f(t) }; });
+    const lo = fpts(fb.lo), hi = fpts(fb.hi);
+    svg.append(sigSvgEl("path", { d: path(hi) + lo.slice().reverse().map(q => "L" + X(q.t).toFixed(1) + " " + Y(q.v).toFixed(1)).join("") + "Z", class: "sig-env" }),
+      sigSvgEl("path", { d: path(hi), class: "sig-mapline" }), sigSvgEl("path", { d: path(lo), class: "sig-mapline" }),
+      sigSvgEl("text", { x: X(x1) - 3, y: Y(hi[M - 1].v) - 5, class: "sig-maplbl", "text-anchor": "end" }, fb.label));
+  }
+  /* forecast rays (map) */
+  for (const fc of p.forecast || []) {
+    const v0 = fc.from.vf(fc.from.t), pts = [];
+    for (let i = 0; i <= 20; i++) { const t = x1 * i / 20; let v = v0 + fc.slope * t;
+      if (fc.floor != null) v = Math.max(fc.floor, v); v = sigClamp(v, p.dom[0], p.dom[1]); pts.push({ t, v }); }
+    svg.append(sigSvgEl("path", { d: path(pts), class: "sig-mapline sig-mapray" }),
+      sigSvgEl("text", { x: X(x1) - 3, y: Y(pts[20].v) + (fc.slope > 0 ? -4 : 9), class: "sig-maplbl", "text-anchor": "end" }, fc.label));
+  }
+  /* observed: multi-node small-multiple or single series (territory) */
+  if (p.multi) {
+    for (const s of p.multi) {
+      const pts = samp(s.f);
+      svg.append(sigSvgEl("path", { d: path(pts), class: s.hot ? "sig-obs" : "sig-obs sig-obsdim" }),
+        sigSvgEl("text", { x: X(0) + 3, y: Y(pts[N - 1].v) + 3, class: s.hot ? "sig-endlbl" : "sig-endlbl sig-endldim" }, s.k));
+    }
+  } else if (p.bars) {
+    const bw = Math.max(1.5, (X(0) - L) / N * 0.55), dt = hrs / (N - 1);
+    for (const [f, cls] of [[p.bars.dim, "sig-bar sig-bardim"], [p.bars.hot, "sig-bar"]]) {
+      samp(t => f(t, dt)).forEach(q => { if (q.v <= 0) return;
+        svg.append(sigSvgEl("rect", { x: (X(q.t) - bw / 2).toFixed(1), y: Y(q.v).toFixed(1), width: bw.toFixed(1), height: (Y(0) - Y(q.v)).toFixed(1), class: cls })); });
+    }
+  } else if (obsPts) {
+    svg.append(sigSvgEl("path", { d: path(obsPts) + `L${X(0).toFixed(1)} ${Y(p.dom[0]).toFixed(1)}L${X(x0).toFixed(1)} ${Y(p.dom[0]).toFixed(1)}Z`, class: "sig-obsarea" }),
+      sigSvgEl("path", { d: path(obsPts), class: "sig-obs" }));
+  }
+  /* event markers — greedy two-row flag placement to avoid overlaps */
+  const sigFlagRows = [[], []];
+  (sigEVENTS[p.id] || []).filter(e => e.t >= x0 && e.t <= x1).forEach(e => {
+    const txt = e.glyph + " " + e.label, wEst = txt.length * 5.1 + 10;
+    let fx = X(e.t) + 3; if (fx + wEst > Rt) fx = X(e.t) - wEst - 3;
+    let row = sigFlagRows.findIndex(r => r.every(([a, b]) => fx + wEst < a - 2 || fx > b + 2));
+    if (row < 0) row = sigFlagRows[0].length <= sigFlagRows[1].length ? 0 : 1;
+    sigFlagRows[row].push([fx, fx + wEst]);
+    const fy = row ? 15 : 2;
+    svg.append(sigSvgEl("line", { x1: X(e.t), y1: T - 2, x2: X(e.t), y2: B, class: "sig-evline" }),
+      sigSvgEl("rect", { x: fx, y: fy, width: wEst, height: 11, class: "sig-evflag" }),
+      sigSvgEl("text", { x: fx + 5, y: fy + 8.5, class: "sig-evtxt" },
+        sigSvgEl("tspan", { fill: e.tone === "ink" ? "var(--ink2)" : sigTone(e.tone) }, e.glyph + " "),
+        sigSvgEl("tspan", {}, e.label)));
+  });
+  /* now line + live tick (motion only for genuine liveness; guarded) */
+  if (hasFut) svg.append(sigSvgEl("line", { x1: X(0), y1: T - 2, x2: X(0), y2: B, class: "sig-nowline" }),
+    sigSvgEl("text", { x: X(0), y: B + 8, class: "sig-ax sig-nowlbl", "text-anchor": "middle" }, "now"));
+  const lastV = p.obs ? p.obs(0) : p.multi ? p.multi.find(s => s.hot).f(0) : null;
+  if (lastV != null && p.live) svg.append(
+    sigSvgEl("circle", { cx: X(0), cy: Y(lastV), r: 2.6, class: "sig-livedot" + (sigRM ? "" : " sig-pulse") }));
+
+  /* header */
+  const cur = p.obs ? p.obs(0) : p.multi ? p.multi.find(s => s.hot).f(0) : null;
+  const first = p.obs ? p.obs(x0) : p.multi ? p.multi.find(s => s.hot).f(x0) : null;
+  let deltaEl = null;
+  if (cur != null && first != null) {
+    const d = cur - first, span = p.dom[1] - p.dom[0], big = Math.abs(d) > span * 0.02;
+    const worse = p.goodUp ? d < 0 : d > 0;
+    deltaEl = h("span", { class: "sig-delta" + (big ? (worse ? " bad" : " good") : "") },
+      (d >= 0 ? "▲" : "▼") + " " + p.fmt(Math.abs(d)) + " /" + range);
+  }
+  let barsTotal = null;
+  if (p.bars) { const dt = hrs / (N - 1); let tot = 0; samp(t => p.bars.hot(t, dt)).forEach(q => tot += q.v); barsTotal = tot; }
+  const sess = sigFindSession(p.session);
+  const head = h("div", { class: "sig-phead" },
+    h("div", { class: "sig-pl" },
+      h("div", { class: "sig-pt" }, p.title, h("span", { class: "sig-phost" }, p.host)),
+      h("div", { class: "sig-pv" },
+        cur != null ? p.fmt(cur) : barsTotal != null ? String(barsTotal) : "—",
+        h("span", { class: "sig-punit" }, barsTotal != null ? " total /" + range : " " + p.unit),
+        deltaEl)),
+    h("div", { class: "sig-pr" },
+      ...(p.chips || []).map(c => h("span", { class: "sig-chip", style: `color:${sigTone(c.tone)};border-color:color-mix(in srgb,${sigTone(c.tone)} 45%,transparent)` }, c.txt)),
+      sess ? h("button", { class: "sig-sess mono", onclick: () => (typeof openSession === "function") && openSession(sess), title: sess.title }, sess.id) : null));
+  return h("div", { class: "sig-panel" + (p.anom ? " sig-anom" : ""), "data-panel": p.id }, head, svg);
+}
+
+/* ---- estate heat row (territory only) ---- */
+function sigHeatRow() {
+  const src = (typeof HOSTS !== "undefined") ? HOSTS : sigHOSTS_FB;
+  const toneOf = { ok: "match", warn: "partial", crit: "deviation" }, glyphOf = { ok: "·", warn: "▲", crit: "✕" };
+  const bySite = {};
+  for (const [id, hst] of Object.entries(src)) (bySite[hst.site] = bySite[hst.site] || []).push([id, hst]);
+  const counts = { ok: 0, warn: 0, crit: 0 };
+  Object.values(src).forEach(hst => counts[hst.health]++);
+  const row = h("div", { class: "sig-heat" }, h("span", { class: "lbl" }, "estate"));
+  for (const [site, list] of Object.entries(bySite)) {
+    row.append(h("span", { class: "sig-hsite mono" }, site));
+    list.sort((a, b) => a[0] < b[0] ? -1 : 1).forEach(([id, hst]) => {
+      const sess = (typeof SESSIONS !== "undefined") ? SESSIONS.find(s => s.host === id) : null;
+      row.append(h("button", { class: "sig-cell", "data-hl": hst.health, title: `${id} · ${hst.role} · ${hst.health}` + (sess ? ` · ${sess.id}` : ""),
+        onclick: () => sess && typeof openSession === "function" && openSession(sess) },
+        h("span", { class: "sig-cg", style: `color:${sigTone(toneOf[hst.health])}` }, glyphOf[hst.health]),
+        h("span", { class: "sig-ch mono" }, id.replace(/^(dc1|dc2)/, ""))));
+    });
+  }
+  row.append(h("span", { class: "sig-hsum mono" }, `${counts.ok} ok · ${counts.warn} warn · ${counts.crit} crit`));
+  return row;
+}
+
+/* ---- legend (one shared key for every panel) ---- */
+function sigLegend() {
+  const item = (swatch, label) => h("span", { class: "sig-lgi" }, swatch, label);
+  const line = (cls) => sigSvgEl("svg", { viewBox: "0 0 22 8", class: "sig-lgs" }, sigSvgEl("line", { x1: 1, y1: 4, x2: 21, y2: 4, class: cls }));
+  const box  = (cls) => sigSvgEl("svg", { viewBox: "0 0 22 8", class: "sig-lgs" }, sigSvgEl("rect", { x: 1, y: 1, width: 20, height: 6, class: cls }));
+  return h("div", { class: "sig-legend" },
+    item(line("sig-obs"), "observed · territory"),
+    item(line("sig-mapline"), "predicted · map"),
+    item(box("sig-env"), "envelope"),
+    item(box("sig-lgdev"), "out of envelope"),
+    item(line("sig-evline"), "TG event"),
+    item(line("sig-lgthr"), "threshold"));
+}
+
+/* ---- anomaly badge count for the nav rail ---- */
+function sigAnomalyCount() { return 2; }
+
+/* ---- facet filter ---- */
+function sigFacetPass(p, fac) {
+  if (fac === "anom") return !!p.anom;
+  if (fac === "pred") return !!(p.band || p.futureBand || p.forecast);
+  if (fac === "evt")  return (sigEVENTS[p.id] || []).length > 0;
+  return true;
+}
+
+/* ---- view state + root ---- */
+const sigState = { range: "6h" };
+function sigDraw(root) {
+  const fac = (typeof facetState !== "undefined" && facetState.signals) || "all";
+  const panels = sigPanels().filter(p => sigFacetPass(p, fac));
+  root.replaceChildren(
+    h("div", { class: "sig-toolbar" },
+      h("span", { class: "lbl" }, "golden signals"),
+      h("span", { class: "sig-fix mono" }, "fixture · representative, not live"),
+      h("span", { class: "sig-grow" }),
+      h("div", { class: "sig-ranges", role: "tablist", "aria-label": "time range" },
+        ...Object.keys(sigRANGES).map(r => h("button", { class: "sig-rchip mono" + (r === sigState.range ? " on" : ""),
+          role: "tab", "aria-selected": r === sigState.range ? "true" : "false",
+          onclick: () => { sigState.range = r; sigDraw(root); } }, r)))),
+    h("div", { class: "sig-tiles" }, ...sigTILES.map(tl =>
+      h("div", { class: "sig-tile" },
+        h("div", { class: "lbl" }, tl.lbl),
+        h("div", { class: "sig-tv mono", style: tl.tone ? `color:${sigTone(tl.tone)}` : "" },
+          tl.glyph ? h("span", { class: "sig-tg" }, tl.glyph + " ") : null, tl.val),
+        tl.bar != null ? h("div", { class: "sig-tbar" }, h("i", { style: `width:${pct(tl.bar)}%;background:${sigTone(tl.tone || "match")}` })) : null,
+        h("div", { class: "sig-ts mono" }, tl.sub)))),
+    sigHeatRow(),
+    sigLegend(),
+    ...sigSECTIONS.map(([key, title, summary]) => {
+      const ps = panels.filter(p => p.sec === key);
+      if (!ps.length) return null;
+      return h("section", { class: "sig-sec" },
+        h("div", { class: "sig-sechead" },
+          h("span", { class: "sig-sect" }, title),
+          h("span", { class: "sig-secsum mono" }, summary)),
+        h("div", { class: "sig-grid" }, ...ps.map(p => sigMetricPanel(p, sigState.range))));
+    }).filter(Boolean));
+}
+function sigView() {
+  const root = h("div", { class: "sig-root" });
+  sigDraw(root);
+  return root;
+}

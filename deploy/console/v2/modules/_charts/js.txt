@@ -1,0 +1,457 @@
+/* =====================================================================================
+   TG chart primitives — pure DOM/SVG, tokens only, deterministic (no Math.random).
+   MAP (AI prediction) = indigo, dashed, ghost.  TERRITORY (observed) = steel, solid.
+   Status is never color alone: every event marker = color + shape + label.
+   Exposes window globals: svgEl, sparkline, areaChart, metricPanel, smallMultiples,
+   donut, hbar, mulberry32.
+   ===================================================================================== */
+"use strict";
+(function () {
+
+  const SVG_NS = "http://www.w3.org/2000/svg";
+
+  /* ── tokens (referenced, never hard-coded) ─────────────────────────────────── */
+  const T = {
+    territory: "var(--territory)", map: "var(--map)",
+    match: "var(--match)", partial: "var(--partial)", deviation: "var(--deviation)",
+    accent: "var(--accent)", hazard: "var(--hazard)",
+    line: "var(--line)", line2: "var(--line2)", line3: "var(--line3)",
+    ink: "var(--ink)", ink2: "var(--ink2)", ink3: "var(--ink3)", ink4: "var(--ink4)",
+    g1: "var(--g1)", g2: "var(--g2)",
+  };
+
+  const R2 = (v) => Math.round(v * 100) / 100;
+  const motionOK = () =>
+    !(typeof reduceMotion !== "undefined"
+      ? reduceMotion
+      : (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches));
+
+  /* ── element helpers ───────────────────────────────────────────────────────── */
+  function applyAttrs(e, attrs, isSvg) {
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v == null || v === false) continue;
+      if (k === "class") { if (isSvg) e.setAttribute("class", v); else e.className = v; }
+      else if (k === "html") e.innerHTML = v;
+      else if (k.startsWith("on") && typeof v === "function") e.addEventListener(k.slice(2).toLowerCase(), v);
+      else e.setAttribute(k, v === true ? "" : v);
+    }
+  }
+  function appendKids(e, kids) {
+    for (const k of kids.flat(Infinity)) {
+      if (k == null || k === false) continue;
+      e.append(k.nodeType ? k : document.createTextNode(k));
+    }
+  }
+
+  /* 1 ─ svgEl(tag, attrs, ...kids): namespace-aware SVG twin of h(). */
+  function svgEl(tag, attrs = {}, ...kids) {
+    const e = document.createElementNS(SVG_NS, tag);
+    applyAttrs(e, attrs, true);
+    appendKids(e, kids);
+    return e;
+  }
+  /* internal HTML twin (h() exists in the console; kept local so this file is standalone) */
+  function el(tag, attrs = {}, ...kids) {
+    const e = document.createElement(tag);
+    applyAttrs(e, attrs, false);
+    appendKids(e, kids);
+    return e;
+  }
+
+  /* ── deterministic PRNG (fixtures use this; library itself never randomizes) ── */
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /* ── shared math ───────────────────────────────────────────────────────────── */
+  const toVals = (s) => Array.isArray(s)
+    ? s.map((p) => (p && typeof p === "object") ? +p.v : +p).filter(Number.isFinite)
+    : [];
+
+  function domainOf(arrays, extra) {
+    let lo = Infinity, hi = -Infinity;
+    for (const a of arrays) if (a) for (const v of a) { if (v < lo) lo = v; if (v > hi) hi = v; }
+    if (extra != null && Number.isFinite(+extra)) { lo = Math.min(lo, +extra); hi = Math.max(hi, +extra); }
+    if (!Number.isFinite(lo)) { lo = 0; hi = 1; }
+    if (hi === lo) { hi += 1; lo -= 1; }
+    const pad = (hi - lo) * 0.08;
+    return { lo: lo - pad, hi: hi + pad };
+  }
+  const linePathD = (vals, x, y) =>
+    vals.map((v, i) => `${i ? "L" : "M"}${x(i)} ${y(v)}`).join(" ");
+  const areaPathD = (vals, x, y, baseY) =>
+    `${linePathD(vals, x, y)} L${x(vals.length - 1)} ${R2(baseY)} L${x(0)} ${R2(baseY)} Z`;
+
+  function fmtNum(v) {
+    if (v == null || !Number.isFinite(+v)) return "—";
+    const a = Math.abs(v);
+    if (a >= 1000) return Math.round(v).toLocaleString("en-US");
+    if (Number.isInteger(v)) return String(v);
+    if (a >= 100) return String(Math.round(v));
+    if (a >= 10) return (Math.round(v * 10) / 10).toFixed(1);
+    return (Math.round(v * 100) / 100).toFixed(2);
+  }
+
+  /* honest empty state — never fake a line */
+  function emptyState(w, h, msg = "awaiting data") {
+    return el("div", { class: "tg-empty", style: `width:${w}px;height:${h}px`, role: "img", "aria-label": msg }, msg);
+  }
+
+  /* event t: fractions strictly inside (0,1) are relative positions; anything else is an index */
+  function evIndex(t, n) {
+    if (typeof t !== "number" || !Number.isFinite(t)) return 0;
+    if (t > 0 && t < 1) return t * (n - 1);
+    return Math.max(0, Math.min(n - 1, t));
+  }
+
+  const EVENT_STYLES = {
+    "alert":              { color: T.deviation, shape: "tri" },
+    "predicted":          { color: T.map,       shape: "diamond" },
+    "commit":             { color: T.map,       shape: "diamond" },
+    "executed":           { color: T.accent,    shape: "circle" },
+    "verified-match":     { color: T.match,     shape: "square" },
+    "verified-deviation": { color: T.deviation, shape: "tri-down" },
+  };
+  const DEFAULT_EVENT_STYLE = { color: T.ink3, shape: "tick" };
+
+  function evGlyph(shape, x, yc, color) {
+    const s = 3.2;
+    switch (shape) {
+      case "tri":      return svgEl("path", { d: `M${R2(x)} ${R2(yc - s)} L${R2(x + s)} ${R2(yc + s)} L${R2(x - s)} ${R2(yc + s)} Z`, fill: color });
+      case "tri-down": return svgEl("path", { d: `M${R2(x)} ${R2(yc + s)} L${R2(x + s)} ${R2(yc - s)} L${R2(x - s)} ${R2(yc - s)} Z`, fill: color });
+      case "diamond":  return svgEl("path", { d: `M${R2(x)} ${R2(yc - s)} L${R2(x + s)} ${R2(yc)} L${R2(x)} ${R2(yc + s)} L${R2(x - s)} ${R2(yc)} Z`, fill: color });
+      case "square":   return svgEl("rect", { x: R2(x - s + 0.5), y: R2(yc - s + 0.5), width: R2(2 * s - 1), height: R2(2 * s - 1), fill: color });
+      case "tick":     return svgEl("line", { x1: R2(x), x2: R2(x), y1: R2(yc - s), y2: R2(yc + s), stroke: color, "stroke-width": 1.5 });
+      default:         return svgEl("circle", { cx: R2(x), cy: R2(yc), r: s - 0.4, fill: color });
+    }
+  }
+
+  function legendItem(kind, color, label) {
+    const sw = svgEl("svg", { width: 14, height: 8, viewBox: "0 0 14 8", "aria-hidden": "true" });
+    if (kind === "solid") sw.append(svgEl("line", { x1: 0, x2: 14, y1: 4, y2: 4, stroke: color, "stroke-width": 2 }));
+    else if (kind === "dash") sw.append(svgEl("line", { x1: 0, x2: 14, y1: 4, y2: 4, stroke: color, "stroke-width": 2, "stroke-dasharray": "3 2" }));
+    else sw.append(svgEl("rect", { x: 3, y: 0, width: 8, height: 8, fill: color }));
+    return el("span", { class: "tg-legend-item" }, sw, label);
+  }
+
+  /* faint calibration grid — recessive, quartile rules + baseline ticks */
+  function calibrationGrid(m, iw, ih) {
+    const g = svgEl("g", { class: "tg-grid", "aria-hidden": "true" });
+    for (const f of [0.25, 0.5, 0.75]) {
+      const gy = R2(m.t + ih * f);
+      g.append(svgEl("line", { x1: m.l, x2: R2(m.l + iw), y1: gy, y2: gy, stroke: T.line2, "stroke-width": 1, opacity: 0.5, "shape-rendering": "crispEdges" }));
+    }
+    const by = R2(m.t + ih);
+    g.append(svgEl("line", { x1: m.l, x2: R2(m.l + iw), y1: by, y2: by, stroke: T.line2, "stroke-width": 1, "shape-rendering": "crispEdges" }));
+    for (const f of [0.25, 0.5, 0.75]) {
+      const gx = R2(m.l + iw * f);
+      g.append(svgEl("line", { x1: gx, x2: gx, y1: by, y2: R2(by - 3), stroke: T.line2, "stroke-width": 1, "shape-rendering": "crispEdges" }));
+    }
+    return g;
+  }
+
+  function thresholdLayer(threshold, m, iw, ih, y, withLabel) {
+    const g = svgEl("g", { class: "tg-threshold" });
+    const ty = Math.max(m.t, Math.min(m.t + ih, y(threshold)));
+    g.append(svgEl("rect", { x: m.l, y: m.t, width: R2(iw), height: Math.max(0, R2(ty - m.t)), fill: T.hazard, "fill-opacity": 0.05 }));
+    g.append(svgEl("line", { x1: m.l, x2: R2(m.l + iw), y1: R2(ty), y2: R2(ty), stroke: T.hazard, "stroke-width": 1, "stroke-dasharray": "3 3", opacity: 0.85 }));
+    const below = ty - m.t < 10;   /* line hugging the plot top → label flips under it */
+    if (withLabel) g.append(svgEl("text", { class: "tg-thr-label", x: R2(m.l + iw), y: R2(below ? ty + 9 : ty - 2.5), "text-anchor": "end" }, `thr ${fmtNum(threshold)}`));
+    return g;
+  }
+
+  /* nearest-index hover plumbing (crosshair layer) */
+  function attachHover(svg, o) {
+    svg.addEventListener("pointermove", (e) => {
+      const r = svg.getBoundingClientRect();
+      if (!r.width) return;
+      const px = (e.clientX - r.left) * (o.w / r.width);
+      const f = ((px - o.mL) / (o.iw || 1)) * (o.N - 1);
+      o.move(Math.max(0, Math.min(o.N - 1, Math.round(f))));
+    });
+    svg.addEventListener("pointerleave", () => o.leave());
+  }
+
+  /* 2 ─ sparkline(series, {w=90,h=22,color,fill=true,threshold}) */
+  function sparkline(series, opts = {}) {
+    const { w = 90, h = 22, color = T.territory, fill = true, threshold } = opts;
+    const vals = toVals(series);
+    if (!vals.length) return emptyState(w, h);
+    const n = vals.length;
+    const d = domainOf([vals], threshold);
+    const x = (i) => R2(2 + (i * (w - 6)) / Math.max(1, n - 1));
+    const y = (v) => R2(1.5 + (1 - (v - d.lo) / (d.hi - d.lo)) * (h - 3));
+    const last = vals[n - 1];
+    const svg = svgEl("svg", {
+      class: "tg-spark", width: w, height: h, viewBox: `0 0 ${w} ${h}`,
+      role: "img", "aria-label": `sparkline, ${n} samples, last ${fmtNum(last)}`,
+    }, svgEl("title", {}, `last ${fmtNum(last)}`));
+    if (fill) svg.append(svgEl("path", { d: areaPathD(vals, x, y, h - 1.5), fill: color, "fill-opacity": 0.08, stroke: "none" }));
+    if (threshold != null && Number.isFinite(+threshold))
+      svg.append(svgEl("line", { x1: 2, x2: w - 2, y1: y(+threshold), y2: y(+threshold), stroke: T.hazard, "stroke-width": 1, "stroke-dasharray": "2 2", opacity: 0.8 }));
+    svg.append(svgEl("path", { d: linePathD(vals, x, y), fill: "none", stroke: color, "stroke-width": 1.5, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    svg.append(svgEl("circle", { cx: x(n - 1), cy: y(last), r: 2, fill: color }));
+    return svg;
+  }
+
+  /* 3 ─ areaChart(series, {w,h,color,threshold,grid=true}) */
+  function areaChart(series, opts = {}) {
+    const { w = 220, h = 64, color = T.territory, threshold, grid = true } = opts;
+    const vals = toVals(series);
+    if (!vals.length) return emptyState(w, h);
+    const n = vals.length;
+    const m = { t: 5, r: 4, b: 4, l: 4 };
+    const iw = w - m.l - m.r, ih = h - m.t - m.b;
+    const d = domainOf([vals], threshold);
+    const x = (i) => R2(m.l + (i * iw) / Math.max(1, n - 1));
+    const y = (v) => R2(m.t + (1 - (v - d.lo) / (d.hi - d.lo)) * ih);
+    const last = vals[n - 1];
+    const svg = svgEl("svg", {
+      class: "tg-area", width: w, height: h, viewBox: `0 0 ${w} ${h}`,
+      role: "img", "aria-label": `area chart, ${n} samples, last ${fmtNum(last)}`,
+    });
+    if (grid) svg.append(calibrationGrid(m, iw, ih));
+    if (threshold != null && Number.isFinite(+threshold)) svg.append(thresholdLayer(+threshold, m, iw, ih, y, w >= 160));
+    svg.append(svgEl("path", { d: areaPathD(vals, x, y, m.t + ih), fill: color, "fill-opacity": 0.08, stroke: "none" }));
+    svg.append(svgEl("path", { d: linePathD(vals, x, y), fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    svg.append(svgEl("circle", { cx: x(n - 1), cy: y(last), r: 2.5, fill: color, stroke: T.g1, "stroke-width": 1 }));
+    /* hover: crosshair + mono value readout inside the plot */
+    const hLine = svgEl("line", { y1: m.t, y2: m.t + ih, stroke: T.line3, "stroke-width": 1, visibility: "hidden" });
+    const hDot = svgEl("circle", { r: 2.5, fill: color, stroke: T.g1, "stroke-width": 1, visibility: "hidden" });
+    const hLabel = svgEl("text", { class: "tg-hover-label", x: m.l + 2, y: m.t + 8, visibility: "hidden" });
+    svg.append(hLine, hDot, hLabel);
+    attachHover(svg, {
+      w, mL: m.l, iw, N: n,
+      move(i) {
+        const xi = x(i);
+        hLine.setAttribute("x1", xi); hLine.setAttribute("x2", xi); hLine.setAttribute("visibility", "visible");
+        hDot.setAttribute("cx", xi); hDot.setAttribute("cy", y(vals[i])); hDot.setAttribute("visibility", "visible");
+        hLabel.textContent = fmtNum(vals[i]);
+        hLabel.setAttribute("text-anchor", i > n / 2 ? "end" : "start");
+        hLabel.setAttribute("x", i > n / 2 ? xi - 5 : xi + 5);
+        hLabel.setAttribute("visibility", "visible");
+      },
+      leave() { for (const q of [hLine, hDot, hLabel]) q.setAttribute("visibility", "hidden"); },
+    });
+    return svg;
+  }
+
+  /* 4 ─ metricPanel(cfg) — map-vs-territory in the time domain */
+  function metricPanel(cfg = {}) {
+    const { title = "", unit = "", series, threshold, events = [], predicted, live = false, w = 280, h = 96 } = cfg;
+    const vals = toVals(series);
+
+    const valueEl = el("span", { class: "tg-metric-value" });
+    const root = el("div", { class: "tg-metric" },
+      el("div", { class: "tg-metric-head" },
+        el("span", { class: "tg-metric-title" }, title),
+        valueEl));
+
+    if (!vals.length) { valueEl.append("—"); root.append(emptyState(w - 20, h)); return root; }
+
+    const n = vals.length;
+    const last = vals[n - 1];
+    const setReadout = (v, hover) => {
+      valueEl.textContent = "";
+      valueEl.append(fmtNum(v));
+      if (unit) valueEl.append(el("span", { class: "tg-unit" }, unit));
+      valueEl.classList.toggle("is-hover", !!hover);
+    };
+    setReadout(last, false);
+
+    /* predicted: series | {series, band:{lo,hi}} — the AI's MAP, ghosted in indigo */
+    let pSeries = null, pBand = null;
+    if (predicted) {
+      if (Array.isArray(predicted)) pSeries = toVals(predicted);
+      else {
+        pSeries = toVals(predicted.series);
+        if (predicted.band) {
+          const lo = toVals(predicted.band.lo), hi = toVals(predicted.band.hi);
+          if (lo.length && hi.length) pBand = { lo, hi };
+        }
+      }
+      if (pSeries && !pSeries.length) pSeries = null;
+    }
+
+    const N = Math.max(n, pSeries ? pSeries.length : 0, pBand ? Math.min(pBand.lo.length, pBand.hi.length) : 0);
+    const m = { t: 16, r: 6, b: 5, l: 6 };
+    const iw = w - m.l - m.r, ih = h - m.t - m.b;
+    const d = domainOf([vals, pSeries, pBand && pBand.lo, pBand && pBand.hi], threshold);
+    const x = (i) => R2(m.l + (i * iw) / Math.max(1, N - 1));
+    const y = (v) => R2(m.t + (1 - (v - d.lo) / (d.hi - d.lo)) * ih);
+
+    const svg = svgEl("svg", {
+      class: "tg-plot", width: w, height: h, viewBox: `0 0 ${w} ${h}`, style: "max-width:100%",
+      role: "img", "aria-label": `${title || "metric"}: ${n} samples, last ${fmtNum(last)}${unit ? " " + unit : ""}`,
+    });
+
+    svg.append(calibrationGrid(m, iw, ih));
+    if (threshold != null && Number.isFinite(+threshold)) svg.append(thresholdLayer(+threshold, m, iw, ih, y, true));
+
+    /* MAP layer: predicted envelope, indigo dashed ghost UNDER the steel territory line */
+    if (pBand) {
+      const bn = Math.min(pBand.lo.length, pBand.hi.length);
+      const dPath = pBand.hi.slice(0, bn).map((v, i) => `${i ? "L" : "M"}${x(i)} ${y(v)}`).join(" ")
+        + " " + pBand.lo.slice(0, bn).map((v, i) => `L${x(bn - 1 - i)} ${y(pBand.lo[bn - 1 - i])}`).join(" ") + " Z";
+      svg.append(svgEl("path", { class: "tg-map-band", d: dPath, fill: T.map, "fill-opacity": 0.08, stroke: "none" }));
+    }
+    if (pSeries) svg.append(svgEl("path", {
+      class: "tg-map-line", d: linePathD(pSeries, x, y),
+      fill: "none", stroke: T.map, "stroke-width": 1.5, "stroke-dasharray": "4 3", opacity: 0.9, "stroke-linejoin": "round",
+    }));
+
+    /* TERRITORY layer: observed, steel solid */
+    svg.append(svgEl("path", { d: areaPathD(vals, x, y, m.t + ih), fill: T.territory, "fill-opacity": 0.07, stroke: "none" }));
+    svg.append(svgEl("path", { d: linePathD(vals, x, y), fill: "none", stroke: T.territory, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+
+    /* endpoint emphasis (+ live pulse, motion-gated) */
+    const ex = x(n - 1), ey = y(last);
+    if (live && motionOK()) svg.append(svgEl("circle", { class: "tg-live-pulse", cx: ex, cy: ey, r: 2.5, fill: T.territory }));
+    svg.append(svgEl("circle", { cx: ex, cy: ey, r: 2.5, fill: T.territory, stroke: T.g1, "stroke-width": 1 }));
+
+    /* vertical event markers: thin rule + typed glyph + tiny ink label (color+shape+text) */
+    for (const ev of events || []) {
+      if (!ev) continue;
+      const st = EVENT_STYLES[ev.type] || DEFAULT_EVENT_STYLE;
+      const exi = x(evIndex(ev.t, N));
+      const g = svgEl("g", { class: "tg-event", "data-type": ev.type || "" });
+      g.append(svgEl("line", { x1: exi, x2: exi, y1: m.t, y2: R2(m.t + ih), stroke: st.color, "stroke-width": 1, opacity: 0.55 }));
+      g.append(evGlyph(st.shape, exi, m.t - 7, st.color));
+      if (ev.label) {
+        const flip = exi > w - 44;
+        g.append(svgEl("text", {
+          class: "tg-ev-label", x: R2(flip ? exi - 6 : exi + 6), y: m.t - 4.5,
+          "text-anchor": flip ? "end" : "start", fill: T.ink3,
+        }, ev.label));
+      }
+      g.append(svgEl("title", {}, `${ev.type || "event"}${ev.label ? ": " + ev.label : ""}`));
+      svg.append(g);
+    }
+
+    /* hover crosshair — observed value first, predicted where observation has run out */
+    const hLine = svgEl("line", { y1: m.t, y2: m.t + ih, stroke: T.line3, "stroke-width": 1, visibility: "hidden" });
+    const hDot = svgEl("circle", { r: 2.5, visibility: "hidden", stroke: T.g1, "stroke-width": 1 });
+    svg.append(hLine, hDot);
+    attachHover(svg, {
+      w, mL: m.l, iw, N,
+      move(i) {
+        const xi = x(i);
+        hLine.setAttribute("x1", xi); hLine.setAttribute("x2", xi); hLine.setAttribute("visibility", "visible");
+        if (i < n) {
+          hDot.setAttribute("fill", T.territory);
+          hDot.setAttribute("cx", xi); hDot.setAttribute("cy", y(vals[i])); hDot.setAttribute("visibility", "visible");
+          setReadout(vals[i], true);
+        } else if (pSeries && i < pSeries.length) {
+          hDot.setAttribute("fill", T.map);
+          hDot.setAttribute("cx", xi); hDot.setAttribute("cy", y(pSeries[i])); hDot.setAttribute("visibility", "visible");
+          setReadout(pSeries[i], true);
+        } else hDot.setAttribute("visibility", "hidden");
+      },
+      leave() {
+        hLine.setAttribute("visibility", "hidden");
+        hDot.setAttribute("visibility", "hidden");
+        setReadout(last, false);
+      },
+    });
+
+    root.append(svg);
+
+    /* compact legend — only once there are ≥2 encodings (single series: the title names it) */
+    if (pSeries || pBand || (threshold != null && Number.isFinite(+threshold))) {
+      const leg = el("div", { class: "tg-legend" }, legendItem("solid", T.territory, "observed"));
+      if (pSeries || pBand) leg.append(legendItem("dash", T.map, "predicted"));
+      if (threshold != null && Number.isFinite(+threshold)) leg.append(legendItem("dash", T.hazard, "threshold"));
+      root.append(leg);
+    }
+    return root;
+  }
+
+  /* 5 ─ smallMultiples(panels, {cols=3}) — layout only; feed same-scale panels */
+  function smallMultiples(panels = [], opts = {}) {
+    const cols = Math.max(1, (opts.cols || 3) | 0);
+    const grid = el("div", { class: "tg-smallmult", style: `grid-template-columns:repeat(${cols},minmax(0,1fr))` });
+    for (const p of panels || []) if (p) grid.append(p);
+    return grid;
+  }
+
+  /* 6 ─ donut(segments, {size=120}) — center total + side legend */
+  function annularD(cx, cy, r0, r1, a0, a1) {
+    const P = (r, a) => `${R2(cx + r * Math.cos(a))} ${R2(cy + r * Math.sin(a))}`;
+    const large = a1 - a0 > Math.PI ? 1 : 0;
+    return `M${P(r1, a0)} A${R2(r1)} ${R2(r1)} 0 ${large} 1 ${P(r1, a1)} L${P(r0, a1)} A${R2(r0)} ${R2(r0)} 0 ${large} 0 ${P(r0, a0)} Z`;
+  }
+  function donut(segments = [], opts = {}) {
+    const { size = 120 } = opts;
+    const segs = (segments || []).filter((s) => s && Number.isFinite(+s.value) && +s.value > 0);
+    const total = segs.reduce((a, s) => a + +s.value, 0);
+    const wrap = el("div", { class: "tg-donut" });
+    if (!segs.length || total <= 0) { wrap.append(emptyState(size, Math.max(40, size / 2))); return wrap; }
+
+    const cx = size / 2, cy = size / 2;
+    const r1 = size / 2 - 2, r0 = r1 - Math.max(8, size * 0.13);
+    const svg = svgEl("svg", {
+      class: "tg-donut-svg", width: size, height: size, viewBox: `0 0 ${size} ${size}`,
+      role: "img", "aria-label": `donut chart, total ${fmtNum(total)}: ` + segs.map((s) => `${s.label} ${fmtNum(s.value)}`).join(", "),
+    });
+    const TAU = Math.PI * 2;
+    const gap = segs.length > 1 ? Math.min(2 / r1, 0.06) : 0;   /* ≈2px surface gap between fills */
+    let a = -Math.PI / 2;
+    for (const s of segs) {
+      const frac = +s.value / total, sweep = frac * TAU;
+      const color = s.color || T.territory;
+      const tt = svgEl("title", {}, `${s.label}: ${fmtNum(s.value)} (${Math.round(frac * 100)}%)`);
+      if (sweep >= TAU - 1e-4) {
+        svg.append(svgEl("circle", { cx, cy, r: R2((r0 + r1) / 2), fill: "none", stroke: color, "stroke-width": R2(r1 - r0) }, tt));
+      } else {
+        const a0 = a + gap / 2, a1 = a + sweep - gap / 2;
+        if (a1 > a0) svg.append(svgEl("path", { d: annularD(cx, cy, r0, r1, a0, a1), fill: color }, tt));
+      }
+      a += sweep;
+    }
+    svg.append(
+      svgEl("text", { class: "tg-donut-total", x: cx, y: cy + 1, "text-anchor": "middle", fill: T.ink,
+        style: `font:600 ${Math.max(12, Math.round(size * 0.14))}px var(--mono);font-variant-numeric:tabular-nums` }, fmtNum(total)),
+      svgEl("text", { class: "tg-donut-cap", x: cx, y: cy + Math.max(11, size * 0.11), "text-anchor": "middle", fill: T.ink3,
+        style: "font:8px var(--mono);letter-spacing:.14em;text-transform:uppercase" }, "total"),
+    );
+
+    const ul = el("ul", { class: "tg-donut-legend" });
+    for (const s of segs) ul.append(el("li", {},
+      el("i", { class: "tg-donut-swatch", style: `background:${s.color || T.territory}`, "aria-hidden": "true" }),
+      el("span", { class: "tg-donut-lbl" }, s.label),
+      el("span", { class: "tg-donut-val" }, fmtNum(s.value))));
+    wrap.append(svg, ul);
+    return wrap;
+  }
+
+  /* 7 ─ hbar(rows) — labeled horizontal bars, mono values, optional detail line */
+  function hbar(rows = []) {
+    const list = (rows || []).filter(Boolean);
+    const wrap = el("div", { class: "tg-hbar" });
+    if (!list.length) { wrap.append(emptyState(180, 40)); return wrap; }
+    const gmax = Math.max(...list.map((r) => (Number.isFinite(+r.max) && +r.max > 0) ? +r.max : (+r.value || 0)), 1e-9);
+    for (const r of list) {
+      const max = (Number.isFinite(+r.max) && +r.max > 0) ? +r.max : gmax;
+      const v = Math.max(0, +r.value || 0);
+      const wp = Math.min(100, (v / max) * 100);
+      const row = el("div", { class: "tg-hbar-row" },
+        el("span", { class: "tg-hbar-label", title: r.label }, r.label ?? ""),
+        el("span", { class: "tg-hbar-track", role: "img", "aria-label": `${r.label}: ${fmtNum(v)} of ${fmtNum(max)}` },
+          el("i", { class: "tg-hbar-fill", style: `width:${wp.toFixed(2)}%;background:${r.color || T.territory}` })),
+        el("span", { class: "tg-hbar-val" }, fmtNum(v)));
+      if (r.detail) row.append(el("span", { class: "tg-hbar-detail" }, r.detail));
+      wrap.append(row);
+    }
+    return wrap;
+  }
+
+  /* ── exports ───────────────────────────────────────────────────────────────── */
+  const g = typeof window !== "undefined" ? window : globalThis;
+  Object.assign(g, { svgEl, sparkline, areaChart, metricPanel, smallMultiples, donut, hbar, mulberry32 });
+})();

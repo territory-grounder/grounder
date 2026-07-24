@@ -1,0 +1,11 @@
+# Grafana dashboard provider: load the JSON dashboards in this directory at startup.
+apiVersion: 1
+providers:
+  - name: territory-grounder
+    orgId: 1
+    folder: Territory Grounder
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards

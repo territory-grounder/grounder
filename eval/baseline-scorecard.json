@@ -1,0 +1,30 @@
+{
+  "measured_at": "2026-07-18",
+  "git_sha": "b58465725e676c4bfa76142d94ce7383cedc88e0",
+  "runs": 3,
+  "n": 60,
+  "provenance": "Pooled mean of 3 honest on-box runs of origin/main @ b584657 on dc1tg01's live LiteLLM gateway (read-only, mutation OFF), via the on-box A/B harness (eval/run-on-box.sh), N=20 corpus each (N=60 pooled). Real Runner + shared core/judge. Measured during this session's R2 gate (not a dedicated run for this baseline). Individual-run overalls: 3.09, 3.23, 2.91. Re-measure with `TG_EVAL_RUNS=3 make eval-gate` and re-pool on a legitimate upward move; never lower it to hide a regression.",
+  "individual_runs": [
+    { "overall": 3.09, "n": 20, "note": "base-scorecard.json" },
+    { "overall": 3.23, "n": 20, "note": "run2-base-scorecard.json" },
+    { "overall": 2.91, "n": 20, "note": "run3-base-scorecard.json" }
+  ],
+  "scorecard": {
+    "n": 60,
+    "bands": {
+      "POLL_PAUSE": 27,
+      "none": 33
+    },
+    "proposal_rate": 0.45,
+    "prediction_rate": 0.45,
+    "mutation_count": 0,
+    "dim_means": {
+      "appropriate_band": 4.233,
+      "correct_diagnosis": 3.267,
+      "evidence_grounded": 3.217,
+      "sensible_proposal": 3.183,
+      "falsifiable_prediction": 1.483
+    },
+    "overall": 3.077
+  }
+}

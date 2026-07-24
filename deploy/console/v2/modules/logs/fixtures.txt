@@ -1,0 +1,89 @@
+/* ---- logs fixtures: 58-line coherent narrative across 5 correlation arcs ---- */
+/* arcs: c-7f3a9b mem pressure dc1k8s-w3 (TG-0412, AUTO_NOTICE) · c-b2d114 crowdsec ssh-bf dc1fw01
+   (TG-0407, POLL_PAUSE + human approve) · c-3e91c7 disk dc2nas01 (TG-0399, deviation, floor pause) ·
+   c-e0a844 scrape gap dc2pve02 (TG-0415, AUTO, verified MATCH) · c-9a03b1 wan2 down dc1fw01 (TG-0416). */
+const LOG_T0 = Date.parse("2026-07-15T13:41:00.000");
+const LOG_CAP = 400;   /* hard cap on total retained lines */
+
+const LOG_LINES = [
+  {t:0,     lvl:"info", actor:"system",src:"governance",cid:"c-sys000",msg:"connector fleet: 31/31 modules loaded · 7 families healthy · MUTATION switch OFF"},
+  {t:1240,  lvl:"info", actor:"system",src:"librenms",  cid:"c-sys000",msg:"poll cycle 8492 complete · 214 devices · 0 unreachable"},
+  {t:2611,  lvl:"debug",actor:"ai",    src:"agent",     cid:"c-sys000",msg:"model gateway warm · litellm route ok · p50 412ms p99 1.9s"},
+  {t:4102,  lvl:"info", actor:"system",src:"prometheus",cid:"c-3e91c7",msg:"scrape ok · node_exporter dc2nas01 · 1.2k series"},
+  {t:6833,  lvl:"warn", actor:"system",src:"librenms",  cid:"c-7f3a9b",msg:"ALERT mem_util 94% on dc1k8s-w3 · rule mem>90%/5m · alert#88213",session:"TG-0412"},
+  {t:8001,  lvl:"info", actor:"ai",    src:"agent",     cid:"c-7f3a9b",msg:"session TG-0412 opened · ingest librenms#88213 · triage begin",session:"TG-0412"},
+  {t:9410,  lvl:"debug",actor:"ai",    src:"agent",     cid:"c-7f3a9b",msg:"estate graph: dc1k8s-w3 degree 7 · blast radius est 4 pods, 1 svc",session:"TG-0412"},
+  {t:11250, lvl:"info", actor:"ai",    src:"agent",     cid:"c-7f3a9b",msg:"hypothesis: kubelet memory leak — correlating with pod restarts on dc1k8s-w3",session:"TG-0412"},
+  {t:13892, lvl:"debug",actor:"ai",    src:"agent",     cid:"c-7f3a9b",msg:"evidence: 12 OOMKilled events / 45m · top offender ingester-7d9f",session:"TG-0412"},
+  {t:16044, lvl:"info", actor:"ai",    src:"gate",      cid:"c-7f3a9b",msg:"classify act_9f3ea1c2 → AUTO_NOTICE · risk 0.31 · conf 0.87 · reversible=yes",session:"TG-0412"},
+  {t:16987, lvl:"info", actor:"system",src:"gate",      cid:"c-7f3a9b",msg:"never-auto floor check: pass · target class k8s-workload · not in floor set",session:"TG-0412"},
+  {t:18230, lvl:"warn", actor:"system",src:"executor",  cid:"c-7f3a9b",msg:"act_9f3ea1c2 GATED — MUTATION switch OFF · plan held read-only",session:"TG-0412"},
+  {t:19112, lvl:"info", actor:"system",src:"governance",cid:"c-7f3a9b",msg:"ledger seq 18211 append · kind=classified · sha256 9f3e…a1c2 · chain ok",session:"TG-0412"},
+  {t:24508, lvl:"warn", actor:"system",src:"crowdsec",  cid:"c-b2d114",msg:"decision: ban 203.0.113.77 · scenario ssh-bf on dc1fw01 · duration 6h",session:"TG-0407"},
+  {t:25861, lvl:"info", actor:"ai",    src:"agent",     cid:"c-b2d114",msg:"session TG-0407 opened · crowdsec ssh-bf · 412 attempts/9m",session:"TG-0407"},
+  {t:27302, lvl:"debug",actor:"ai",    src:"agent",     cid:"c-b2d114",msg:"reverse dns: none · asn AS9009 · prior offenses 3",session:"TG-0407"},
+  {t:29155, lvl:"warn", actor:"ai",    src:"gate",      cid:"c-b2d114",msg:"classify act_4c77d0ab → POLL_PAUSE · perimeter firewall = never-auto floor",session:"TG-0407"},
+  {t:30021, lvl:"info", actor:"system",src:"gate",      cid:"c-b2d114",msg:"paused for human · notified #tg-ops · sla 30m",session:"TG-0407"},
+  {t:36414, lvl:"warn", actor:"system",src:"prometheus",cid:"c-3e91c7",msg:"ALERT disk_used 91% on dc2nas01 · volume tank/backups",session:"TG-0399"},
+  {t:37800, lvl:"info", actor:"ai",    src:"agent",     cid:"c-3e91c7",msg:"session TG-0399 opened · prometheus disk_used · trend +1.1%/day",session:"TG-0399"},
+  {t:39215, lvl:"debug",actor:"ai",    src:"agent",     cid:"c-3e91c7",msg:"predicted map: volume full in 8.2d · retention policy drift suspected",session:"TG-0399"},
+  {t:42710, lvl:"info", actor:"ai",    src:"agent",     cid:"c-3e91c7",msg:"proposal act_c31b77e0: prune backup snapshots >90d on dc2nas01 (est -14%)",session:"TG-0399"},
+  {t:44003, lvl:"warn", actor:"ai",    src:"gate",      cid:"c-3e91c7",msg:"classify act_c31b77e0 → POLL_PAUSE · destructive op class=storage-prune",session:"TG-0399"},
+  {t:44950, lvl:"info", actor:"system",src:"governance",cid:"c-3e91c7",msg:"ledger seq 18214 append · kind=proposed · chain ok",session:"TG-0399"},
+  {t:51200, lvl:"debug",actor:"ai",    src:"agent",     cid:"c-sys000",msg:"loop tick 5512 · queue 3 · tokens 41.2k/h"},
+  {t:58333, lvl:"info", actor:"human", src:"governance",cid:"c-b2d114",msg:"human k.papadopoulos APPROVED act_4c77d0ab via console · mfa ok",session:"TG-0407"},
+  {t:59410, lvl:"warn", actor:"system",src:"executor",  cid:"c-b2d114",msg:"act_4c77d0ab GATED — MUTATION OFF · would apply: drop-list +1 on dc1fw01",session:"TG-0407"},
+  {t:60122, lvl:"info", actor:"system",src:"governance",cid:"c-b2d114",msg:"ledger seq 18215 append · kind=approved · actor=human · chain ok",session:"TG-0407"},
+  {t:66280, lvl:"info", actor:"system",src:"librenms",  cid:"c-7f3a9b",msg:"recheck: mem_util 88% on dc1k8s-w3 · below threshold",session:"TG-0412"},
+  {t:68455, lvl:"info", actor:"ai",    src:"agent",     cid:"c-7f3a9b",msg:"verify: territory converging to map · verdict PARTIAL (2/3 signals)",session:"TG-0412"},
+  {t:74019, lvl:"error",actor:"system",src:"prometheus",cid:"c-e0a844",msg:"scrape FAILED dc2pve02 · context deadline exceeded (3rd of 5)",session:"TG-0415"},
+  {t:75288, lvl:"info", actor:"ai",    src:"agent",     cid:"c-e0a844",msg:"session TG-0415 opened · scrape gap dc2pve02 · checking node vs exporter",session:"TG-0415"},
+  {t:76940, lvl:"debug",actor:"ai",    src:"agent",     cid:"c-e0a844",msg:"icmp ok 0.4ms · tcp 9100 refused → exporter down, host up",session:"TG-0415"},
+  {t:79102, lvl:"info", actor:"ai",    src:"agent",     cid:"c-e0a844",msg:"proposal act_77aa03f9: restart node_exporter unit on dc2pve02",session:"TG-0415"},
+  {t:80515, lvl:"info", actor:"ai",    src:"gate",      cid:"c-e0a844",msg:"classify act_77aa03f9 → AUTO · risk 0.04 · conf 0.96 · reversible=yes",session:"TG-0415"},
+  {t:81400, lvl:"warn", actor:"system",src:"executor",  cid:"c-e0a844",msg:"act_77aa03f9 GATED — MUTATION OFF · dry-run recorded",session:"TG-0415"},
+  {t:84211, lvl:"info", actor:"system",src:"governance",cid:"c-sys000",msg:"ledger checkpoint · 18216 entries · head sha256 4be1‖77c9 · verify ok 100%"},
+  {t:90650, lvl:"info", actor:"system",src:"crowdsec",  cid:"c-b2d114",msg:"decision review: 12 active bans · 0 appeals · lapi healthy"},
+  {t:96130, lvl:"warn", actor:"ai",    src:"agent",     cid:"c-3e91c7",msg:"DEVIATION: observed growth 2.4%/day > predicted 1.1%/day on dc2nas01",session:"TG-0399"},
+  {t:97544, lvl:"info", actor:"ai",    src:"agent",     cid:"c-3e91c7",msg:"map revised · new full-in 3.9d · escalating priority p2→p1",session:"TG-0399"},
+  {t:103801,lvl:"error",actor:"system",src:"executor",  cid:"c-b90211",msg:"actuation adapter ssh: keepalive lost to dc1db01 · reconnect 1/3"},
+  {t:105232,lvl:"info", actor:"system",src:"executor",  cid:"c-b90211",msg:"reconnected dc1db01 · session resumed · 0 actions in flight"},
+  {t:111460,lvl:"info", actor:"system",src:"librenms",  cid:"c-sys000",msg:"poll cycle 8493 complete · 214 devices · 1 warn"},
+  {t:112905,lvl:"debug",actor:"ai",    src:"agent",     cid:"c-sys000",msg:"context window 62% · pruning 14 stale observations"},
+  {t:114010,lvl:"debug",actor:"system",src:"gate",      cid:"c-sys000",msg:"gate ruleset v41 · 17 floor entries · hash 88ac…d310"},
+  {t:120344,lvl:"info", actor:"human", src:"governance",cid:"c-7f3a9b",msg:"human k.papadopoulos acked alert librenms#88213 · note: watching trend",session:"TG-0412"},
+  {t:126001,lvl:"info", actor:"system",src:"prometheus",cid:"c-e0a844",msg:"scrape recovered dc2pve02 · gap 4m12s backfilled",session:"TG-0415"},
+  {t:127459,lvl:"info", actor:"ai",    src:"agent",     cid:"c-e0a844",msg:"verify act_77aa03f9: territory matches map · verdict MATCH",session:"TG-0415"},
+  {t:128300,lvl:"info", actor:"system",src:"governance",cid:"c-e0a844",msg:"ledger seq 18219 append · kind=verified · chain ok",session:"TG-0415"},
+  {t:134820,lvl:"warn", actor:"system",src:"crowdsec",  cid:"c-d17742",msg:"scenario http-probing from 198.51.100.14 · watch (below ban threshold)"},
+  {t:136114,lvl:"debug",actor:"ai",    src:"agent",     cid:"c-d17742",msg:"correlated 0 sessions · noted to estate graph edge dc1fw01→wan"},
+  {t:141002,lvl:"info", actor:"system",src:"governance",cid:"c-sys000",msg:"weekly never-auto floor review due in 2d · 17 entries · owner sre"},
+  {t:147630,lvl:"warn", actor:"system",src:"librenms",  cid:"c-9a03b1",msg:"ALERT ifOperStatus down · dc1fw01 port wan2 (backup) · rule if-down/2m",session:"TG-0416"},
+  {t:148911,lvl:"info", actor:"ai",    src:"agent",     cid:"c-9a03b1",msg:"session TG-0416 opened · wan2 down · primary wan1 healthy · impact low",session:"TG-0416"},
+  {t:150482,lvl:"info", actor:"ai",    src:"agent",     cid:"c-9a03b1",msg:"hypothesis: carrier maintenance — matches provider window 13:00–15:00",session:"TG-0416"},
+  {t:153077,lvl:"info", actor:"ai",    src:"gate",      cid:"c-9a03b1",msg:"classify act_5d20e6b4 → AUTO_NOTICE · notify only · no actuation planned",session:"TG-0416"},
+  {t:154210,lvl:"info", actor:"system",src:"executor",  cid:"c-9a03b1",msg:"notice dispatched → notifier:matrix #tg-ops · no mutation required",session:"TG-0416"},
+  {t:160003,lvl:"info", actor:"system",src:"governance",cid:"c-sys000",msg:"ledger seq 18221 append · daily hash-chain audit scheduled 18:00"}
+];
+const LOG_LAST_T = LOG_LINES[LOG_LINES.length-1].t;
+
+/* deterministic live-tail sequence — cycled in order, timestamps derived from tick index (never Date.now) */
+const LOG_TAIL = [
+  {lvl:"info", actor:"system",src:"prometheus",cid:"c-sys000",msg:"scrape ok · 214 targets · 0 failed"},
+  {lvl:"debug",actor:"ai",    src:"agent",     cid:"c-sys000",msg:"loop tick · queue 2 · p50 latency 398ms"},
+  {lvl:"info", actor:"system",src:"librenms",  cid:"c-sys000",msg:"poll delta · 0 new alerts"},
+  {lvl:"info", actor:"ai",    src:"agent",     cid:"c-3e91c7",msg:"trend watch dc2nas01 · disk 91.4% · slope steady",session:"TG-0399"},
+  {lvl:"debug",actor:"system",src:"gate",      cid:"c-sys000",msg:"floor set unchanged · ruleset v41"},
+  {lvl:"info", actor:"system",src:"crowdsec",  cid:"c-d17742",msg:"http-probing 198.51.100.14 · 2 more hits · still below threshold"},
+  {lvl:"info", actor:"system",src:"governance",cid:"c-sys000",msg:"ledger head advance · chain verify ok"},
+  {lvl:"debug",actor:"ai",    src:"agent",     cid:"c-7f3a9b",msg:"mem_util dc1k8s-w3 87.6% · below threshold · cooling",session:"TG-0412"},
+  {lvl:"info", actor:"system",src:"executor",  cid:"c-sys000",msg:"0 actions in flight · MUTATION OFF"},
+  {lvl:"info", actor:"system",src:"prometheus",cid:"c-e0a844",msg:"dc2pve02 exporter up 6m · series stable",session:"TG-0415"},
+  {lvl:"debug",actor:"ai",    src:"agent",     cid:"c-sys000",msg:"tokens 41.9k/h · budget 68% headroom"},
+  {lvl:"info", actor:"system",src:"librenms",  cid:"c-9a03b1",msg:"wan2 dc1fw01 still down · within provider window",session:"TG-0416"}
+];
+
+/* persistent module state — survives route swaps so filters + appended tail lines are kept */
+const LOG_STATE = { q:"", actor:new Set(), lvl:new Set(), src:new Set(),
+  live:(typeof reduceMotion!=="undefined" ? !reduceMotion : true),  /* reduced motion => start paused */
+  n:0, extra:[], drop:0 };

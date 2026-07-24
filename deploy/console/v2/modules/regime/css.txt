@@ -1,0 +1,29 @@
+/* REGIME module (rgm-) — the Actuation Regime Engine's operator surface (spec/017 T-017-7, REQ-1716).
+   Reuses the console design system verbatim (tokens, chips, tbl, wrapcard, tiles, sec, empty). The
+   map-vs-territory plane language carries over: map=indigo for the machine/effect lane, territory=steel
+   for the observed target. Read-only: no control here selects a lane or launches a job. */
+.rgm-root{display:flex;flex-direction:column;gap:12px}
+.rgm-toolbar{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.rgm-fixture{margin-left:auto;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--ink4);border:1px dashed var(--line3);padding:1px 6px;border-radius:var(--radius-s)}
+.rgm-intro{font-size:11.5px;line-height:1.55;color:var(--ink3);max-width:84ch;margin:0 2px 8px}
+.rgm-strip{margin-bottom:22px}
+.rgm-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.rgm-scroll table{min-width:660px}
+/* mode & posture hero — colored by the worker mutation gate (read-only safe → actuating warn) */
+.rgm-mode{display:flex;gap:18px;align-items:stretch;flex-wrap:wrap;padding:16px 18px;margin-bottom:14px}
+.rgm-mode-badge{display:flex;flex-direction:column;justify-content:center;gap:7px;min-width:172px;padding:14px 18px;border-radius:var(--radius);border:1px solid}
+.rgm-mode-name{font-family:var(--mono);font-size:21px;font-weight:600;letter-spacing:.01em;line-height:1.05}
+.rgm-mode-tag{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;opacity:.9}
+.rgm-mode-body{flex:1;min-width:240px;display:flex;flex-direction:column;gap:9px;justify-content:center}
+.rgm-flags{display:flex;gap:8px;flex-wrap:wrap}
+.rgm-note{font-size:11px;color:var(--ink3);line-height:1.5}
+.rgm-note b{color:var(--ink2)}
+.rgm-pill{display:inline-block;font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;font-weight:600;text-transform:uppercase;padding:2px 9px;border-radius:20px;border:1px solid;white-space:nowrap}
+.rgm-lane{font-family:var(--mono);font-size:12px;color:var(--map);font-weight:600}
+.rgm-target{font-family:var(--mono);font-size:11.5px;color:var(--territory)}
+.rgm-kref{font-family:var(--mono);font-size:10px;color:var(--ink3);border:1px solid var(--line2);border-radius:var(--radius-s);padding:1px 6px;white-space:nowrap}
+.rgm-cap{font-size:10.5px;color:var(--ink4);margin:2px 2px 12px;line-height:1.5}
+.rgm-cap b{color:var(--ink3)}
+/* lane-coverage activity bar */
+.rgm-lane-bar{display:inline-block;width:88px;height:7px;border-radius:5px;background:var(--g3s);border:1px solid var(--line2);overflow:hidden;vertical-align:middle}
+.rgm-lane-fill{display:block;height:100%}

@@ -1,0 +1,33 @@
+# Prometheus scrape config for the Territory Grounder Phase-2 canary safety plane.
+#
+# It scrapes the READ-ONLY /metrics surfaces of the grounder (public :8080) and the worker (admin :8444) —
+# it cannot mutate anything. The gauges it collects (mutation_enabled, circuit_breaker_state,
+# deviation_count) drive the alert rules in alert.rules.yml; the critical one is "mutation_enabled == 1",
+# an unexpected flip while the read-only foundation should hold OFF. Targets are reached by compose service
+# name on the internal network.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    stack: territory-grounder
+
+rule_files:
+  - /etc/prometheus/alert.rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: grounder
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["grounder:8080"]
+  - job_name: worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["worker:8444"]
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

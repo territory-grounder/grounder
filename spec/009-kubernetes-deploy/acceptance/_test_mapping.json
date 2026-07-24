@@ -1,0 +1,17 @@
+{
+  "feature": "kubernetes-deploy.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step renders the chart and asserts against real output; pending = the chart is authored but its godog render/assert step definitions do not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior). Every scenario here is pending — the chart skeleton exists but no binding test does.",
+  "scenarios": [
+    { "name": "A helm install brings up the full service set",                                              "req": "REQ-901", "status": "present", "test": "TestKubernetesDeployAcceptance" },
+    { "name": "The Helm chart is a first-class target at parity with compose",                               "req": "REQ-902", "status": "present", "test": "TestKubernetesDeployAcceptance" },
+    { "name": "The values file is the single authoritative configuration contract",                          "req": "REQ-907", "status": "present", "test": "TestKubernetesDeployAcceptance" },
+    { "name": "The grounder Deployment runs the same distroless binary image",                               "req": "REQ-903", "status": "present", "test": "TestKubernetesDeployAcceptance" },
+    { "name": "Mutation stays disabled by default under the Phase 0/1 foundation",                           "req": "REQ-906", "status": "present", "test": "TestKubernetesDeployAcceptance" },
+    { "name": "The public Service is auth-gated and the admin listener is not default-exposed",              "req": "REQ-909", "status": "present", "test": "TestKubernetesDeployAcceptance" },
+    { "name": "The grounder Deployment declares liveness and readiness probes ordered after Postgres",       "req": "REQ-910", "status": "present", "test": "TestKubernetesDeployAcceptance" },
+    { "name": "Credentials are sourced from Kubernetes Secrets and never rendered as literals",              "req": "REQ-904", "status": "present", "test": "TestKubernetesDeployAcceptance" },
+    { "name": "The runtime DSN uses the DML-only role and migration uses the DDL role",                      "req": "REQ-905", "status": "present", "test": "TestKubernetesDeployAcceptance" },
+    { "name": "CI runs helm lint and template render on a chart change",                                     "req": "REQ-908", "status": "present", "test": "TestKubernetesDeployAcceptance" },
+    { "name": "CI fails when a rendered manifest contains a literal credential",                             "req": "REQ-904", "status": "present", "test": "TestKubernetesDeployAcceptance" }
+  ]
+}

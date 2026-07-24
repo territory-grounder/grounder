@@ -1,0 +1,330 @@
+/* ================= estatedepth — ESTATE DEPTH =================
+   Exports (global, per contract):
+     estateNodeDetail(nodeId[, onNav]) -> DOM node   node inspector panel (drawer- or panel-mountable)
+     incidentTimeline(session)         -> DOM node   incident master-clock (session-drawer section)
+     est2View()                        -> DOM node   registry view (inspector + master-clock preview)
+   Epistemic law: observed telemetry = --territory (steel, solid);
+   AI claims (blast radius, infragraph confidence, predicted envelope) = --map (indigo, dashed). */
+
+/* ---------- deterministic fixture machinery (stable per node/session, honest preview) ---------- */
+function est2Hash(s){let x=2166136261;s=String(s);for(let i=0;i<s.length;i++){x^=s.charCodeAt(i);x=Math.imul(x,16777619);}return x>>>0;}
+function est2Rng(seed){let x=(seed>>>0)||1;return function(){x^=x<<13;x^=x>>>17;x^=x<<5;x>>>=0;return x/4294967296;};}
+function est2Walk(seedStr,n,base,amp){const r=est2Rng(est2Hash(seedStr));const o=[];let v=base;
+  for(let i=0;i<n;i++){v+=(r()-.5)*amp;v=Math.max(1,Math.min(99,v));o.push(+v.toFixed(1));}return o;}
+
+function est2DefaultProfile(id,health){const r=est2Rng(est2Hash(id));
+  const hot=health==="crit",wm=health==="warn";
+  return {cpu:[20+r()*35,10+r()*12,hot],mem:[35+r()*35,4+r()*8,wm&&r()>.5],disk:[25+r()*45,2+r()*3],net:[15+r()*45,10+r()*20]};}
+
+function est2Signals(id,health){
+  const p=EST2_PROFILES[id]||est2DefaultProfile(id,health);
+  const mk=(k,def)=>{const c=p[k]||def;const s=est2Walk(id+":"+k,48,c[0],c[1]);
+    if(c[2]){for(let i=34;i<48;i++)s[i]=Math.min(99,+(s[i]+(i-33)*2.6).toFixed(1));}
+    return {series:s,now:s[s.length-1],unit:k==="net"?"Mb/s":"%"};};
+  return {cpu:mk("cpu",[30,16]),mem:mk("mem",[55,8]),disk:mk("disk",[45,3]),net:mk("net",[35,20])};}
+
+/* ---------- infragraph reads (edge [a,b,w] = "a depends on b, confidence w") ---------- */
+function est2Deps(id){const up=[],down=[];
+  (((typeof ESTATE!=="undefined")&&ESTATE.edges)||[]).forEach(e=>{const a=e[0],b=e[1],w=e[2]==null?1:e[2];
+    if(a===id)up.push({id:b,w});if(b===id)down.push({id:a,w});});
+  up.sort((x,y)=>y.w-x.w);down.sort((x,y)=>y.w-x.w);return {up,down};}
+
+function est2Blast(id){ // transitive downstream ripple: who breaks if id changes (AI claim -> map)
+  const res=new Map();const q=[[id,1,0]];
+  while(q.length){const cur=q.shift();
+    (((typeof ESTATE!=="undefined")&&ESTATE.edges)||[]).forEach(e=>{const a=e[0],b=e[1],w=e[2]==null?1:e[2];
+      if(b===cur[0]&&a!==id){const c=cur[1]*w;
+        if(!res.has(a)||res.get(a).conf<c){res.set(a,{conf:c,hop:cur[2]+1});if(cur[2]<4&&c>0.05)q.push([a,c,cur[2]+1]);}}});}
+  return Array.from(res,pair=>({id:pair[0],conf:pair[1].conf,hop:pair[1].hop})).sort((x,y)=>y.conf-x.conf);}
+
+/* ---------- sparkline adapter: prefer the chart-primitives sparkline(), safe local fallback ---------- */
+function est2Spark(vals,o){o=o||{};const col=o.color||"var(--territory)";
+  if(typeof sparkline==="function"){try{
+    const n=sparkline(vals,{w:o.w||104,h:o.h||26,color:col,stroke:col});
+    if(n&&n.nodeType===1)return n;}catch(e){/* fall through to local */}}
+  const w=o.w||104,h2=o.h||26,p=2,min=Math.min.apply(null,vals),max=Math.max.apply(null,vals),sp=(max-min)||1;
+  const pts=vals.map((v,i)=>[p+i*(w-2*p)/(vals.length-1),h2-p-(v-min)/sp*(h2-2*p)]);
+  const d="M"+pts.map(pt=>pt[0].toFixed(1)+","+pt[1].toFixed(1)).join("L");
+  const last=pts[pts.length-1];
+  return svgEl("svg",{viewBox:"0 0 "+w+" "+h2,class:"e2-spark","aria-hidden":"true"},
+    svgEl("path",{d:d+"L"+(w-p)+","+(h2-p)+"L"+p+","+(h2-p)+"Z",fill:col,opacity:"0.09",stroke:"none"}),
+    svgEl("path",{d:d,fill:"none",stroke:col,"stroke-width":"1.2","stroke-linejoin":"round"}),
+    svgEl("circle",{cx:last[0],cy:last[1],r:"1.8",fill:col}));}
+
+/* ---------- chips (color + glyph + label, never color alone) ---------- */
+function est2HealthChip(hl){const m=EST2_HEALTH[hl]||EST2_HEALTH.ok;
+  return h("span",{class:"e2-chip",style:"color:"+m[1]},h("span",{class:"e2-g","aria-hidden":"true"},m[0]),m[2]);}
+function est2VerdictChip(v){const m=EST2_VERDICT[v]||EST2_VERDICT.match;
+  return h("span",{class:"e2-chip e2-vchip",style:"color:"+m[1]+";border-color:"+m[1]},
+    h("span",{class:"e2-g","aria-hidden":"true"},m[0]),m[2]);}
+function est2BandChip(b){const m=EST2_BAND[b]||EST2_BAND.pause;
+  return h("span",{class:"e2-chip",style:"color:"+m[1]},h("span",{class:"e2-g","aria-hidden":"true"},m[0]),
+    (typeof bandName!=="undefined"&&bandName[b])||b);}
+function est2SevChip(sev){const m=EST2_SEV[sev]||EST2_SEV.info;
+  return h("span",{class:"e2-chip",style:"color:"+m[1]},h("span",{class:"e2-g","aria-hidden":"true"},m[0]),m[2]);}
+function est2ConfBar(v){return h("span",{class:"e2-wbar"},
+  h("span",{class:"e2-wfill",style:"width:"+pct(Math.max(0,Math.min(1,v)))+"%"}));}
+
+/* ================= (1) ESTATE NODE DETAIL ================= */
+function estateNodeDetail(nodeId,onNav){
+  const nodes=((typeof ESTATE!=="undefined")&&ESTATE.nodes)||[];
+  const node=nodes.find(n=>n.id===nodeId)||{id:nodeId,health:"ok"};
+  const meta=((typeof HOSTS!=="undefined")&&HOSTS[nodeId])||{site:String(nodeId).slice(0,7),role:"unknown"};
+  const health=meta.health||node.health||"ok";
+  const sig=est2Signals(nodeId,health);
+  const deps=est2Deps(nodeId),blast=est2Blast(nodeId);
+  const alerts=(((typeof ALERTS!=="undefined")&&ALERTS)||[]).filter(a=>a.host===nodeId&&a.state!=="resolved");
+  const sess=(((typeof SESSIONS!=="undefined")&&SESSIONS)||[]).filter(x=>x.host===nodeId);
+  const nav=id=>onNav
+    ?h("a",{class:"e2-navh",href:"#",onclick:e=>{e.preventDefault();onNav(id);}},id)
+    :h("span",{class:"e2-navh"},id);
+  const depRow=d=>h("div",{class:"e2-drow"},nav(d.id),est2ConfBar(d.w),
+    h("span",{class:"e2-num"},(d.w).toFixed(2)));
+
+  return h("div",{class:"e2-detail"},
+    /* identity */
+    h("div",{class:"e2-head"},
+      h("div",{class:"e2-host"},nodeId),
+      h("div",{class:"e2-tags"},
+        h("span",{class:"e2-tag"},meta.site||"—"),
+        h("span",{class:"e2-tag"},meta.role||"—"),
+        est2HealthChip(health),
+        h("span",{class:"e2-src e2-src-t"},"TERRITORY · observed"))),
+    /* golden signals */
+    h("div",{class:"e2-sec"},
+      h("div",{class:"e2-h"},"GOLDEN SIGNALS",h("span",{class:"e2-hnote"},"48 samples · 4h"),h("span",{class:"e2-fix"},"synthetic")),
+      h("div",{class:"e2-sigrow"},["cpu","mem","disk","net"].map(k=>{
+        const s=sig[k],hot=s.unit==="%"&&s.now>=85;
+        return h("div",{class:"e2-sig"},
+          h("div",{class:"e2-sigl"},k.toUpperCase()),
+          est2Spark(s.series,{w:104,h:26,color:"var(--territory)"}),
+          h("div",{class:"e2-sigv"+(hot?" e2-hot":"")},
+            s.now.toFixed(s.unit==="%"?1:0),h("span",{class:"e2-u"},s.unit)));}))),
+    /* active alerts */
+    h("div",{class:"e2-sec"},
+      h("div",{class:"e2-h"},"ACTIVE ALERTS",h("span",{class:"e2-hnote"},alerts.length+" open")),
+      alerts.length?alerts.map(a=>h("div",{class:"e2-arow"},
+        est2SevChip(a.sev),
+        h("span",{class:"e2-arule"},a.rule),
+        h("span",{class:"e2-asrc"},a.src),
+        h("span",{class:"e2-num"},a.ts)))
+      :h("div",{class:"e2-empty"},"no active alerts on this node")),
+    /* dependencies (infragraph claim -> map) */
+    h("div",{class:"e2-sec"},
+      h("div",{class:"e2-h"},"DEPENDENCIES",
+        h("span",{class:"e2-src e2-src-m"},"MAP · infragraph confidence")),
+      h("div",{class:"e2-deps"},
+        h("div",{class:"e2-dcol"},
+          h("div",{class:"e2-dch"},"▲ UPSTREAM · this node depends on"),
+          deps.up.length?deps.up.map(depRow):h("div",{class:"e2-empty"},"none modeled")),
+        h("div",{class:"e2-dcol"},
+          h("div",{class:"e2-dch"},"▼ DOWNSTREAM · depend on this node"),
+          deps.down.length?deps.down.map(depRow):h("div",{class:"e2-empty"},"none modeled")))),
+    /* blast radius (prediction -> map) */
+    h("div",{class:"e2-sec"},
+      h("div",{class:"e2-h"},"BLAST RADIUS FROM HERE",
+        h("span",{class:"e2-src e2-src-m"},"MAP · predicted ripple")),
+      blast.length?blast.map(b=>h("div",{class:"e2-brow"},
+        h("span",{class:"e2-hop"},"H"+b.hop),nav(b.id),
+        est2ConfBar(b.conf),h("span",{class:"e2-num"},pct(b.conf)+"%")))
+      :h("div",{class:"e2-empty"},"no downstream dependents — blast contained")),
+    /* sessions touching this node */
+    sess.length?h("div",{class:"e2-sec"},
+      h("div",{class:"e2-h"},"SESSIONS ON THIS NODE"),
+      sess.map(x=>h("a",{class:"e2-srow",href:"#",onclick:e=>{e.preventDefault();
+          if(typeof openSession==="function")openSession(x);}},
+        est2BandChip(x.band),
+        h("span",{class:"e2-sref"},x.ref||x.id),
+        h("span",{class:"e2-stitle"},x.title||""),
+        h("span",{class:"e2-open"},"open ▸")))):null,
+    /* gated actuation (mutation OFF) */
+    h("div",{class:"e2-gate"},
+      h("button",{class:"e2-gbtn",disabled:true},"⊘ drain node"),
+      h("button",{class:"e2-gbtn",disabled:true},"⊘ cordon"),
+      h("span",{class:"e2-gnote"},"MUTATION OFF — read-only preview; actuation gated")));}
+
+/* ================= (2) INCIDENT MASTER-CLOCK ================= */
+function est2IncidentModel(s){
+  s=s||{};const r=est2Rng(est2Hash(s.id||s.ref||"sess"));
+  const band=s.band||"pause",verdict=s.verdict||"match";
+  const pre=520+Math.round(r()*260);          // alert -> execute, seconds
+  const tVerify=90+Math.round(r()*180);
+  const tMin=-pre-90,tMax=tVerify+430;
+  const ev=[{t:-pre,k:"alert",lbl:(s.alerts&&s.alerts[0])||"alert.fired"}];
+  const rs=(s.reason||[]).slice(0,3);
+  if(rs.length)rs.forEach((x,i)=>ev.push({t:-pre+pre*(0.18+0.16*i),k:"hyp",
+    lbl:(x.kind||"hypothesis")+(x.conf!=null?" "+pct(x.conf)+"%":"")}));
+  else{ev.push({t:-pre*0.76,k:"hyp",lbl:"hypothesis 82%"});ev.push({t:-pre*0.55,k:"hyp",lbl:"evidence cited"});}
+  ev.push({t:-pre*0.34,k:"commit",lbl:"prediction.commit"});
+  if(band!=="auto")ev.push({t:-pre*0.14,k:"approve",lbl:band==="pause"?"human approve":"notified"});
+  ev.push({t:0,k:"exec",lbl:"execute"});
+  ev.push({t:tVerify,k:"verify",lbl:"verify: "+verdict,verdict:verdict});
+  /* observed series (territory) */
+  const base=26+r()*10,peak=78+r()*12,step=20,obs=[];
+  for(let t=tMin;t<=tMax;t+=step){let v;
+    if(t<-pre)v=base+(r()-.5)*4;
+    else if(t<0){const k=Math.min(1,(t+pre)/140);v=base+(peak-base)*k+(r()-.5)*5;}
+    else{const d=Math.exp(-t/170);
+      if(verdict==="match")v=base+(peak-base)*d+(r()-.5)*4;
+      else if(verdict==="partial")v=base+22+(peak-base-22)*d+(r()-.5)*5;
+      else v=peak-6+Math.sin(t/95)*7+(r()-.5)*6;}
+    obs.push([t,Math.max(2,Math.min(98,v))]);}
+  /* predicted post-exec envelope, committed pre-exec (map) */
+  const env=[];
+  for(let t=0;t<=tMax;t+=step){const d=Math.exp(-t/160);
+    env.push([t,Math.max(2,base-6+(peak-14-base)*d),Math.min(98,base+9+(peak+4-base)*d)]);}
+  return {band:band,verdict:verdict,tMin:tMin,tMax:tMax,tVerify:tVerify,ev:ev,obs:obs,env:env,base:base,
+    metric:"cpu_util % · "+(s.host||(s.action&&s.action.target)||"target"),live:!!s.live,ref:s.ref||s.id||"—"};}
+
+function est2Fmt(t){if(t===0)return "T0";const a=Math.abs(t),m=Math.floor(a/60),sec=a%60;
+  return (t<0?"T−":"T+")+(sec?m+":"+String(sec).padStart(2,"0"):m+"m");}
+function est2EnvAt(env,t){if(!env.length||t<env[0][0])return null;
+  for(let i=1;i<env.length;i++){if(env[i][0]>=t){const a=env[i-1],b=env[i],k=(t-a[0])/((b[0]-a[0])||1);
+    return [a[1]+(b[1]-a[1])*k,a[2]+(b[2]-a[2])*k];}}
+  return [env[env.length-1][1],env[env.length-1][2]];}
+function est2Glyph(shape,cx,cy,c){
+  switch(shape){
+    case "tri":return svgEl("path",{d:"M"+cx+" "+(cy-4.5)+"L"+(cx+4.5)+" "+(cy+3.5)+"L"+(cx-4.5)+" "+(cy+3.5)+"Z",fill:c});
+    case "diam":return svgEl("path",{d:"M"+cx+" "+(cy-5)+"L"+(cx+5)+" "+cy+"L"+cx+" "+(cy+5)+"L"+(cx-5)+" "+cy+"Z",
+      fill:"var(--g1)",stroke:c,"stroke-width":"1.4"});
+    case "sq":return svgEl("rect",{x:cx-3.5,y:cy-3.5,width:7,height:7,fill:"var(--g1)",stroke:c,"stroke-width":"1.4"});
+    case "bar":return svgEl("rect",{x:cx-1.5,y:cy-6,width:3,height:12,fill:c});
+    case "ring":return svgEl("g",{},
+      svgEl("circle",{cx:cx,cy:cy,r:4.5,fill:"none",stroke:c,"stroke-width":"1.4"}),
+      svgEl("circle",{cx:cx,cy:cy,r:1.8,fill:c}));
+    default:return svgEl("circle",{cx:cx,cy:cy,r:3.2,fill:"var(--g1)",stroke:c,"stroke-width":"1.4"});}}
+
+function incidentTimeline(s){
+  const m=est2IncidentModel(s);
+  const W=720,H=234,L=46,R=12,EY=52,MT=82,MB=192,AXY=212;
+  const x=t=>L+(t-m.tMin)/(m.tMax-m.tMin)*(W-L-R);
+  const y=v=>MB-(Math.max(0,Math.min(100,v))/100)*(MB-MT);
+  const svg=svgEl("svg",{viewBox:"0 0 "+W+" "+H,class:"e2-csvg",role:"img",
+    "aria-label":"incident master-clock: event lane over "+m.metric});
+  /* metric grid + value axis */
+  [0,50,100].forEach(g=>{svg.append(
+    svgEl("line",{x1:L,x2:W-R,y1:y(g),y2:y(g),class:"e2-grid"}),
+    svgEl("text",{x:L-6,y:y(g)+3,class:"e2-ax","text-anchor":"end"},g===100?"100%":String(g)));});
+  /* lane tags + divider + event baseline */
+  svg.append(
+    svgEl("text",{x:L,y:13,class:"e2-lt"},"EVENTS"),
+    svgEl("text",{x:L,y:MT-7,class:"e2-lt"},m.metric.toUpperCase()),
+    svgEl("line",{x1:L,x2:W-R,y1:68,y2:68,class:"e2-grid"}),
+    svgEl("line",{x1:L,x2:W-R,y1:EY,y2:EY,class:"e2-base"}));
+  /* shared time axis, ticks every 5 min */
+  for(let t=Math.ceil(m.tMin/300)*300;t<=m.tMax;t+=300){
+    svg.append(svgEl("line",{x1:x(t),x2:x(t),y1:MB,y2:MB+4,class:"e2-grid"}),
+      svgEl("text",{x:x(t),y:AXY,class:"e2-ax"+(t===0?" e2-t0":""),"text-anchor":"middle"},est2Fmt(t)));}
+  /* predicted envelope (map: indigo, dashed) */
+  if(m.env.length){
+    const lo=m.env.map(p=>x(p[0]).toFixed(1)+","+y(p[1]).toFixed(1));
+    const hi=m.env.map(p=>x(p[0]).toFixed(1)+","+y(p[2]).toFixed(1));
+    svg.append(
+      svgEl("path",{d:"M"+lo.join("L")+"L"+hi.slice().reverse().join("L")+"Z",fill:"var(--map)",opacity:"0.08",stroke:"none"}),
+      svgEl("path",{d:"M"+hi.join("L"),fill:"none",stroke:"var(--map)","stroke-width":"1.1","stroke-dasharray":"4 3"}),
+      svgEl("path",{d:"M"+lo.join("L"),fill:"none",stroke:"var(--map)","stroke-width":"1.1","stroke-dasharray":"4 3"}));}
+  /* observed series (territory: steel, solid) */
+  const op=m.obs.map(p=>x(p[0]).toFixed(1)+","+y(p[1]).toFixed(1));
+  svg.append(
+    svgEl("path",{d:"M"+op.join("L")+"L"+x(m.tMax).toFixed(1)+","+MB+"L"+x(m.tMin).toFixed(1)+","+MB+"Z",
+      fill:"var(--territory)",opacity:"0.07",stroke:"none"}),
+    svgEl("path",{d:"M"+op.join("L"),fill:"none",stroke:"var(--territory)","stroke-width":"1.6",
+      "stroke-linejoin":"round",class:"e2-obs"}));
+  /* out-of-envelope overlay (verdict deviation made visible on the territory line) */
+  let seg=[];const flush=()=>{if(seg.length>1)svg.append(svgEl("path",{d:"M"+seg.join("L"),fill:"none",
+    stroke:"var(--deviation)","stroke-width":"1.6","stroke-linejoin":"round"}));seg=[];};
+  m.obs.forEach(p=>{const e=p[0]>=0?est2EnvAt(m.env,p[0]):null;
+    if(e&&(p[1]>e[1]+0.5||p[1]<e[0]-0.5))seg.push(x(p[0]).toFixed(1)+","+y(p[1]).toFixed(1));else flush();});
+  flush();
+  /* alert + execute verticals span BOTH lanes (the shared clock) */
+  const tAlert=m.ev[0].t;
+  svg.append(
+    svgEl("line",{x1:x(tAlert),x2:x(tAlert),y1:20,y2:MB,stroke:"var(--deviation)","stroke-width":"1",
+      "stroke-dasharray":"2 3",opacity:"0.45"}),
+    svgEl("line",{x1:x(0),x2:x(0),y1:8,y2:MB+6,stroke:"var(--hazard)","stroke-width":"1.4"}),
+    svgEl("text",{x:x(0)+5,y:MT-7,class:"e2-lt e2-haz"},"EXECUTE"));
+  /* event ticks + staggered labels with leaders */
+  m.ev.forEach((e,i)=>{const k=EST2_KINDS[e.k]||EST2_KINDS.hyp;
+    const c=e.k==="verify"?(EST2_VERDICT[e.verdict]||EST2_VERDICT.match)[1]:k.c;
+    const ex=x(e.t),row=i%2,ly=row?24:38;
+    const lx=Math.max(L+8,Math.min(W-R-8,ex));
+    svg.append(
+      svgEl("line",{x1:ex,x2:ex,y1:ly+3,y2:EY-7,class:"e2-lead"}),
+      est2Glyph(k.shape,ex,EY,c),
+      svgEl("text",{x:lx,y:ly,class:"e2-elbl","text-anchor":"middle",fill:c},
+        e.lbl.length>26?e.lbl.slice(0,25)+"…":e.lbl));});
+  /* crosshair + readout */
+  const cross=svgEl("line",{x1:-9,x2:-9,y1:20,y2:MB,class:"e2-cross",opacity:"0"});
+  svg.append(cross);
+  const read=h("div",{class:"e2-xread"},"");
+  svg.addEventListener("mousemove",e=>{
+    const rc=svg.getBoundingClientRect();if(!rc.width)return;
+    const vx=(e.clientX-rc.left)*(W/rc.width);
+    if(vx<L||vx>W-R){cross.setAttribute("opacity","0");read.textContent="";return;}
+    const t=m.tMin+(vx-L)/(W-L-R)*(m.tMax-m.tMin);
+    const i=Math.max(0,Math.min(m.obs.length-1,Math.round((t-m.tMin)/20)));
+    const ob=m.obs[i],env=t>=0?est2EnvAt(m.env,t):null;
+    cross.setAttribute("x1",x(ob[0]));cross.setAttribute("x2",x(ob[0]));cross.setAttribute("opacity","1");
+    read.textContent=est2Fmt(Math.round(ob[0]/20)*20)+" · obs "+ob[1].toFixed(1)+"%"+
+      (env?" · pred "+env[0].toFixed(0)+"–"+env[1].toFixed(0)+"%":" · pred —");});
+  svg.addEventListener("mouseleave",()=>{cross.setAttribute("opacity","0");read.textContent="";});
+  /* assembly: header / svg / legend */
+  const liveDot=m.live?h("span",{class:"e2-livedot"+((typeof reduceMotion!=="undefined"&&reduceMotion)?"":" pulse"),
+    title:"session live"}):null;
+  return h("div",{class:"e2-clock"},
+    h("div",{class:"e2-chead"},
+      h("span",{class:"e2-h e2-ch"},"INCIDENT MASTER-CLOCK"),
+      h("span",{class:"e2-sref"},m.ref),
+      est2BandChip(m.band),liveDot,
+      h("span",{class:"e2-fix"},"synthetic"),
+      h("span",{class:"e2-sp"}),
+      est2VerdictChip(m.verdict)),
+    h("div",{class:"e2-cbody"},svg,read),
+    h("div",{class:"e2-clegend"},
+      h("span",{class:"e2-li"},h("span",{class:"e2-sw e2-sw-t"}),"OBSERVED · territory"),
+      h("span",{class:"e2-li"},h("span",{class:"e2-sw e2-sw-m"}),"PREDICTED envelope · map"),
+      h("span",{class:"e2-li"},h("span",{class:"e2-sw e2-sw-x"}),"T0 execute"),
+      h("span",{class:"e2-li"},h("span",{class:"e2-sw e2-sw-d"}),"out of envelope")));}
+
+/* ================= registry view: estate depth ================= */
+function est2Rank(hl){return hl==="crit"?0:hl==="warn"?1:2;}
+function est2View(){
+  const nodes=(((typeof ESTATE!=="undefined")&&ESTATE.nodes)||[]).slice()
+    .sort((a,b)=>est2Rank(a.health)-est2Rank(b.health)||a.id.localeCompare(b.id));
+  let sel=(nodes.find(n=>n.health==="crit")||nodes[0]||{id:"dc1k8s-w3"}).id;
+  const list=h("div",{class:"e2-list"});
+  const host=h("div",{class:"e2-dhost"});
+  function draw(){
+    const f=((typeof facetState!=="undefined")&&facetState.estatedepth)||"all";
+    const rows=nodes.filter(n=>f==="all"||n.health===f).map(n=>{
+      const hm=EST2_HEALTH[n.health]||EST2_HEALTH.ok;
+      return h("a",{class:"e2-lrow"+(n.id===sel?" sel":""),href:"#",
+        onclick:e=>{e.preventDefault();sel=n.id;draw();}},
+        h("span",{class:"e2-g",style:"color:"+hm[1],"aria-hidden":"true"},hm[0]),
+        h("span",{class:"e2-lid"},n.id),
+        h("span",{class:"e2-lrole"},((typeof HOSTS!=="undefined")&&HOSTS[n.id]&&HOSTS[n.id].role)||""));});
+    list.replaceChildren.apply(list,rows.length?rows:[h("div",{class:"e2-empty"},"no nodes match facet")]);
+    host.replaceChildren(estateNodeDetail(sel,id=>{sel=id;draw();}));}
+  draw();
+  const sess=((typeof SESSIONS!=="undefined")&&SESSIONS&&SESSIONS.length)
+    ?(SESSIONS.find(z=>z.verdict==="deviation")||SESSIONS[0]):null;
+  const listHdr=h("div",{class:"e2-ph"},"NODES",h("span",{class:"e2-hnote"},nodes.length+" in estate"));
+  const inspPane=h("div",{class:"e2-pane"},host);
+  /* Cap the node list to the INSPECTOR's content height so the grid row tracks the inspector (the documented
+     intent) and no orphaned gap opens above the master-clock. CSS can't reference a sibling's height, so
+     measure host (the inspector's natural content — a plain block, so it reports its content height even when
+     its pane is stretched) and cap the list to that minus its own header. Re-runs on node switch (host's
+     children change) and on window resize. Guarded to only write on a >2px change so it can never feed back
+     on itself. The CSS max-height is the fallback until this first fires / where ResizeObserver is absent. */
+  if(typeof ResizeObserver!=="undefined"){
+    let last=-1;
+    const sync=()=>{ const ch=host.getBoundingClientRect().height, hh=listHdr.offsetHeight||28;
+      const cap=Math.max(180,Math.round(ch-hh));
+      if(ch>0 && Math.abs(cap-last)>2){ last=cap; list.style.maxHeight=cap+"px"; } };
+    try{ new ResizeObserver(sync).observe(host); }catch(e){/* fallback: CSS max-height */}
+  }
+  return h("div",{class:"e2-view"},
+    h("div",{class:"e2-cols"},
+      h("div",{class:"e2-pane"},listHdr,list),
+      inspPane),
+    sess?h("div",{class:"e2-pane e2-clockpane"},incidentTimeline(sess)):null);}

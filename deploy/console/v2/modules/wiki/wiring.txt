@@ -1,0 +1,8 @@
+views.wiki = wkView;
+VIEW_META.wiki = ["Wiki", "the living wiki — lessons the verifier confirmed, runbooks embedded in the binary, the skill library by reference (REQ-521)"];
+FACETS.wiki = [["lessons", "Lessons"], ["runbooks", "Runbooks"], ["skills", "Skills"]];
+facetState.wiki = facetState.wiki || "runbooks";  // land on populated runbooks, not the honestly-empty lessons tab
+wkBadge();
+/* eager live load: wrap session adoption so the wiki + badge go live the moment a session lands */
+const wkPrevLiveAdopt = liveAdopt;
+liveAdopt = async function(){ await wkPrevLiveAdopt(); if (liveState.on) wkLoadIndex(); };

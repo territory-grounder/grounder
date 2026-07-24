@@ -1,0 +1,355 @@
+{
+  "spec": "008-connectors",
+  "tasks": [
+    {
+      "id": "T-008-0",
+      "title": "Module framework: the seven adapter-surface interfaces + capability-scoped registry (INV-17/18)",
+      "files_owned": [
+        "modules/registry.go",
+        "adapters/ingest/ingest.go",
+        "adapters/tracker/tracker.go",
+        "adapters/notifier/notifier.go",
+        "adapters/cmdb/cmdb.go",
+        "adapters/observability/observability.go",
+        "adapters/model/provider.go"
+      ],
+      "deps": [],
+      "req_ids": ["REQ-821"],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "An unregistered or disabled module has no execution path",
+          "Each surface admits exactly one registered implementation per source type"
+        ]
+      },
+      "budget": { "max_loc_delta": 400, "max_wall_clock_minutes": 90 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-1",
+      "title": "modules/ingest/librenms: loadable LibreNMS ingest module (NL + GR config rows behind one impl)",
+      "files_owned": ["modules/ingest/librenms/librenms.go", "modules/ingest/librenms/normalize.go"],
+      "deps": [],
+      "req_ids": ["REQ-801"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The LibreNMS ingest module loads and normalizes a device-down alert"] },
+      "budget": { "max_loc_delta": 400, "max_wall_clock_minutes": 90 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-2",
+      "title": "modules/ingest/prometheus-alertmanager: loadable Prometheus/Alertmanager ingest module",
+      "files_owned": ["modules/ingest/prometheus-alertmanager/alertmanager.go", "modules/ingest/prometheus-alertmanager/correlate.go"],
+      "deps": [],
+      "req_ids": ["REQ-802"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The Prometheus Alertmanager ingest module loads and correlates a firing-then-resolved alert"] },
+      "budget": { "max_loc_delta": 400, "max_wall_clock_minutes": 90 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-3",
+      "title": "modules/ingest/crowdsec: loadable CrowdSec ingest module",
+      "files_owned": ["modules/ingest/crowdsec/crowdsec.go"],
+      "deps": [],
+      "req_ids": ["REQ-803"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The CrowdSec ingest module loads and normalizes a decision event"] },
+      "budget": { "max_loc_delta": 350, "max_wall_clock_minutes": 75 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-4",
+      "title": "modules/tracker/youtrack: loadable YouTrack tracker module (trigger + audit sink)",
+      "files_owned": ["modules/tracker/youtrack/youtrack.go", "modules/tracker/youtrack/state.go"],
+      "deps": [],
+      "req_ids": ["REQ-804"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The YouTrack tracker module loads and drives the trigger and audit sink"] },
+      "budget": { "max_loc_delta": 400, "max_wall_clock_minutes": 90 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-5",
+      "title": "modules/tracker/jira: reference Jira tracker module behind the tracker interface",
+      "files_owned": ["modules/tracker/jira/jira.go"],
+      "deps": ["T-008-4"],
+      "req_ids": ["REQ-805"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The Jira tracker module loads behind the tracker interface"] },
+      "budget": { "max_loc_delta": 250, "max_wall_clock_minutes": 60 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-6",
+      "title": "modules/tracker/github-issues: reference GitHub Issues tracker module",
+      "files_owned": ["modules/tracker/github-issues/github_issues.go"],
+      "deps": ["T-008-4"],
+      "req_ids": ["REQ-805"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The GitHub Issues tracker module loads behind the tracker interface"] },
+      "budget": { "max_loc_delta": 250, "max_wall_clock_minutes": 60 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-7",
+      "title": "modules/tracker/servicenow: reference ServiceNow tracker module",
+      "files_owned": ["modules/tracker/servicenow/servicenow.go"],
+      "deps": ["T-008-4"],
+      "req_ids": ["REQ-805"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The ServiceNow tracker module loads behind the tracker interface"] },
+      "budget": { "max_loc_delta": 250, "max_wall_clock_minutes": 60 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-8",
+      "title": "modules/notifier/matrix: loadable Matrix notifier+approval module + shared notifier obligations",
+      "files_owned": ["modules/notifier/matrix/matrix.go", "modules/notifier/matrix/approval.go", "adapters/notifier/redact.go"],
+      "deps": [],
+      "req_ids": ["REQ-806"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The Matrix notifier module loads and binds an approval vote to its decision"] },
+      "budget": { "max_loc_delta": 400, "max_wall_clock_minutes": 90 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-9",
+      "title": "modules/notifier/twilio-sms: loadable Twilio SMS notifier module",
+      "files_owned": ["modules/notifier/twilio-sms/twilio_sms.go"],
+      "deps": [],
+      "req_ids": ["REQ-807"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The Twilio SMS notifier module loads and delivers a deduplicated page"] },
+      "budget": { "max_loc_delta": 300, "max_wall_clock_minutes": 60 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-10",
+      "title": "modules/notifier/mattermost: loadable Mattermost notifier+approval module",
+      "files_owned": ["modules/notifier/mattermost/mattermost.go"],
+      "deps": [],
+      "req_ids": ["REQ-808"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The Mattermost notifier module loads and binds a response to its decision"] },
+      "budget": { "max_loc_delta": 350, "max_wall_clock_minutes": 75 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-11",
+      "title": "modules/notifier/slack: reference Slack notifier+approval module",
+      "files_owned": ["modules/notifier/slack/slack.go"],
+      "deps": ["T-008-8"],
+      "req_ids": ["REQ-809"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The Slack notifier module loads behind the notifier interface"] },
+      "budget": { "max_loc_delta": 250, "max_wall_clock_minutes": 60 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-12",
+      "title": "modules/notifier/teams: reference Microsoft Teams notifier+approval module",
+      "files_owned": ["modules/notifier/teams/teams.go"],
+      "deps": ["T-008-8"],
+      "req_ids": ["REQ-809"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The Microsoft Teams notifier module loads behind the notifier interface"] },
+      "budget": { "max_loc_delta": 250, "max_wall_clock_minutes": 60 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-13",
+      "title": "modules/notifier/email: reference SMTP email notifier module",
+      "files_owned": ["modules/notifier/email/email.go"],
+      "deps": ["T-008-8"],
+      "req_ids": ["REQ-809"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The SMTP email notifier module loads behind the notifier interface"] },
+      "budget": { "max_loc_delta": 250, "max_wall_clock_minutes": 60 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-14",
+      "title": "modules/cmdb/netbox: loadable NetBox CMDB module (authoritative entity resolution)",
+      "files_owned": ["modules/cmdb/netbox/netbox.go", "modules/cmdb/netbox/resolve.go"],
+      "deps": [],
+      "req_ids": ["REQ-810"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The NetBox CMDB module loads and re-reads an entity by id"] },
+      "budget": { "max_loc_delta": 400, "max_wall_clock_minutes": 90 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-15",
+      "title": "modules/actuation/ssh: loadable SSH actuation module (fixed argv, no shell)",
+      "files_owned": ["modules/actuation/ssh/ssh.go", "modules/actuation/ssh/rollback.go"],
+      "deps": [],
+      "req_ids": ["REQ-811"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The SSH actuation module loads and refuses an interactive shell"] },
+      "budget": { "max_loc_delta": 400, "max_wall_clock_minutes": 90 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-16",
+      "title": "modules/actuation/kubernetes: loadable Kubernetes actuation module (delete/drain clamped)",
+      "files_owned": ["modules/actuation/kubernetes/kubernetes.go"],
+      "deps": [],
+      "req_ids": ["REQ-812"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The Kubernetes actuation module loads and clamps delete to the never-auto floor"] },
+      "budget": { "max_loc_delta": 400, "max_wall_clock_minutes": 90 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-17",
+      "title": "modules/actuation/proxmox: loadable Proxmox actuation module (lifecycle enable-gated)",
+      "files_owned": ["modules/actuation/proxmox/proxmox.go"],
+      "deps": [],
+      "req_ids": ["REQ-813"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The Proxmox actuation module loads and gates a lifecycle operation behind the enable flag"] },
+      "budget": { "max_loc_delta": 400, "max_wall_clock_minutes": 90 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-18",
+      "title": "modules/actuation/mcp: loadable MCP tool actuation surface (unregistered tool has no path)",
+      "files_owned": ["modules/actuation/mcp/mcp.go"],
+      "deps": [],
+      "req_ids": ["REQ-814"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The MCP tool actuation surface loads and denies an unregistered tool"] },
+      "budget": { "max_loc_delta": 400, "max_wall_clock_minutes": 90 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-19",
+      "title": "modules/model/litellm: bundled LiteLLM model-gateway module (one OpenAI-compatible endpoint)",
+      "files_owned": ["modules/model/litellm/gateway.go", "modules/model/litellm/routing.go"],
+      "deps": [],
+      "req_ids": ["REQ-815"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The LiteLLM model-gateway module loads and exposes one OpenAI-compatible endpoint"] },
+      "budget": { "max_loc_delta": 400, "max_wall_clock_minutes": 90 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-20",
+      "title": "modules/model/zai: z.ai provider backend behind the model-gateway",
+      "files_owned": ["modules/model/zai/zai.go"],
+      "deps": ["T-008-19"],
+      "req_ids": ["REQ-815"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The z.ai provider backend resolves through the model-gateway"] },
+      "budget": { "max_loc_delta": 200, "max_wall_clock_minutes": 45 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-21",
+      "title": "modules/model/deepseek: DeepSeek provider backend behind the model-gateway",
+      "files_owned": ["modules/model/deepseek/deepseek.go"],
+      "deps": ["T-008-19"],
+      "req_ids": ["REQ-815"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The DeepSeek provider backend resolves through the model-gateway"] },
+      "budget": { "max_loc_delta": 200, "max_wall_clock_minutes": 45 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-22",
+      "title": "modules/model/mistral: Mistral provider backend behind the model-gateway",
+      "files_owned": ["modules/model/mistral/mistral.go"],
+      "deps": ["T-008-19"],
+      "req_ids": ["REQ-815"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The Mistral provider backend resolves through the model-gateway"] },
+      "budget": { "max_loc_delta": 200, "max_wall_clock_minutes": 45 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-23",
+      "title": "modules/model/ollama: Ollama local provider backend behind the model-gateway",
+      "files_owned": ["modules/model/ollama/ollama.go"],
+      "deps": ["T-008-19"],
+      "req_ids": ["REQ-815"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The Ollama provider backend resolves through the model-gateway"] },
+      "budget": { "max_loc_delta": 200, "max_wall_clock_minutes": 45 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-24",
+      "title": "modules/model/anthropic: Anthropic provider backend behind the model-gateway",
+      "files_owned": ["modules/model/anthropic/anthropic.go"],
+      "deps": ["T-008-19"],
+      "req_ids": ["REQ-815"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The Anthropic provider backend resolves through the model-gateway"] },
+      "budget": { "max_loc_delta": 200, "max_wall_clock_minutes": 45 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-25",
+      "title": "modules/model/openai: OpenAI provider backend behind the model-gateway",
+      "files_owned": ["modules/model/openai/openai.go"],
+      "deps": ["T-008-19"],
+      "req_ids": ["REQ-815"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The OpenAI provider backend resolves through the model-gateway"] },
+      "budget": { "max_loc_delta": 200, "max_wall_clock_minutes": 45 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-26",
+      "title": "modules/observability/prometheus: loadable Prometheus metrics-exposition module",
+      "files_owned": ["modules/observability/prometheus/prometheus.go"],
+      "deps": [],
+      "req_ids": ["REQ-816"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The Prometheus observability module exposes stamped metrics for scrape"] },
+      "budget": { "max_loc_delta": 350, "max_wall_clock_minutes": 75 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-27",
+      "title": "modules/observability/grafana: loadable Grafana dashboard-provisioning module",
+      "files_owned": ["modules/observability/grafana/grafana.go"],
+      "deps": [],
+      "req_ids": ["REQ-817"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The Grafana observability module provisions dashboards from version control"] },
+      "budget": { "max_loc_delta": 300, "max_wall_clock_minutes": 60 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-28",
+      "title": "modules/observability/openobserve: loadable OpenObserve OTLP export module",
+      "files_owned": ["modules/observability/openobserve/openobserve.go"],
+      "deps": [],
+      "req_ids": ["REQ-818"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The OpenObserve observability module exports OTLP traces default-on"] },
+      "budget": { "max_loc_delta": 300, "max_wall_clock_minutes": 60 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-29",
+      "title": "modules/observability/langfuse: loadable Langfuse per-session trace module",
+      "files_owned": ["modules/observability/langfuse/langfuse.go"],
+      "deps": [],
+      "req_ids": ["REQ-819"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The Langfuse observability module records a per-session trace"] },
+      "budget": { "max_loc_delta": 300, "max_wall_clock_minutes": 60 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-30",
+      "title": "modules/observability/healthchecks: loadable Healthchecks.io dead-man ping module",
+      "files_owned": ["modules/observability/healthchecks/healthchecks.go"],
+      "deps": [],
+      "req_ids": ["REQ-820"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The Healthchecks.io observability module pings a dead-man check on heartbeat"] },
+      "budget": { "max_loc_delta": 300, "max_wall_clock_minutes": 60 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-31",
+      "title": "modules/actuation/ssh: gated argv-only mutating path + reversible-op allowlist (mutation stays off, task #21)",
+      "files_owned": ["modules/actuation/ssh/mutate.go"],
+      "deps": ["T-008-15"],
+      "req_ids": ["REQ-822"],
+      "acceptance": { "feature": "connectors.feature", "scenarios": ["The SSH actuation module keeps its gated mutating path inert while mutation is off"] },
+      "budget": { "max_loc_delta": 400, "max_wall_clock_minutes": 120 },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-32",
+      "title": "modules/observability/syslogng: read-only syslog-ng investigation connector (get-host-logs + search-host-logs, argv-only over SSH)",
+      "files_owned": ["modules/observability/syslogng/syslogng.go", "modules/observability/syslogng/tools.go"],
+      "deps": [],
+      "req_ids": ["REQ-823"],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The syslog-ng investigation connector returns a host's recent logs over a fixed argv SSH read",
+          "The syslog-ng investigation connector refuses a path-traversal host and never reads a file"
+        ]
+      },
+      "budget": { "max_loc_delta": 500, "max_wall_clock_minutes": 120 },
+      "status": "completed"
+    }
+  ]
+}

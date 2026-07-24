@@ -1,0 +1,54 @@
+{
+  "spec": "013-actuation-interceptor",
+  "tasks": [
+    {
+      "id": "T-013-1",
+      "title": "actuate.Interceptor wired-by-construction chain: single unexported Execute chokepoint; admission->floor->gate->evidence->execute->verify->audit; fail loud; enable-mutation only behind the proven gate",
+      "files_owned": ["core/actuate/interceptor.go", "core/actuate/mutation.go"],
+      "deps": [],
+      "req_ids": ["REQ-1201", "REQ-1202", "REQ-1203", "REQ-1204", "REQ-1205", "REQ-1206", "REQ-1207", "REQ-1208", "REQ-1209", "REQ-1216"],
+      "acceptance": {
+        "feature": "actuation-interceptor.feature",
+        "scenarios": [
+          "A mutating request is refused while mutation is off",
+          "An unwired interception chain fails loud and does not execute",
+          "A never-auto floor op is refused at the adapter even with mutation on",
+          "An ungated action is refused",
+          "An action_id mismatch is refused",
+          "An action with no bound evidence is refused",
+          "Mutation is enabled only through the proven wired gate",
+          "A fully-admissible governed actuation executes, verifies, and audits",
+          "A mutating action with no post-execution observer is refused before executing",
+          "A mispredicted post-state verifies as a deviation",
+          "An executed mutation records an execution_log bound to the action id",
+          "A policy approve verdict with a recorded human approval executes",
+          "A policy approve verdict with no recorded approval is refused",
+          "A policy deny verdict is refused even with a recorded human approval",
+          "The never-auto floor refuses an irreversible op even when approved and policy-auto"
+        ]
+      },
+      "budget": { "max_loc_delta": 600, "max_wall_clock_minutes": 120 },
+      "status": "completed"
+    },
+    {
+      "id": "T-013-2",
+      "title": "core/cost cost/budget accountant + $-ceiling breaker (the mutation breaker's spend-guard sibling): a metering model-gateway completer accrues approx-token USD into durable, cross-process day(UTC)/session accumulators; the daily-budget/session-ceiling trip force-Shadows + records a cost:breaker-trip ledger note + sets a shared OPEN state so a trip force-Shadows every sibling; disabled at 0 budget; FAIL-OPEN on a store read error (spend guard, not a safety floor); pgx store + migration 0023",
+      "files_owned": ["core/cost/cost.go", "core/cost/accountant.go", "core/cost/metering.go", "core/cost/memstore.go", "core/db/cost_read.go", "core/db/cost_write.go"],
+      "deps": ["T-013-1"],
+      "req_ids": ["REQ-1211", "REQ-1212", "REQ-1213", "REQ-1214", "REQ-1215"],
+      "acceptance": {
+        "feature": "actuation-interceptor.feature",
+        "scenarios": [
+          "Cost accrues for each model completion into the daily and session accumulators",
+          "Exceeding the daily budget trips the cost breaker and force-Shadows",
+          "Exceeding a session ceiling trips the cost breaker and force-Shadows",
+          "A cost breaker trip force-Shadows a sibling worker sharing the durable store",
+          "A zero budget disables cost enforcement",
+          "An unreadable cost store fails open and does not halt operations"
+        ]
+      },
+      "budget": { "max_loc_delta": 900, "max_wall_clock_minutes": 180 },
+      "status": "completed"
+    }
+  ]
+}

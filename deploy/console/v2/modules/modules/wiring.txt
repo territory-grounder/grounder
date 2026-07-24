@@ -1,0 +1,19 @@
+/* --- wiring: modules --- */
+views.modules = viewModules;
+VIEW_META.modules = ["Modules", "Active connector fleet — 31 loadable modules across 7 families; registry + per-module config"];
+FACETS.modules = [["all","All"],["live","Live"],["idle","Idle"],["dark","Dark"],["mutate","Mutate-scope"],["off","Disabled"]];
+facetState.modules = facetState.modules || "all";
+
+/* nav rail — under the CONFIG group (create the group label if absent):
+<div class="lbl grp">CONFIG</div>
+<a class="navi" data-view="modules">
+  <svg class="ic" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="5" height="5"/><rect x="9" y="2" width="5" height="5"/><rect x="2" y="9" width="5" height="5"/><path d="M9 11.5h5M11.5 9v5"/></svg>
+  <span class="t">Modules</span><span class="n" data-badge="modules">1</span>
+</a> */
+
+/* badge = enabled-but-dark modules (attention count): */
+const modsBadgeEl = document.querySelector('[data-badge="modules"]');
+if (modsBadgeEl) modsBadgeEl.textContent = MODS_FLEET.filter(m => m.enabled && m.health === "dark").length;
+
+/* in route(name): call modsCloseDrawer() before swapping views (safe no-op if never opened);
+   viewModules() also calls it defensively on each render. */

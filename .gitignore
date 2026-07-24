@@ -1,0 +1,54 @@
+# Binaries / build output
+/bin/
+/dist/
+/worker
+/grounder
+*.exe
+*.out
+*.test
+
+# Go
+/vendor/
+*.prof
+coverage.out
+coverage.html
+
+# Environment / secrets — never commit real values
+.env
+deploy/.env
+*.local
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# Runtime
+*.log
+
+# frontend (spec/010 operator console)
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+
+# shadowbench runtime artifacts
+tools/shadowbench/__pycache__/
+tools/shadowbench/scorecard.jsonl
+# campaign (TG-84) run outputs: manifest data, watch logs, per-run scorecards — data, not code.
+tools/shadowbench/out/
+
+# --- Claude Code: track shared harness config (.claude/agents, .claude/README.md, .claude/settings.json)
+#     but never the per-clone RUNTIME scratch (these were previously only in the local, uncommitted
+#     .git/info/exclude). The github-sync mirror strips the whole .claude/ tree regardless (denylist step).
+.claude/scheduled_tasks.lock
+.claude/scheduled_tasks.json
+.claude/routines/.state/
+.claude/worktrees/
+.claude/checkpoints/
+.claude/mailbox/
+.claude/agent-registry.json
+.claude/agent-memory-local
+.claude/first-run
+.claude/assistant-daemon-state.json

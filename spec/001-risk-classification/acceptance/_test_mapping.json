@@ -1,0 +1,84 @@
+{
+  "feature": "risk-classification.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes; pending = specified behavior whose implementation (core/risk.Classifier, Phase 2) does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior).",
+  "scenarios": [
+    {
+      "name": "The zero-value band is POLL_PAUSE",
+      "req": "REQ-006",
+      "status": "present",
+      "test": "TestRiskClassificationAcceptance"
+    },
+    {
+      "name": "An unmatched band value stringifies as POLL_PAUSE",
+      "req": "REQ-006",
+      "status": "present",
+      "test": "TestRiskClassificationAcceptance"
+    },
+    {
+      "name": "Irreversible operation classes are on the never-auto floor",
+      "req": "REQ-004",
+      "status": "present",
+      "test": "TestRiskClassificationAcceptance"
+    },
+    {
+      "name": "A reversible operation class is not on the never-auto floor",
+      "req": "REQ-004",
+      "status": "present",
+      "test": "TestRiskClassificationAcceptance"
+    },
+    {
+      "name": "The remediation lane fails closed by default",
+      "req": "REQ-006",
+      "status": "present",
+      "test": "TestRiskClassificationAcceptance"
+    },
+    {
+      "name": "A low-risk reversible action is classified AUTO",
+      "req": "REQ-001",
+      "status": "present",
+      "test": "TestRiskClassificationAcceptance"
+    },
+    {
+      "name": "A reversible-mixed action on a critical host is classified AUTO_NOTICE",
+      "req": "REQ-002",
+      "status": "present",
+      "test": "TestRiskClassificationAcceptance"
+    },
+    {
+      "name": "A high-risk irreversible action is classified POLL_PAUSE",
+      "req": "REQ-003",
+      "status": "present",
+      "test": "TestRiskClassificationAcceptance"
+    },
+    {
+      "name": "An incident with no learned prior is classified POLL_PAUSE",
+      "req": "REQ-007",
+      "status": "present",
+      "test": "TestRiskClassificationAcceptance"
+    },
+    {
+      "name": "An AUTO-RESOLVE lacking bound evidence is downgraded to a poll",
+      "req": "REQ-008",
+      "status": "present",
+      "test": "TestRiskClassificationAcceptance"
+    },
+    {
+      "name": "A canary-pinned action is forced to POLL_PAUSE",
+      "req": "REQ-009",
+      "status": "present",
+      "test": "TestRiskClassificationAcceptance"
+    },
+    {
+      "name": "A leaked credential in the untrusted seed is redacted before it reaches the model or the ledger",
+      "req": "REQ-010",
+      "status": "present",
+      "test": "TestRiskClassificationAcceptance"
+    },
+    {
+      "name": "A benign alert body is not mangled by the secret redaction pass",
+      "req": "REQ-010",
+      "status": "present",
+      "test": "TestRiskClassificationAcceptance"
+    }
+  ]
+}

@@ -1,0 +1,202 @@
+/* Territory Grounder — operator sign-in (fail-closed auth gate).
+   Themed after territorygrounder.com: the same dark instrument ground, steel/indigo/teal epistemic
+   palette, and IBM Plex type as the marketing site (see www/assets/css/main.css). Tokens are scoped
+   under .tg-authgate — prefixed, not the app's own --ink/--line/etc — so this screen never bleeds its
+   look into the console that mounts after it, and the console's tokens never bleed into this screen.
+
+   Signature: the gate reuses the product's own "grounding ribbon" vocabulary (predict → act → verify,
+   map=indigo vs territory=steel, match=teal verdict) recast as claim → verify → verdict — the login
+   is itself a grounded claim getting checked, not a belief taken on faith. */
+
+.tg-authgate {
+  --ag-g0: #0b1114;    /* deepest ground */
+  --ag-g1: #0e1519;    /* page ground */
+  --ag-g2: #121b20;    /* raised panel (the card) */
+  --ag-g3: #182228;    /* inset (inputs) */
+  --ag-line: #202b32;
+  --ag-line2: #2b3a42;
+  --ag-ink: #d8e2e8;
+  --ag-ink2: #9db0bb;
+  --ag-ink3: #7e929e;
+  --ag-ink4: #718695;
+  --ag-territory: #8ea0ac; /* steel — observed / the gate's default */
+  --ag-map: #7488ec;       /* indigo — a claim being checked */
+  --ag-match: #33a891;     /* teal — verified */
+  --ag-cyan: #2bd4c0;      /* the wordmark's bright accent — the primary action, used sparingly */
+  --ag-deviation: #f0492f; /* a claim that failed the check */
+  --ag-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ag-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --ag-radius: 9px;
+
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  /* Epistemic glow carried from territorygrounder.com's palette: indigo (the AI's map) settling from
+     above, teal (a verified match) rising from below, over the deep instrument ground. The calibration
+     grid itself lives on ::before so it can fade into the dark at the edges. */
+  background:
+    radial-gradient(125% 90% at 50% -12%, color-mix(in srgb, var(--ag-map) 11%, transparent), transparent 58%),
+    radial-gradient(95% 70% at 50% 116%, color-mix(in srgb, var(--ag-match) 8%, transparent), transparent 55%),
+    var(--ag-g1);
+  color: var(--ag-ink);
+  font-family: var(--ag-sans);
+  color-scheme: dark;
+}
+
+/* The faint calibration grid — the instrument's paper (same 72px hairline grid as territorygrounder.com),
+   masked to a soft radial so it reads crisp behind the sign-in card and dissolves into the ground at the
+   edges. Depth from the product's own vocabulary, no new color. */
+.tg-authgate::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--ag-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--ag-line) 1px, transparent 1px);
+  background-size: 72px 72px;
+  background-position: center top;
+  -webkit-mask-image: radial-gradient(118% 100% at 50% 42%, #000 28%, transparent 78%);
+  mask-image: radial-gradient(118% 100% at 50% 42%, #000 28%, transparent 78%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tg-authgate[data-gate="verifying"]::before { animation: ag-grid-breathe 2.4s ease-in-out infinite; }
+}
+@keyframes ag-grid-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.72; }
+}
+
+.tg-authgate * { box-sizing: border-box; }
+
+.tg-authgate .ag-card {
+  position: relative;
+  z-index: 1;
+  width: min(430px, 100%);
+  background: var(--ag-g2);
+  border: 1px solid var(--ag-line2);
+  border-radius: 12px;
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--ag-line);
+  padding: 32px 28px 26px;
+}
+
+.tg-authgate .ag-brand { display: flex; align-items: center; gap: 11px; margin-bottom: 26px; }
+.tg-authgate .ag-mark {
+  font-family: var(--ag-mono); font-weight: 600; font-size: 13px; letter-spacing: 0.03em;
+  color: var(--ag-g0); background: var(--ag-ink); padding: 4px 7px; border-radius: 4px; flex: none;
+}
+.tg-authgate .ag-word { display: flex; flex-direction: column; line-height: 1.3; }
+.tg-authgate .ag-word b { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--ag-ink); }
+.tg-authgate .ag-word span {
+  font-family: var(--ag-mono); font-size: 9.5px; color: var(--ag-ink3);
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+
+.tg-authgate .ag-eyebrow {
+  font: 600 10.5px/1 var(--ag-mono); letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--ag-territory); margin: 0 0 12px;
+}
+.tg-authgate .ag-thesis {
+  font-size: 20px; line-height: 1.34; font-weight: 600; letter-spacing: -0.015em;
+  color: var(--ag-ink); margin: 0 0 12px; max-width: 27ch; text-wrap: balance;
+}
+.tg-authgate .ag-desc { font-size: 12px; line-height: 1.6; color: var(--ag-ink3); margin: 0 0 24px; }
+
+/* ---- the signature ribbon: claim -> verify -> verdict ---- */
+.tg-authgate .ag-spine { display: flex; align-items: center; margin: 0 0 28px; }
+.tg-authgate .ag-stage { display: flex; align-items: center; flex: 1; min-width: 0; }
+.tg-authgate .ag-stage:last-child { flex: 0 0 auto; }
+.tg-authgate .ag-node {
+  width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--ag-line2);
+  background: var(--ag-g0); flex: none; position: relative; transition: border-color 0.2s, background 0.2s;
+}
+.tg-authgate .ag-wire { flex: 1; height: 2px; background: var(--ag-line2); margin: 0 2px; }
+.tg-authgate .ag-caps {
+  display: flex; justify-content: space-between; margin-top: 8px;
+  font: 600 8.5px/1 var(--ag-mono); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ag-ink4);
+}
+
+.tg-authgate[data-gate="verifying"] .ag-node.claim,
+.tg-authgate[data-gate="ok"] .ag-node.claim,
+.tg-authgate[data-gate="error"] .ag-node.claim {
+  border-color: var(--ag-territory); background: var(--ag-territory);
+}
+.tg-authgate[data-gate="verifying"] .ag-wire.claim-verify,
+.tg-authgate[data-gate="ok"] .ag-wire.claim-verify,
+.tg-authgate[data-gate="error"] .ag-wire.claim-verify { background: var(--ag-territory); }
+
+.tg-authgate[data-gate="verifying"] .ag-node.verify {
+  border-color: var(--ag-map); background: var(--ag-g0);
+  box-shadow: 0 0 0 4px rgba(116, 136, 236, 0.18);
+  animation: ag-breathe 1.8s ease-in-out infinite;
+}
+.tg-authgate[data-gate="verifying"] .ag-wire.verify-verdict {
+  background: repeating-linear-gradient(90deg, var(--ag-map) 0 5px, transparent 5px 10px);
+  background-size: 200% 100%;
+  animation: ag-flow 1s linear infinite;
+}
+
+.tg-authgate[data-gate="ok"] .ag-node.verify,
+.tg-authgate[data-gate="ok"] .ag-node.verdict { border-color: var(--ag-match); background: var(--ag-match); }
+.tg-authgate[data-gate="ok"] .ag-wire.verify-verdict { background: var(--ag-match); }
+
+.tg-authgate[data-gate="error"] .ag-node.verify { border-color: var(--ag-territory); background: var(--ag-territory); }
+.tg-authgate[data-gate="error"] .ag-node.verdict {
+  border-color: var(--ag-deviation); background: var(--ag-deviation);
+  box-shadow: 0 0 0 4px rgba(240, 73, 47, 0.2);
+  animation: ag-alarm 1.4s ease-in-out infinite;
+}
+
+@keyframes ag-breathe { 0%, 100% { box-shadow: 0 0 0 3px rgba(116, 136, 236, 0.18); } 50% { box-shadow: 0 0 0 6px transparent; } }
+@keyframes ag-flow { to { background-position: -20px 0; } }
+@keyframes ag-alarm { 0%, 100% { box-shadow: 0 0 0 3px rgba(240, 73, 47, 0.26); } 50% { box-shadow: 0 0 0 7px transparent; } }
+
+/* ---- the form ---- */
+.tg-authgate .ag-form { display: flex; flex-direction: column; gap: 14px; }
+.tg-authgate .ag-field { display: flex; flex-direction: column; gap: 6px; }
+.tg-authgate .ag-field-label {
+  font: 600 10px/1 var(--ag-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ag-ink3);
+}
+.tg-authgate .ag-field input {
+  background: var(--ag-g3); border: 1px solid var(--ag-line2); border-radius: 6px;
+  padding: 11px 12px; color: var(--ag-ink); font: 13px var(--ag-mono);
+}
+.tg-authgate .ag-field input::placeholder { color: var(--ag-ink4); }
+.tg-authgate .ag-field input:disabled { opacity: 0.55; }
+.tg-authgate .ag-field input:focus-visible {
+  outline: 2px solid var(--ag-cyan); outline-offset: 1px; border-color: var(--ag-cyan);
+}
+
+.tg-authgate .ag-error {
+  min-height: 16px; color: var(--ag-deviation); font-size: 11.5px; line-height: 1.45;
+}
+
+.tg-authgate .ag-submit {
+  display: flex; align-items: center; justify-content: center; width: 100%;
+  height: 40px; margin-top: 2px; border: 1px solid var(--ag-match); border-radius: 6px;
+  background: var(--ag-match); color: #06110e; font: 600 13.5px var(--ag-sans); cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.tg-authgate .ag-submit:hover:not(:disabled) { background: var(--ag-cyan); border-color: var(--ag-cyan); }
+.tg-authgate .ag-submit:focus-visible { outline: 2px solid var(--ag-cyan); outline-offset: 2px; }
+.tg-authgate .ag-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.tg-authgate .ag-foot {
+  margin-top: 20px; text-align: center; font: 500 9.5px/1.5 var(--ag-mono);
+  letter-spacing: 0.05em; color: var(--ag-ink4);
+}
+
+@media (max-width: 480px) {
+  .tg-authgate .ag-card { padding: 26px 18px 20px; }
+  .tg-authgate .ag-thesis { font-size: 17px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tg-authgate * { animation: none !important; transition: none !important; }
+}

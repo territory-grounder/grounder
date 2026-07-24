@@ -1,0 +1,43 @@
+/* ===================== wiki module (.wk-) =====================
+   The living wiki (REQ-521). Three sections, each with its own epistemic standing: a LESSON is
+   TERRITORY — distilled only from a confirmed-clean resolution (verdict match + confirmed clear), the
+   same corpus the retriever reloads; a RUNBOOK is the operating manual of the shipped code, embedded
+   in the binary; SKILLS is a reference join to the versioned library (#skills). Nothing here is
+   invented: empty corpus = empty section, said plainly. */
+.wk-root{display:flex;flex-direction:column;gap:12px}
+.wk-toolbar{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.wk-search{font-family:var(--mono);font-size:12px;padding:7px 10px;background:var(--g3s);border:1px solid var(--line2);border-radius:var(--radius-s);color:var(--ink);width:100%;max-width:340px}
+.wk-search::placeholder{color:var(--ink4)}
+.wk-search:focus-visible{outline:none;border-color:var(--accent)}
+/* lesson cards */
+.wk-card{background:var(--g1);border:1px solid var(--line);border-left:3px solid var(--match);border-radius:var(--radius);padding:11px 14px;display:flex;flex-direction:column;gap:6px;cursor:pointer}
+.wk-card:hover{border-color:var(--line3);border-left-color:var(--match);background:var(--g2)}
+.wk-card:focus-visible{outline:1px solid var(--accent);outline-offset:-1px}
+.wk-card-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.wk-ref{font-family:var(--mono);font-size:12px;color:var(--territory);font-weight:600}
+.wk-kv{font-family:var(--mono);font-size:10px;padding:1px 6px;border:1px solid var(--line2);border-radius:var(--radius-s);color:var(--ink2);white-space:nowrap}
+.wk-kv b{color:var(--map);font-weight:600}
+.wk-res{font-size:11.5px;color:var(--ink2);line-height:1.5}
+.wk-res b{color:var(--match);font-weight:600}
+/* runbook grid: index rail + page */
+.wk-grid{display:grid;grid-template-columns:250px 1fr;gap:14px;align-items:start}
+.wk-rail{display:flex;flex-direction:column;gap:4px}
+.wk-item{display:flex;flex-direction:column;gap:1px;padding:8px 10px;border:1px solid transparent;border-radius:var(--radius-s);cursor:pointer;text-decoration:none}
+.wk-item:hover{background:var(--g2);border-color:var(--line2)}
+.wk-item.active{background:var(--accent-dim);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.wk-item-t{font-family:var(--mono);font-size:11.5px;color:var(--ink);font-weight:600}
+.wk-item-s{font-size:10.5px;color:var(--ink4)}
+.wk-page{background:var(--g1);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;min-height:200px}
+/* the tiny markdown-ish renderer's output */
+.wk-md{font-size:12.5px;line-height:1.65;color:var(--ink2);max-width:74ch}
+.wk-md h2{font-size:16px;color:var(--ink);margin:2px 0 10px}
+.wk-md h3{font-size:13.5px;color:var(--ink);margin:16px 0 6px}
+.wk-md h4{font-size:12px;color:var(--ink);margin:12px 0 4px;font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase}
+.wk-md p{margin:0 0 9px}
+.wk-md ul{margin:0 0 9px;padding-left:20px}
+.wk-md li{margin:2px 0}
+.wk-md code{font-family:var(--mono);font-size:11px;background:var(--g3s);border:1px solid var(--line2);border-radius:2px;padding:0 4px;color:var(--territory)}
+.wk-md pre{font-family:var(--mono);font-size:11px;line-height:1.55;background:var(--g0);border:1px solid var(--line);border-radius:var(--radius-s);padding:10px 12px;overflow:auto;margin:0 0 9px;color:var(--ink2)}
+.wk-md pre code{background:none;border:none;padding:0;color:inherit}
+.wk-md blockquote{margin:0 0 9px;padding:6px 12px;border-left:3px solid var(--map);background:var(--map-dim);color:var(--ink2)}
+@media (max-width:900px){.wk-grid{grid-template-columns:1fr}}

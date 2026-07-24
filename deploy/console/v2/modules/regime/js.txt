@@ -1,0 +1,227 @@
+/* relative time from an RFC3339 string; honest "never"/passthrough on empty/unparseable. */
+function rgmRel(iso) {
+  if (!iso) return "never";
+  const t = Date.parse(iso);
+  if (isNaN(t)) return String(iso);
+  let s = Math.floor((Date.now() - t) / 1000);
+  if (s < 0) return "just now";
+  if (s < 60) return s + "s ago";
+  const m = Math.floor(s / 60); if (m < 60) return m + "m ago";
+  const hh = Math.floor(m / 60); if (hh < 24) return hh + "h ago";
+  const d = Math.floor(hh / 24); if (d < 30) return d + "d ago";
+  const mo = Math.floor(d / 30); if (mo < 12) return mo + "mo ago";
+  return Math.floor(mo / 12) + "y ago";
+}
+function rgmErr(msg) { return h("div", { class: "empty", style: "padding:22px" }, h("div", { class: "desc" }, msg)); }
+function rgmNone(big, desc) { return h("div", { class: "empty", style: "padding:30px 20px" }, h("div", { class: "big" }, big), h("div", { class: "desc" }, desc)); }
+function rgmSec(lbl, title, extra) {
+  return h("div", { class: "sec" },
+    h("span", { class: "lbl", style: "color:var(--match)" }, lbl),
+    h("h3", {}, title),
+    h("span", { class: "rule" }),
+    extra || null);
+}
+/* a table wrapped in its own horizontal-scroll container — the page body never scrolls sideways. */
+function rgmCard(table) { return h("div", { class: "wrapcard" }, h("div", { class: "rgm-scroll" }, table)); }
+
+/* outcome / verdict / graduation / AWX-status chips — reuse the console ok/warn/bad semantics. */
+function rgmOutcome(o) {
+  const t = String(o || "").toLowerCase();
+  if (t === "resolved") return h("span", { class: "chip-ok" }, "RESOLVED");
+  if (t === "refused") return h("span", { class: "chip-bad" }, "REFUSED");
+  return h("span", { class: "rgm-pill", style: "color:var(--ink3);border-color:var(--line2)" }, (o || "—").toUpperCase());
+}
+function rgmVerdict(v) {
+  const t = String(v || "").toLowerCase();
+  if (t === "match") return h("span", { class: "chip-ok" }, "MATCH");
+  if (t === "deviation") return h("span", { class: "chip-bad" }, "DEVIATION");
+  return h("span", { class: "rgm-pill", style: "color:var(--ink3);border-color:var(--line2)" }, (v || "unverified").toUpperCase());
+}
+function rgmGrad(g) {
+  const t = String(g || "").toLowerCase();
+  if (t === "verified_clean") return h("span", { class: "chip-ok" }, "VERIFIED CLEAN");
+  if (t === "deviated") return h("span", { class: "chip-bad" }, "DEVIATED");
+  return h("span", { class: "rgm-pill", style: "color:var(--ink3);border-color:var(--line2)" }, (g || "no_credit").toUpperCase().replace(/_/g, " "));
+}
+function rgmStatus(s) {
+  const t = String(s || "").toLowerCase();
+  const tint = t === "successful" ? "var(--match)" : (t === "failed" || t === "error" || t === "canceled") ? "var(--deviation)" : "var(--ink3)";
+  return h("span", { class: "rgm-pill", style: "color:" + tint + ";border-color:color-mix(in srgb," + tint + " 45%,transparent)" }, (s || "—").toUpperCase());
+}
+
+/* ---- data plumbing: fixture in preview, /v1/regime once a session is adopted ---- */
+function rgmData() {
+  if (typeof liveState !== "undefined" && liveState.on) return { live: true, page: liveState.regime };
+  return { live: false, page: RGM_FIX };
+}
+
+/* ---- section 1: mode & posture — DERIVED honestly (the read API serves audits, not a mode enum) ---- */
+function rgmPostureSection(d) {
+  const page = d.page || {};
+  const res = page.resolutions || [], act = page.actuations || [], ver = page.deferred_verdicts || [], cov = page.lane_coverage || [];
+  const activeLanes = cov.filter(l => ((l.resolutions || 0) + (l.actuations || 0)) > 0).length;
+  const strip = h("div", { class: "rgm-strip" });
+  strip.append(rgmSec(d.live ? "LIVE · actuation posture" : "posture", "How TG routes actuation — the governed-lane posture"));
+
+  let name, tint, tag, note;
+  if (!d.live) {
+    name = "Shadow"; tint = "var(--match)"; tag = "read-only posture · reason-and-log";
+    note = h("p", { class: "rgm-note" }, "Design-preview posture. On a live session this reflects the worker's mutation gate; ",
+      h("b", {}, "/v1/regime serves the audit projections, not a mode enum"), ".");
+  } else {
+    const mut = liveState.mutation, stale = liveState.postureStale;
+    const anyTraffic = res.length || act.length || ver.length;
+    if (stale) { name = "UNVERIFIED"; tint = "var(--partial)"; tag = "worker posture stale"; }
+    else if (mut) { name = "ACTUATING"; tint = "var(--deviation)"; tag = "mutation gate ON"; }
+    else { name = "READ-ONLY"; tint = "var(--match)"; tag = "mutation gate OFF · reason-and-log"; }
+    note = h("p", { class: "rgm-note" },
+      "The regime read API serves the append-only audits, ", h("b", {}, "not a mode enum"), ". Under ", h("b", {}, "Shadow"),
+      " the audits stay empty by design — the mode chokepoint refuses before execute, so no resolution, launch, or verdict occurs before the flip" +
+      (anyTraffic ? " — this engine has recorded traffic below." : "; this engine's audits are currently empty, consistent with Shadow."));
+  }
+  const badge = h("div", { class: "rgm-mode-badge", style: "color:" + tint + ";border-color:color-mix(in srgb," + tint + " 50%,transparent);background:color-mix(in srgb," + tint + " 8%,transparent)" },
+    h("span", { class: "rgm-mode-name" }, name),
+    h("span", { class: "rgm-mode-tag" }, tag));
+  const flags = h("div", { class: "rgm-flags" },
+    h("span", { class: "rgm-pill", style: "color:var(--map);border-color:color-mix(in srgb,var(--map) 45%,transparent)" }, activeLanes + " lane" + (activeLanes === 1 ? "" : "s") + " carrying traffic"),
+    h("span", { class: "rgm-pill", style: "color:var(--territory);border-color:color-mix(in srgb,var(--territory) 45%,transparent)" }, res.length + " resolution" + (res.length === 1 ? "" : "s")),
+    h("span", { class: "rgm-pill", style: "color:var(--ink3);border-color:var(--line2)" }, act.length + " launch" + (act.length === 1 ? "" : "es")),
+    h("span", { class: "rgm-pill", style: "color:var(--ink3);border-color:var(--line2)" }, ver.length + " deferred verdict" + (ver.length === 1 ? "" : "s")));
+  strip.append(h("div", { class: "wrapcard rgm-mode" }, badge, h("div", { class: "rgm-mode-body" }, flags, note)));
+  return strip;
+}
+
+/* ---- section 2: lane coverage — "which lanes carry any traffic?" (fail-closed refusal note) ---- */
+function rgmLaneSection(d) {
+  const cov = (d.page && d.page.lane_coverage) || [];
+  const res = (d.page && d.page.resolutions) || [];
+  const refused = res.filter(r => String(r.outcome).toLowerCase() === "refused").length;
+  const strip = h("div", { class: "rgm-strip" });
+  strip.append(rgmSec(d.live ? "LIVE · lanes" : "lanes", "Registered lanes — the traffic each carries"));
+  if (!cov.length) {
+    strip.append(rgmNone("No lane has carried traffic yet", "Lane coverage is derived from real resolutions and launches. Under Shadow no lane has been routed through — a lane appears here once it carries its first resolution or launch."));
+  } else {
+    const maxN = Math.max(1, ...cov.map(l => (l.resolutions || 0) + (l.actuations || 0)));
+    const t = h("table", { class: "tbl" });
+    t.append(h("thead", {}, h("tr", {}, ...["Lane", "Activity", "Resolutions", "Launches", "State"].map(x => h("th", {}, x)))));
+    const tb = h("tbody");
+    cov.forEach(l => {
+      const r = l.resolutions || 0, a = l.actuations || 0, tot = r + a;
+      const state = a > 0 ? h("span", { class: "chip-ok" }, "ACTUATING")
+        : r > 0 ? h("span", { class: "rgm-pill", style: "color:var(--map);border-color:color-mix(in srgb,var(--map) 45%,transparent)" }, "ROUTING")
+          : h("span", { class: "rgm-pill", style: "color:var(--ink4);border-color:var(--line2)" }, "IDLE · NO TRAFFIC");
+      tb.append(h("tr", {},
+        h("td", {}, h("span", { class: "rgm-lane" }, l.lane || "—")),
+        h("td", {}, h("span", { class: "rgm-lane-bar" }, h("span", { class: "rgm-lane-fill", style: "width:" + ((tot / maxN) * 100).toFixed(0) + "%;background:" + (a > 0 ? "var(--map)" : "var(--match)") }))),
+        h("td", { class: "m", style: "color:var(--territory)" }, String(r)),
+        h("td", { class: "m", style: "color:var(--map)" }, String(a)),
+        h("td", {}, state)));
+    });
+    t.append(tb);
+    strip.append(rgmCard(t));
+  }
+  strip.append(h("div", { class: "rgm-cap" },
+    "Coverage is derived from real resolutions and launches. A ", h("b", {}, "refused"), " resolution (below) with no lane is the fail-closed signal — a resolved regime whose lane is not wired refuses rather than acting around the chain." + (refused ? " " + refused + " refusal" + (refused === 1 ? "" : "s") + " in this window." : "")));
+  return strip;
+}
+
+/* ---- section 3: per-target resolution — target → regime → lane (the core view) ---- */
+function rgmResolutionSection(d) {
+  const res = (d.page && d.page.resolutions) || [];
+  const strip = h("div", { class: "rgm-strip" });
+  strip.append(rgmSec(d.live ? "LIVE · resolution" : "resolution", "Per-target regime → lane resolution"));
+  if (!res.length) {
+    strip.append(rgmNone("No resolutions recorded", "The engine logs one append-only row per lane selection. Under Shadow this audit is empty by design — a row appears once a target is routed to a lane."));
+    return strip;
+  }
+  const t = h("table", { class: "tbl" });
+  t.append(h("thead", {}, h("tr", {}, ...["Target", "Regime", "Lane", "Rule", "Outcome", "Resolved"].map(x => h("th", {}, x)))));
+  const tb = h("tbody");
+  res.forEach(r => {
+    tb.append(h("tr", {},
+      h("td", {}, h("span", { class: "rgm-target" }, r.target || "—")),
+      h("td", { class: "m" }, r.regime ? h("span", { style: "color:var(--ink2)" }, r.regime) : h("span", { style: "color:var(--ink4)" }, "—")),
+      h("td", { class: "m" }, r.lane ? h("span", { class: "rgm-lane" }, r.lane) : h("span", { style: "color:var(--deviation)", title: "resolved without a wired lane — fail closed" }, "no wired lane")),
+      h("td", { class: "m" }, r.rule_id ? h("span", { style: "color:var(--territory)" }, r.rule_id) : h("span", { style: "color:var(--ink4)", title: "no rule matched — operator default lane" }, "default")),
+      h("td", {}, rgmOutcome(r.outcome)),
+      h("td", { class: "m", style: "color:var(--ink3)" }, rgmRel(r.created_at))));
+  });
+  t.append(tb);
+  strip.append(rgmCard(t));
+  return strip;
+}
+
+/* ---- section 4: launches — what each lane actuated, under which op-class ---- */
+function rgmActuationSection(d) {
+  const act = (d.page && d.page.actuations) || [];
+  const strip = h("div", { class: "rgm-strip" });
+  strip.append(rgmSec(d.live ? "LIVE · launches" : "launches", "What each lane actuated — under which op-class"));
+  if (!act.length) {
+    strip.append(rgmNone("No launches recorded", "The engine logs one row per job launch. Under Shadow no launch occurs (the mode chokepoint refuses before execute) — a row appears after the flip."));
+    return strip;
+  }
+  const t = h("table", { class: "tbl" });
+  t.append(h("thead", {}, h("tr", {}, ...["Action", "Lane", "Job template", "Op-class", "Job", "Token ref", "Launched"].map(x => h("th", {}, x)))));
+  const tb = h("tbody");
+  act.forEach(a => {
+    tb.append(h("tr", {},
+      h("td", { class: "m", style: "color:var(--map)" }, String(a.action_id || "").slice(0, 12) || "—"),
+      h("td", {}, h("span", { class: "rgm-lane" }, a.lane || "—")),
+      h("td", { class: "m", style: "color:var(--ink3)" }, a.job_template_id ? "JT " + a.job_template_id : "—"),
+      h("td", { class: "m" }, a.op_class ? h("span", { style: "color:var(--ink2)" }, a.op_class) : h("span", { style: "color:var(--ink4)" }, "—")),
+      h("td", { class: "m", style: "color:var(--ink3)" }, a.job_id ? "#" + a.job_id : "—"),
+      h("td", {}, a.token_ref ? h("span", { class: "rgm-kref", title: "a SecretRef REFERENCE — the credential is resolved by reference, never a value (INV-13)" }, a.token_ref) : h("span", { style: "color:var(--ink4)" }, "—")),
+      h("td", { class: "m", style: "color:var(--ink3)" }, rgmRel(a.created_at))));
+  });
+  t.append(tb);
+  strip.append(rgmCard(t));
+  return strip;
+}
+
+/* ---- section 5: deferred verify — the launch was a prediction; here is its terminal verdict ---- */
+function rgmVerdictSection(d) {
+  const ver = (d.page && d.page.deferred_verdicts) || [];
+  const strip = h("div", { class: "rgm-strip" });
+  strip.append(rgmSec(d.live ? "LIVE · deferred verify" : "deferred verify", "Deferred verdicts — the launch was a prediction"));
+  if (!ver.length) {
+    strip.append(rgmNone("No deferred verdicts recorded", "Every launch is a prediction; the async-verify channel resolves it to a mechanical verdict + graduation once the job reaches a terminal AWX status. Empty under Shadow."));
+    return strip;
+  }
+  const t = h("table", { class: "tbl" });
+  t.append(h("thead", {}, h("tr", {}, ...["Action", "Job", "Status", "Verdict", "Graduation", "Verified"].map(x => h("th", {}, x)))));
+  const tb = h("tbody");
+  ver.forEach(v => {
+    tb.append(h("tr", {},
+      h("td", { class: "m", style: "color:var(--map)" }, String(v.action_id || "").slice(0, 12) || "—"),
+      h("td", { class: "m", style: "color:var(--ink3)" }, v.job_id ? "#" + v.job_id : "—"),
+      h("td", {}, rgmStatus(v.status)),
+      h("td", {}, rgmVerdict(v.verdict)),
+      h("td", {}, rgmGrad(v.graduation)),
+      h("td", { class: "m", style: "color:var(--ink3)" }, rgmRel(v.created_at))));
+  });
+  t.append(tb);
+  strip.append(rgmCard(t));
+  return strip;
+}
+
+/* ---- the surface ---- */
+function rgmView() {
+  const d = rgmData();
+  const root = h("div", { class: "rgm-root" });
+  root.append(h("div", { class: "rgm-toolbar" },
+    d.live
+      ? h("span", { class: "lbl", style: "color:var(--match)" }, "LIVE · /v1/regime — the actuation regime engine's audit projections")
+      : h("span", { class: "lbl" }, "the actuation regime engine — how each target routes to a governed effect lane"),
+    d.live ? null : h("span", { class: "rgm-fixture" }, "FIXTURE DATA — design preview")));
+  root.append(h("p", { class: "desc rgm-intro" },
+    "The actuation regime engine routes each target to a governed effect ", h("b", {}, "lane"), " (native-ssh · awx-job · gitops-mr) over the SAME estate object-model as policy and credential. This surface reads the append-only audit projections: which lane a target resolved to, what each lane launched, and how the deferred verify scored the prediction. ",
+    h("b", {}, "Non-secret metadata only"), " — lane/regime/op-class slugs and the AWX token as a store:<name> reference, never a value (INV-13). Read-only; mutation stays OFF."));
+  if (d.live && d.page === undefined) { root.append(rgmErr("Connecting to the regime engine…")); return root; }
+  if (d.live && d.page === null) { root.append(rgmErr("/v1/regime is not served by this control plane yet (fail-closed) — the regime reader is unwired, so the engine's audit projections are unavailable.")); return root; }
+  root.append(rgmPostureSection(d));
+  root.append(rgmLaneSection(d));
+  root.append(rgmResolutionSection(d));
+  root.append(rgmActuationSection(d));
+  root.append(rgmVerdictSection(d));
+  return root;
+}

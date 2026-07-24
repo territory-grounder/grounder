@@ -1,0 +1,236 @@
+# Territory Grounder Helm chart — the single authoritative configuration contract (spec/009 REQ-907).
+#
+# Every rendered manifest draws exclusively from this file. There is no second hand-maintained config
+# surface. This is the deploy-layer application of INV-15 (one authoritative definition).
+#
+# CREDENTIALS ARE NEVER LITERALS HERE (spec/009 REQ-904 / INV-13). This file carries only Secret
+# *names*; the actual DSNs, passwords, master key, and provider API keys live in a referenced
+# Kubernetes Secret (secrets.mode=reference) or are resolved by the External Secrets Operator
+# (secrets.mode=external). The CI gate greps the rendered output and fails on any literal credential.
+
+# --- global read-only foundation switch (spec/009 REQ-906 / INV-09) ---
+# Phase 0/1 ships with the mutation effect channel OFF by construction. Leave this false until a
+# Phase-2+ spec governs turning it on; the deploy-parity invariant fails a default render that flips it.
+mutation:
+  enabled: false
+
+nameOverride: ""
+fullnameOverride: ""
+
+# --- credential sourcing (spec/009 REQ-904 / INV-13) ---
+secrets:
+  # reference = the operator supplies a Kubernetes Secret named `secrets.name` out-of-band.
+  # external  = an ExternalSecret (External Secrets Operator) resolves the keys from an upstream store.
+  mode: reference
+  # name of the Kubernetes Secret that holds every credential key below (reference mode), or the
+  # target Secret the ExternalSecret writes (external mode).
+  name: grounder-secrets
+  # external-mode only: the ClusterSecretStore/SecretStore that backs the ExternalSecret.
+  externalSecretStore:
+    kind: ClusterSecretStore
+    name: ""
+    refreshInterval: 1h
+  # The credential KEYS expected inside the Secret. Values are supplied out-of-band, never here.
+  keys:
+    runtimeDSN: TG_RUNTIME_DSN         # DML-only tg_runtime role DSN (spec/009 REQ-905)
+    migrationDSN: TG_MIGRATION_DSN     # DDL tg_migration role DSN, startup migration only
+    litellmMasterKey: LITELLM_MASTER_KEY
+    pgSuperuserPassword: PG_SUPERUSER_PASSWORD
+    tgRuntimePassword: TG_RUNTIME_PASSWORD
+    tgMigrationPassword: TG_MIGRATION_PASSWORD
+    temporalPgPassword: TEMPORAL_PG_PASSWORD
+    # model-provider keys consumed by the LiteLLM gateway
+    zaiApiKey: ZAI_API_KEY
+    deepseekApiKey: DEEPSEEK_API_KEY
+    mistralApiKey: MISTRAL_API_KEY
+    anthropicApiKey: ANTHROPIC_API_KEY
+    openaiApiKey: OPENAI_API_KEY
+    xaiApiKey: XAI_API_KEY
+
+# --- the grounder control-plane (spec/009 REQ-903, REQ-909, REQ-910) ---
+grounder:
+  replicaCount: 1
+  image:
+    # The SAME distroless static binary that deploy/Dockerfile builds (spec/009 REQ-903).
+    # Pin by immutable digest in real deploys; the placeholder tag below is overridden in CI/release.
+    repository: registry.example.net/territory-grounder/grounder
+    tag: "0.1.0"
+    # digest wins over tag when set, e.g. sha256:....  (spec/009 REQ-903 — pin by digest)
+    digest: ""
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  # ports match deploy/docker-compose.yml
+  publicPort: 8080     # authenticated public API
+  adminPort: 8443      # elevated admin listener — CLUSTER-INTERNAL ONLY (spec/009 REQ-909)
+  env:
+    TG_LITELLM_URL: http://grounder-litellm:4000
+    TG_LITELLM_KEY_REF: env:LITELLM_MASTER_KEY
+    TG_PUBLIC_ADDR: ":8080"
+    TG_ADMIN_ADDR: ":8443"
+    # The grounder dials Temporal (as a client) to mint the ingest→triage session. The binary reads
+    # TG_TEMPORAL_HOSTPORT (cmd/grounder/main.go); an unread TEMPORAL_ADDRESS silently degrades ingest to
+    # validate-only despite the full Temporal stack being provisioned.
+    TG_TEMPORAL_HOSTPORT: grounder-temporal:7233
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  # non-root, read-only rootfs, no privilege escalation (spec/009 REQ-903 / INV-13)
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 15
+  readinessProbe:
+    httpGet:
+      path: /readyz
+      port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  service:
+    type: ClusterIP
+    port: 8080
+  ingress:
+    # public API only; admin/Temporal/Postgres are never placed here (spec/009 REQ-909)
+    enabled: false
+    className: ""
+    annotations: {}
+    host: grounder.example.org
+    tls:
+      enabled: false
+      secretName: ""
+
+# --- the Runner worker (spec/009 REQ-902 parity) ---
+# The Temporal Runner poller/executor. WITHOUT this Deployment the grounder API enqueues triage workflows
+# onto the tg.runner task queue that NOTHING consumes — the platform ingests alerts and reports healthy while
+# triaging nothing (the load-bearing compose `worker` service, deploy/docker-compose.yml). Same image family
+# as the grounder, built with BIN=worker (deploy/Dockerfile).
+worker:
+  replicaCount: 1
+  image:
+    repository: registry.example.net/territory-grounder/worker
+    tag: "0.1.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env:
+    TG_LITELLM_URL: http://grounder-litellm:4000
+    TG_LITELLM_KEY_REF: env:LITELLM_MASTER_KEY
+    TG_TEMPORAL_HOSTPORT: grounder-temporal:7233
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+
+# --- application Postgres + pgvector (spec/009 REQ-905) ---
+postgres:
+  image:
+    repository: pgvector/pgvector
+    tag: pg16
+    pullPolicy: IfNotPresent
+  database: grounder
+  superuser: postgres
+  port: 5432
+  storage:
+    size: 10Gi
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+  # the two least-privilege roles are created by the init script (parity with compose postgres-init)
+  init:
+    createRoles: true
+
+# --- LiteLLM model-gateway (spec/009 REQ-901, REQ-904) ---
+litellm:
+  image:
+    repository: ghcr.io/berriai/litellm
+    tag: main-stable
+    pullPolicy: IfNotPresent
+  port: 4000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+# --- Temporal durable-orchestration substrate + its backing Postgres + UI (spec/009 REQ-901) ---
+temporal:
+  image:
+    repository: temporalio/auto-setup
+    tag: "1.25.2"
+    pullPolicy: IfNotPresent
+  frontendPort: 7233   # CLUSTER-INTERNAL ONLY (spec/009 REQ-909)
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  postgres:
+    image:
+      repository: postgres
+      tag: "16"
+      pullPolicy: IfNotPresent
+    user: temporal
+    database: temporal
+    port: 5432
+    # bounded like every other pod — the persistence tier of the durable orchestration substrate must not be
+    # BestEffort (the first OOM-kill target under node pressure).
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+    storage:
+      size: 5Gi
+      storageClassName: ""
+  ui:
+    enabled: true
+    image:
+      repository: temporalio/ui
+      tag: "2.34.0"
+      pullPolicy: IfNotPresent
+    port: 8080   # CLUSTER-INTERNAL ONLY (spec/009 REQ-909)
+
+commonLabels: {}
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

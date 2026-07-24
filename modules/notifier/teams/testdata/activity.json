@@ -1,0 +1,31 @@
+{
+  "type": "message",
+  "id": "1616000000000",
+  "timestamp": "2026-07-15T12:00:00.123Z",
+  "localTimestamp": "2026-07-15T05:00:00.123-07:00",
+  "serviceUrl": "https://smba.trafficmanager.net/amer/",
+  "channelId": "msteams",
+  "from": {
+    "id": "29:1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
+    "name": "Casey Oncall",
+    "aadObjectId": "7f8e6d5c-4b3a-2109-8765-43210fedcba9"
+  },
+  "conversation": {
+    "isGroup": true,
+    "conversationType": "channel",
+    "tenantId": "aaaabbbb-cccc-dddd-eeee-ffff00001111",
+    "id": "19:abc123def456@thread.tacv2;messageid=1616000000001"
+  },
+  "recipient": {
+    "id": "28:76543210-0123-4567-89ab-cdef01234567",
+    "name": "Grounder Bot"
+  },
+  "textFormat": "plain",
+  "locale": "en-US",
+  "text": "approve TG-9#restart",
+  "channelData": {
+    "tenant": {
+      "id": "aaaabbbb-cccc-dddd-eeee-ffff00001111"
+    }
+  }
+}

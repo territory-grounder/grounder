@@ -1,0 +1,415 @@
+{
+  "spec": "020-decision-tracer",
+  "tasks": [
+    {
+      "id": "T-020-1",
+      "title": "T0 keystone: thread the confidence scalar into actuate.Request + persist confidence/min_confidence on the decision/triage record (G1)",
+      "files_owned": [
+        "core/db/migrations/0024_decision_signal.up.sql",
+        "core/db/migrations/0024_decision_signal.down.sql",
+        "temporal/runner/confidence.go",
+        "core/db/decision_signal_write.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-2003"
+      ],
+      "acceptance": {
+        "feature": "decision-tracer.feature",
+        "scenarios": [
+          "The confidence scalar persists and reads back non-zero"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 100
+      },
+      "status": "done"
+    },
+    {
+      "id": "T-020-2",
+      "title": "T0: widen the policy_decision writer to persist bundle_version + matched_rules[] + reason (G2)",
+      "files_owned": [
+        "core/db/migrations/0030_policy_decision_columns.up.sql",
+        "core/db/migrations/0030_policy_decision_columns.down.sql",
+        "core/db/policy_decision_columns.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-2004"
+      ],
+      "acceptance": {
+        "feature": "decision-tracer.feature",
+        "scenarios": [
+          "A policy_decision row carries the in-force bundle_version and the matched-rules list"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 350,
+        "max_wall_clock_minutes": 110
+      },
+      "status": "done"
+    },
+    {
+      "id": "T-020-3",
+      "title": "T0: finish T-015-13 — thread action_id/external_ref/principal into the policy Decide audit (G3)",
+      "files_owned": [
+        "core/policy/evalinput_keys.go",
+        "core/db/policy_decision_keys.go"
+      ],
+      "deps": [
+        "T-020-2"
+      ],
+      "req_ids": [
+        "REQ-2005"
+      ],
+      "acceptance": {
+        "feature": "decision-tracer.feature",
+        "scenarios": [
+          "The policy Decide audit carries the action_id external_ref and principal keys"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 100
+      },
+      "status": "done"
+    },
+    {
+      "id": "T-020-4",
+      "title": "T0: backfill action_manifest.approval_choice + action_manifest.verdict on the lifecycle writer (G4)",
+      "files_owned": [
+        "core/db/manifest_backfill.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-2006"
+      ],
+      "acceptance": {
+        "feature": "decision-tracer.feature",
+        "scenarios": [
+          "The action_manifest backfills the approval choice and the post-execution verdict"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "done"
+    },
+    {
+      "id": "T-020-5",
+      "title": "T0: reach external_ref onto the actuation/verify side so the ingest->verify walk needs no bridge (G3 correlation fix, owner-decision 3)",
+      "files_owned": [
+        "core/db/migrations/0028_external_ref_actuation.up.sql",
+        "core/db/migrations/0028_external_ref_actuation.down.sql",
+        "core/db/external_ref_reach.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-2019"
+      ],
+      "acceptance": {
+        "feature": "decision-tracer.feature",
+        "scenarios": [
+          "The ingest to verify walk joins end to end with no bridge hop"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 350,
+        "max_wall_clock_minutes": 110
+      },
+      "status": "done"
+    },
+    {
+      "id": "T-020-6",
+      "title": "T1: versioned/immutable ruleset record so a past decision joins the exact ACL doc in force (G2 dep, owner-decision 4)",
+      "files_owned": [
+        "core/db/migrations/0027_policy_ruleset_version.up.sql",
+        "core/db/migrations/0027_policy_ruleset_version.down.sql",
+        "core/policy/ruleset_version.go",
+        "core/db/ruleset_version_write.go"
+      ],
+      "deps": [
+        "T-020-2"
+      ],
+      "req_ids": [
+        "REQ-2018"
+      ],
+      "acceptance": {
+        "feature": "decision-tracer.feature",
+        "scenarios": [
+          "A past decision joins the exact immutable ruleset version in force when it decided"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 450,
+        "max_wall_clock_minutes": 130
+      },
+      "status": "done"
+    },
+    {
+      "id": "T-020-7",
+      "title": "T1: per-interceptor-gate verdict trail — ordered rows per gate, both keys, append-only REVOKE, observe-only emit (G5)",
+      "files_owned": [
+        "core/db/migrations/0025_interceptor_gate_verdict.up.sql",
+        "core/db/migrations/0025_interceptor_gate_verdict.down.sql",
+        "core/trace/gateverdict.go",
+        "core/db/gate_verdict_write.go"
+      ],
+      "deps": [
+        "T-020-5"
+      ],
+      "req_ids": [
+        "REQ-2007",
+        "REQ-2001",
+        "REQ-2016"
+      ],
+      "acceptance": {
+        "feature": "decision-tracer.feature",
+        "scenarios": [
+          "All gates of a passing action leave ordered verdict rows",
+          "A refusing action leaves the refusing gate row and no phantom pass rows past it",
+          "Every decision chokepoint emits an observe-only trace step at its boundary",
+          "The runtime role holds no update or delete on the agent-step and gate-verdict evidence tables"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 550,
+        "max_wall_clock_minutes": 150
+      },
+      "status": "done"
+    },
+    {
+      "id": "T-020-8",
+      "title": "T1: per-cycle agent-loop transcript (agent_step) — Scrub before persist, non-secret, append-only, keyed by external_ref (G6)",
+      "files_owned": [
+        "core/db/migrations/0026_agent_step.up.sql",
+        "core/db/migrations/0026_agent_step.down.sql",
+        "core/trace/agentstep.go",
+        "core/db/agent_step_write.go"
+      ],
+      "deps": [
+        "T-020-5"
+      ],
+      "req_ids": [
+        "REQ-2008",
+        "REQ-2001",
+        "REQ-2015",
+        "REQ-2016"
+      ],
+      "acceptance": {
+        "feature": "decision-tracer.feature",
+        "scenarios": [
+          "Each ReAct cycle leaves a scrubbed agent-step record with no secret value",
+          "The detail endpoint projects references and schemes only and never a secret value"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 600,
+        "max_wall_clock_minutes": 160
+      },
+      "status": "done"
+    },
+    {
+      "id": "T-020-9",
+      "title": "T1: persist prompt_version + seed_hash + model_tier on the session/triage record (G7)",
+      "files_owned": [
+        "core/db/migrations/0029_session_identity.up.sql",
+        "core/db/migrations/0029_session_identity.down.sql",
+        "core/db/session_identity_write.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-2009"
+      ],
+      "acceptance": {
+        "feature": "decision-tracer.feature",
+        "scenarios": [
+          "The session record carries the seed hash prompt version and model tier"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 350,
+        "max_wall_clock_minutes": 110
+      },
+      "status": "done"
+    },
+    {
+      "id": "T-020-10",
+      "title": "T2: per-session detail READ endpoint GET /v1/sessions/{external_ref} — authenticated non-secret assembler, ordered steps, observe-only (G8)",
+      "files_owned": [
+        "core/httpapi/session_detail.go",
+        "core/trace/assemble.go",
+        "core/trace/record.go",
+        "core/db/trace_spine_read.go",
+        "core/db/trace_spine_read_test.go",
+        "core/httpapi/session_detail_test.go",
+        "core/trace/assemble_test.go",
+        "spec/020-decision-tracer/acceptance/detail_steps_test.go"
+      ],
+      "deps": [
+        "T-020-1",
+        "T-020-2",
+        "T-020-3",
+        "T-020-7",
+        "T-020-8",
+        "T-020-9"
+      ],
+      "req_ids": [
+        "REQ-2000",
+        "REQ-2010",
+        "REQ-2011",
+        "REQ-2002"
+      ],
+      "acceptance": {
+        "feature": "decision-tracer.feature",
+        "scenarios": [
+          "The trace record carries every decision-grade field for a step",
+          "The detail endpoint returns the ordered steps of one session over an authenticated read"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 700,
+        "max_wall_clock_minutes": 180
+      },
+      "status": "done",
+      "note": "Coarse-first read model over the durable spine (classify/propose/predict/verify). REQ-2002 (on/off decision-path proof) binds when the REQ-2001 emit side lands; REQ-2010 (queued/running coverage) binds when the T-020-13 step channel lands."
+    },
+    {
+      "id": "T-020-11",
+      "title": "T2: distinct elevated trace-read RBAC role gating the trace surface (owner-decision 2)",
+      "files_owned": [
+        "core/auth/trace_read_role.go"
+      ],
+      "deps": [
+        "T-020-10"
+      ],
+      "req_ids": [
+        "REQ-2014"
+      ],
+      "acceptance": {
+        "feature": "decision-tracer.feature",
+        "scenarios": [
+          "The trace surface is gated behind a distinct trace-read role"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 100
+      },
+      "status": "done"
+    },
+    {
+      "id": "T-020-12",
+      "title": "T2: live-wire the console Workflows view to the detail endpoint, retain fixture as render contract, respect assemble.py byte-repro (G9)",
+      "files_owned": [
+        "deploy/console/v2/modules/_live/js.txt",
+        "deploy/console/v2/index.html"
+      ],
+      "deps": [
+        "T-020-10"
+      ],
+      "req_ids": [
+        "REQ-2012"
+      ],
+      "acceptance": {
+        "feature": "decision-tracer.feature",
+        "scenarios": [
+          "The console workflows view renders real trace steps in place of the fixtures"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 500,
+        "max_wall_clock_minutes": 150
+      },
+      "status": "done",
+      "note": "Live decision-tracer inspector in the Workflows view: /v1/sessions index + on-select GET /v1/sessions/{external_ref} renders the real classify->propose->predict->verify walk; WF_RUNS fixtures retained as the offline render contract (rendered labeled DEMO only when the spine serves nothing). REQ-2012 console-render half has no Go-drivable oracle (JS surface); its byte-repro half is guarded by make console-verify + verified e2e on-box."
+    },
+    {
+      "id": "T-020-13",
+      "title": "T2: per-session step SSE channel so queued/live-running sessions animate from real boundary events (G10)",
+      "files_owned": [
+        "core/httpapi/session_step_stream.go"
+      ],
+      "deps": [
+        "T-020-10"
+      ],
+      "req_ids": [
+        "REQ-2013",
+        "REQ-2010"
+      ],
+      "acceptance": {
+        "feature": "decision-tracer.feature",
+        "scenarios": [
+          "A queued or running session animates from real boundary events over the step channel"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 450,
+        "max_wall_clock_minutes": 130
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-020-14",
+      "title": "T3 (optional, owner-gated): OTel span backbone + off-by-default Langfuse-OSS exporter of the redacted LLM subset + two-layer schema separation (G12)",
+      "files_owned": [
+        "modules/export/otel/backbone.go",
+        "modules/export/langfuse/exporter.go",
+        "core/trace/layers.go"
+      ],
+      "deps": [
+        "T-020-10"
+      ],
+      "req_ids": [
+        "REQ-2020",
+        "REQ-2017"
+      ],
+      "acceptance": {
+        "feature": "decision-tracer.feature",
+        "scenarios": [
+          "The optional export lane carries the redacted LLM subset only and is off by default",
+          "The trace schema separates the estate-specific layer from the generalizable layer"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 800,
+        "max_wall_clock_minutes": 200
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-020-15",
+      "title": "T2: confidence calibrator — reliability curve + Brier/ECE from persisted confidence x verified outcome (read-only, observe-only; the gate stays OFF until calibrated)",
+      "files_owned": [
+        "core/calibrate/reliability.go",
+        "core/db/calibration_read.go",
+        "temporal/calibrate/job.go",
+        "core/db/calibration_read_test.go",
+        "temporal/calibrate/job_test.go",
+        "spec/020-decision-tracer/acceptance/calibrator_steps_test.go",
+        "cmd/worker/main.go"
+      ],
+      "deps": [
+        "T-020-1",
+        "T-020-5"
+      ],
+      "req_ids": [
+        "REQ-2021"
+      ],
+      "acceptance": {
+        "feature": "decision-tracer.feature",
+        "scenarios": [
+          "The calibrator bins stated confidence against verified outcomes into a reliability curve"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 600,
+        "max_wall_clock_minutes": 170
+      },
+      "status": "done",
+      "note": "Calibrator = pure core/calibrate.Compute (merged !436) + core/db.CalibrationReadStore (session_triage.confidence ⋈ infragraph_prediction verified-clean by external_ref) + temporal/calibrate.Job (read-only pass) wired as a cmd/worker ticker (TG_CALIBRATION_INTERVAL). Observe-only: adjudicates/gates nothing; min_confidence clamp stays OFF until calibrated. Honestly reports 'no evidence yet' until fresh sessions carry confidence + external_ref."
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+/* Grounding scorecard — representative fixture (design preview). Replaced verbatim by the live
+   /v1/grounding aggregate the moment an operator session is adopted. The shape mirrors the REQ-517
+   DTO so the view renders identically for demo and live. */
+const GROUNDING = {
+  verdicts: { match: 128, partial: 19, deviation: 6 },
+  verdict_total: 153,
+  match_rate: 128 / 153,
+  predictions: 141,
+  avg_real_tp: 3.4,      // average real true-positive cascade hits per scored prediction
+  avg_control_tp: 0.7,   // average shuffled-graph control true-positives (chance baseline)
+  signal_ratio: 3.4 / 1, // real vs control (control floored at 1) — >1 beats chance
+  precision: 0.86,
+  recall: 0.79,
+  avg_false_positives: 0.18, // mean blast-radius false positives per scored prediction — honest over-prediction rate (lower=better)
+  bands: { AUTO: 96, AUTO_NOTICE: 41, POLL_PAUSE: 16 },
+  floor_holds: 16,       // POLL_PAUSE = human required / never-auto floor
+};

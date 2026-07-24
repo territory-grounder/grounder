@@ -1,0 +1,100 @@
+{
+  "spec": "018-recency-decay",
+  "tasks": [
+    {
+      "id": "T-017-1",
+      "title": "core/lessons: resolved_at provenance timestamp + HalfLifeWeight/Reconcile/PruneStaleFromCorpus decay",
+      "files_owned": [
+        "core/lessons/decay.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-1800",
+        "REQ-1801"
+      ],
+      "acceptance": {
+        "feature": "recency-decay.feature",
+        "scenarios": [
+          "A lesson carries provenance and an aged lesson is down-weighted and pruned"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 200,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-017-2",
+      "title": "core/learn: exponential half-life (Decay) on co-occurrence + trial counts, base-rate-preserving",
+      "files_owned": [
+        "core/learn/cooccurrence.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-1802"
+      ],
+      "acceptance": {
+        "feature": "recency-decay.feature",
+        "scenarios": [
+          "A learned co-occurrence count halves over a half-life and a faded pair ages out"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 200,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-017-3",
+      "title": "core/estate: DecayOnDisproof over the learned tier (clone-based, ground-truth untouched)",
+      "files_owned": [
+        "core/estate/decay.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-1803",
+        "REQ-1804"
+      ],
+      "acceptance": {
+        "feature": "recency-decay.feature",
+        "scenarios": [
+          "An estate learned edge a fresh observation contradicts decays and ages out",
+          "Decay ages learned state only and never touches ground truth or the estate"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-017-4",
+      "title": "Discovery-corpus flush: drain MemDiscoveryCorpus to durable corpus via eval.IngestCaptured (acceptance harness)",
+      "files_owned": [
+        "spec/018-recency-decay/acceptance/acceptance_test.go"
+      ],
+      "deps": [
+        "T-017-1",
+        "T-017-2",
+        "T-017-3"
+      ],
+      "req_ids": [
+        "REQ-1805"
+      ],
+      "acceptance": {
+        "feature": "recency-decay.feature",
+        "scenarios": [
+          "The discovery-corpus flush drains captured deviations to the durable corpus file"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    }
+  ]
+}

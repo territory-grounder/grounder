@@ -1,0 +1,65 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 0,
+  "title": "Territory Grounder — Canary Safety",
+  "uid": "tg-canary-safety",
+  "tags": ["territory-grounder", "safety"],
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "15s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "mutation_enabled (must be 0)",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "OFF", "color": "green" } } },
+            { "type": "value", "options": { "1": { "text": "ON — UNEXPECTED", "color": "red" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] }
+        }
+      },
+      "targets": [ { "expr": "max by (component) (mutation_enabled)", "legendFormat": "{{component}}", "refId": "A" } ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "mutation breaker (0 closed / 1 half / 2 open)",
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "CLOSED", "color": "green" } } },
+            { "type": "value", "options": { "1": { "text": "HALF-OPEN", "color": "yellow" } } },
+            { "type": "value", "options": { "2": { "text": "OPEN — TRIPPED", "color": "red" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 2 } ] }
+        }
+      },
+      "targets": [ { "expr": "max(circuit_breaker_state{name=\"mutation\"})", "legendFormat": "mutation", "refId": "A" } ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "deviation_count",
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "deviation_count", "legendFormat": "{{job}}", "refId": "A" } ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "mutation_enabled over time (per component)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "mutation_enabled", "legendFormat": "{{job}}/{{component}}", "refId": "A" } ]
+    }
+  ]
+}

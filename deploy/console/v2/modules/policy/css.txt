@@ -1,0 +1,49 @@
+/* POLICY module (pol-) — the Policy Engine's operator surface (epic TG-94/TG-106). Reuses tokens, chips,
+   tbl, wrapcard. Read-only: no control here changes a mode or a rule (that is a sealed-write follow-on). */
+.pol-intro{font-size:11.5px;line-height:1.55;color:var(--ink3);max-width:80ch;margin:0 2px 16px;}
+.pol-strip{margin-bottom:22px;}
+/* tables get their OWN horizontal-scroll container so the page body never scrolls sideways. */
+.pol-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.pol-scroll table{min-width:640px;}
+
+/* mode & posture hero card — color-coded by mode (read-only safe → warn) */
+.pol-mode{display:flex;gap:18px;align-items:stretch;flex-wrap:wrap;padding:16px 18px;margin-bottom:16px;}
+.pol-mode-badge{display:flex;flex-direction:column;justify-content:center;gap:7px;min-width:158px;
+  padding:14px 18px;border-radius:var(--radius);border:1px solid;}
+.pol-mode-name{font-family:var(--mono);font-size:23px;font-weight:600;letter-spacing:.01em;line-height:1;}
+.pol-mode-tag{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;opacity:.9;}
+.pol-mode-body{flex:1;min-width:230px;display:flex;flex-direction:column;gap:10px;justify-content:center;}
+.pol-posture{font-size:12.5px;line-height:1.5;color:var(--ink2);}
+.pol-flags{display:flex;gap:8px;flex-wrap:wrap;}
+.pol-note{font-size:11px;color:var(--ink3);line-height:1.5;}
+.pol-note b{color:var(--ink2);}
+
+/* disabled write control — clearly non-functional, never fake-actionable */
+.pol-disabled{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px;}
+.pol-disbtn{font-family:var(--mono);font-size:10.5px;letter-spacing:.03em;padding:6px 13px;border-radius:var(--radius-s);
+  border:1px dashed var(--line3);background:var(--g3s);color:var(--ink4);cursor:not-allowed;}
+.pol-disnote{font-size:10.5px;color:var(--ink4);line-height:1.45;}
+
+/* verdict / level pills */
+.pol-pill{display:inline-block;font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;font-weight:600;
+  text-transform:uppercase;padding:2px 9px;border-radius:20px;border:1px solid;white-space:nowrap;}
+.pol-sel{font-family:var(--mono);font-size:11px;color:var(--territory);}
+.pol-params{font-family:var(--mono);font-size:10.5px;color:var(--ink3);white-space:nowrap;}
+.pol-params b{color:var(--ink2);font-weight:600;}
+.pol-band{font-family:var(--mono);font-size:10.5px;color:var(--map);}
+.pol-approve{font-family:var(--mono);font-size:10px;color:var(--ink3);}
+.pol-def td{background:color-mix(in srgb,var(--map) 5%,transparent);}
+.pol-ord{font-family:var(--mono);font-size:10px;color:var(--ink4);font-variant-numeric:tabular-nums;}
+
+/* graduation ladder progress toward earned autonomy */
+.pol-grad{display:inline-flex;align-items:center;gap:9px;}
+.pol-grad-bar{display:inline-block;width:78px;height:7px;border-radius:5px;background:var(--g3s);
+  border:1px solid var(--line2);overflow:hidden;}
+.pol-grad-fill{display:block;height:100%;}
+.pol-grad-n{font-family:var(--mono);font-size:11px;color:var(--ink2);font-variant-numeric:tabular-nums;}
+.pol-cap{font-size:10.5px;color:var(--ink4);margin:2px 2px 12px;line-height:1.5;}
+
+/* decision-log limit selector in the section header */
+.pol-lim{height:28px;background:var(--g3s);border:1px solid var(--line2);border-radius:var(--radius);
+  padding:0 8px;color:var(--ink);font-size:11px;font-family:var(--mono);}
+.pol-lim:focus{outline:none;border-color:var(--accent);}

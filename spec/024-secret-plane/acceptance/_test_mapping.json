@@ -1,0 +1,78 @@
+{
+  "feature": "secret-plane.feature",
+  "note": "Honest coverage frontier. status: present=a runnable step drives real code (must name a test); pending=specified behavior not yet built; retrospective_gap=shipped without a driving test (must be zero, INV-22). All PENDING: spec/024 is the design gate; scenarios bind as tasks T-024-1..6 land. INC-1 (complete the bao: migration) is deploy-config only and verified operationally, not by a unit test.",
+  "scenarios": [
+    {
+      "name": "Enforce policy refuses to boot on a plaintext business secret",
+      "req": "REQ-2400",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "Off policy preserves pre-feature behavior",
+      "req": "REQ-2400",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "Warn policy logs each plaintext reference and continues",
+      "req": "REQ-2400",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "The permanent exemption set alone may remain plaintext under enforce",
+      "req": "REQ-2401",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "Every process secret reference is enumerated for the policy",
+      "req": "REQ-2402",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "A business secret migrates from env to a backend with an unchanged resolved value",
+      "req": "REQ-2403",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "A new backend registers read-only at the scheme registry and fails closed",
+      "req": "REQ-2404",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "The Vaultwarden resolver decrypts a vault item field in native Go",
+      "req": "REQ-2405",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "The Passbolt resolver retrieves a resource field via an OpenPGP robot identity",
+      "req": "REQ-2406",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "The OpenBao token bootstraps without a durable on-disk secret",
+      "req": "REQ-2407",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "The homelab backends are labeled second-tier and are not the default",
+      "req": "REQ-2408",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "A hardcoded env default is a violation under enforce",
+      "req": "REQ-2409",
+      "status": "pending",
+      "test": ""
+    }
+  ]
+}

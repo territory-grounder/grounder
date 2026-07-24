@@ -1,0 +1,87 @@
+{
+  "spec": "009-kubernetes-deploy",
+  "tasks": [
+    {
+      "id": "T-009-1",
+      "title": "Helm chart skeleton: Chart.yaml, single values contract, helpers, README",
+      "files_owned": [
+        "deploy/helm/grounder/Chart.yaml",
+        "deploy/helm/grounder/values.yaml",
+        "deploy/helm/grounder/README.md",
+        "deploy/helm/grounder/templates/_helpers.tpl"
+      ],
+      "deps": [],
+      "req_ids": ["REQ-901", "REQ-902", "REQ-907"],
+      "acceptance": {
+        "feature": "kubernetes-deploy.feature",
+        "scenarios": [
+          "A helm install brings up the full service set",
+          "The Helm chart is a first-class target at parity with compose",
+          "The values file is the single authoritative configuration contract"
+        ]
+      },
+      "budget": { "max_loc_delta": 250, "max_wall_clock_minutes": 60 },
+      "status": "completed"
+    },
+    {
+      "id": "T-009-2",
+      "title": "grounder Deployment + Service: same distroless image, mutation-off default, probes, auth-gated exposure",
+      "files_owned": [
+        "deploy/helm/grounder/templates/grounder-deployment.yaml",
+        "deploy/helm/grounder/templates/grounder-service.yaml"
+      ],
+      "deps": ["T-009-1"],
+      "req_ids": ["REQ-903", "REQ-906", "REQ-909", "REQ-910"],
+      "acceptance": {
+        "feature": "kubernetes-deploy.feature",
+        "scenarios": [
+          "The grounder Deployment runs the same distroless binary image",
+          "Mutation stays disabled by default under the Phase 0/1 foundation",
+          "The public Service is auth-gated and the admin listener is not default-exposed",
+          "The grounder Deployment declares liveness and readiness probes ordered after Postgres"
+        ]
+      },
+      "budget": { "max_loc_delta": 300, "max_wall_clock_minutes": 75 },
+      "status": "completed"
+    },
+    {
+      "id": "T-009-3",
+      "title": "Postgres, Temporal, LiteLLM templates + two-role DSN wiring + secret references",
+      "files_owned": [
+        "deploy/helm/grounder/templates/postgres.yaml",
+        "deploy/helm/grounder/templates/temporal.yaml",
+        "deploy/helm/grounder/templates/litellm.yaml",
+        "deploy/helm/grounder/templates/secrets.yaml"
+      ],
+      "deps": ["T-009-1"],
+      "req_ids": ["REQ-904", "REQ-905"],
+      "acceptance": {
+        "feature": "kubernetes-deploy.feature",
+        "scenarios": [
+          "Credentials are sourced from Kubernetes Secrets and never rendered as literals",
+          "The runtime DSN uses the DML-only role and migration uses the DDL role"
+        ]
+      },
+      "budget": { "max_loc_delta": 350, "max_wall_clock_minutes": 90 },
+      "status": "completed"
+    },
+    {
+      "id": "T-009-4",
+      "title": "CI helm-lint + template render + literal-credential scan gate",
+      "files_owned": [
+        "deploy/helm/ci/helm-lint.sh"
+      ],
+      "deps": ["T-009-1", "T-009-2", "T-009-3"],
+      "req_ids": ["REQ-908", "REQ-904"],
+      "acceptance": {
+        "feature": "kubernetes-deploy.feature",
+        "scenarios": [
+          "CI runs helm lint and template render on a chart change",
+          "CI fails when a rendered manifest contains a literal credential"
+        ]
+      },
+      "budget": { "max_loc_delta": 120, "max_wall_clock_minutes": 45 },
+      "status": "completed"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "_comment": "Alert-rule family map for the NOVELTY signature (INV-02: loadable/git-reviewed data, never a Go literal). The SAME physical fault surfaces under several source rule names; the novelty gate keys on the rule, so without this a de-novel under one alias never covers the others. Each family lists the source rule strings (case-insensitive, trimmed) that denote the same remediation-warranting condition. Editing this changes ONLY the novelty MATCH — never what actuates, never any other gate.",
+  "families": {
+    "device-down": [
+      "Device-Down-SNMP-unreachable",
+      "Device-Down-Due-to-no-ICMP-response.",
+      "Devices-up/down",
+      "HostDown"
+    ]
+  }
+}

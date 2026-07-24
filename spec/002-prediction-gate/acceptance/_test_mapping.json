@@ -1,0 +1,84 @@
+{
+  "feature": "prediction-gate.feature",
+  "note": "Honest coverage frontier for the remediation lane (fails CLOSED). status: present = a runnable step drives real code and passes; pending = specified behavior whose oracle is not bound yet (core/predict.PredictionGate + core/verify.Verifier are Phase 2; core/manifest exists but its REQ-102b oracle binding is deferred to the parent); retrospective_gap = shipped without a driving test (must be zero for governed behavior, INV-22). All scenarios are pending here \u2014 the parent binds the green ones.",
+  "scenarios": [
+    {
+      "name": "A prediction is committed before the approval poll starts",
+      "req": "REQ-101",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "A proposal with no committed prediction is denied",
+      "req": "REQ-102",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "An approval poll cannot be built without a gated prediction",
+      "req": "REQ-102",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "Analysis-only mode records the prediction without gating the approval",
+      "req": "REQ-105",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "The mechanical verdict is written only by the deterministic verifier",
+      "req": "REQ-103",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "The acting model has no write path to the verdict columns",
+      "req": "REQ-103",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "The verifier returns a typed verdict detail whose enum matches the bare verdict",
+      "req": "REQ-103a",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "A deviation verdict blocks auto-resolution",
+      "req": "REQ-104",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "The action_id is threaded unchanged through predict approve execute and verify",
+      "req": "REQ-102",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "A mid-session action change mints a new action_id and forces a re-gate",
+      "req": "REQ-102",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "The manifest action_id changes when any action field changes",
+      "req": "REQ-102b",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "A sealed manifest asserts its own action_id and rejects a foreign one",
+      "req": "REQ-102b",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "The sole ParseProposal entry point rejects every second grammar",
+      "req": "REQ-102",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    }
+  ]
+}

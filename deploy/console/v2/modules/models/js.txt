@@ -1,0 +1,345 @@
+/* ============================================================================
+   MODELS module (mdl-) — LLM routing, usage, judge dead-man, model config.
+   Epistemic discipline: configured/expected values (model ids, routes, temps,
+   budget & request envelopes) render MAP-indigo; measured telemetry (tokens,
+   latency, heartbeats, observed req rate) renders TERRITORY-steel.
+   ============================================================================ */
+
+/* namespace-aware SVG helper: use the chart-primitives global if present */
+const mdlSvg = (typeof svgEl === "function") ? svgEl :
+  function (tag, attrs = {}, ...kids) {
+    const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      e.setAttribute(k, v === true ? "" : String(v));
+    }
+    for (const k of kids.flat()) { if (k == null || k === false) continue; e.append(k.nodeType ? k : document.createTextNode(k)); }
+    return e;
+  };
+
+const mdlFmtTok = n => n >= 1e6 ? (n / 1e6).toFixed(n >= 1e8 ? 0 : 1).replace(/\.0$/, "") + "M"
+  : n >= 1e3 ? (n / 1e3).toFixed(1).replace(/\.0$/, "") + "k" : String(n);
+const mdlFmtInt = n => n.toLocaleString("en-US");
+const mdlUsd = n => "$" + n.toFixed(2);
+
+/* ---------------- small pieces ---------------- */
+function mdlSec(lbl, title, ...extra) {
+  return h("div", { class: "mdl-sec" }, h("span", { class: "lbl" }, lbl), h("h3", {}, title),
+    h("span", { class: "mdl-rule" }), ...extra);
+}
+function mdlProv(p) { return h("span", { class: "mdl-prov" }, p); }
+function mdlChain(primary, fallbacks) {
+  const c = h("span", { class: "mdl-chain" });
+  c.append(h("span", { class: "mdl-model pri", title: "primary" }, primary));
+  (fallbacks || []).forEach(f => c.append(
+    h("span", { class: "mdl-arr", "aria-hidden": "true" }, "→"),
+    h("span", { class: "mdl-model fb", title: "fallback" }, f)));
+  return c;
+}
+function mdlCard(capKids, bodyNode) {
+  const card = h("div", { class: "mdl-card" });
+  card.append(h("div", { class: "cap" }, ...capKids));
+  if (bodyNode) card.append(bodyNode);
+  return card;
+}
+function mdlTile(lbl, big, sub, cls) {
+  return h("div", { class: "mdl-tile" },
+    h("div", { class: "lbl" }, lbl),
+    h("div", { class: "mdl-big" + (cls ? " " + cls : "") }, big),
+    sub ? h("div", { class: "mdl-sub" }, sub) : null);
+}
+
+/* ---------------- charts (built on svgEl; tokens only) ---------------- */
+function mdlArcPath(cx, cy, r, a0, a1) {
+  const large = (a1 - a0) > Math.PI ? 1 : 0;
+  return "M " + (cx + r * Math.cos(a0)).toFixed(2) + " " + (cy + r * Math.sin(a0)).toFixed(2) +
+    " A " + r + " " + r + " 0 " + large + " 1 " +
+    (cx + r * Math.cos(a1)).toFixed(2) + " " + (cy + r * Math.sin(a1)).toFixed(2);
+}
+function mdlDonut(items, total) {
+  const cx = 75, cy = 75, r = 57, w = 15, gap = 0.05;
+  const svg = mdlSvg("svg", { viewBox: "0 0 150 150", class: "mdl-donut-svg", role: "img", "aria-label": "estimated cost by model" });
+  let a = -Math.PI / 2;
+  items.forEach(it => {
+    const a1 = a + (it.cost / total) * 2 * Math.PI;
+    svg.append(mdlSvg("path", {
+      d: mdlArcPath(cx, cy, r, a + gap / 2, Math.max(a + gap / 2 + 0.01, a1 - gap / 2)),
+      fill: "none", stroke: MDL_COLOR[it.id] || "var(--ink4)", "stroke-width": w,
+    }));
+    a = a1;
+  });
+  const fig = h("div", { class: "mdl-donut" }, svg,
+    h("div", { class: "mdl-donut-hole" },
+      h("div", { class: "mdl-donut-big" }, mdlUsd(total)),
+      h("div", { class: "lbl", style: "font-size:8.5px" }, "est. spend")));
+  const leg = h("div", { class: "mdl-leg" });
+  items.forEach(it => {
+    const c = MDL_COLOR[it.id] || "var(--ink4)";
+    leg.append(h("div", { class: "mdl-leg-r" },
+      h("i", { class: "sw", style: it.fallbackOnly       /* shape-codes the off-family fallback provider */
+        ? "background:transparent;border:1.5px solid " + c + ";border-radius:50%" : "background:" + c }),
+      h("span", { class: "mdl-leg-id" }, it.id + (it.fallbackOnly ? " (fb)" : "")),
+      h("span", { class: "mdl-leg-v" }, mdlUsd(it.cost)),
+      h("span", { class: "mdl-leg-p" }, pct(it.cost / total) + "%")));
+  });
+  return h("div", { class: "mdl-donut-wrap" }, fig, leg);
+}
+
+function mdlHbar(rows) {
+  const max = Math.max(...rows.map(r => r.tin + r.tout));
+  const el = h("div", { class: "mdl-hbar" });
+  rows.forEach(r => {
+    el.append(h("div", { class: "mdl-hb-row" },
+      h("span", { class: "mdl-hb-lab" }, r.role),
+      h("div", { class: "mdl-hb-track", role: "img", "aria-label": r.role + ": " + mdlFmtTok(r.tin) + " prompt, " + mdlFmtTok(r.tout) + " completion tokens" },
+        h("i", { class: "tin", style: "width:" + (r.tin / max * 100).toFixed(2) + "%" }),
+        h("i", { class: "tout", style: "width:" + (r.tout / max * 100).toFixed(2) + "%" })),
+      h("span", { class: "mdl-hb-val" }, mdlFmtTok(r.tin) + " in · " + mdlFmtTok(r.tout) + " out")));
+  });
+  el.append(h("div", { class: "mdl-hb-leg" },
+    h("span", {}, h("i", { class: "tin" }), "prompt"),
+    h("span", {}, h("i", { class: "tout" }), "completion"),
+    h("span", { class: "lbl", style: "margin-left:auto;font-size:8.5px" }, "observed · territory")));
+  return el;
+}
+
+function mdlReqChart(S) {
+  const W = 1080, H = 230, L = 46, R = 16, T = 18, B = 30;
+  const n = S.obs.length;
+  const rawMax = Math.max(...S.obs, ...S.envHi) * 1.12;
+  const step = rawMax > 1000 ? 500 : 50;
+  const maxY = Math.ceil(rawMax / step) * step;
+  const X = i => L + (W - L - R) * (n === 1 ? 0 : i / (n - 1));
+  const Y = v => T + (H - T - B) * (1 - v / maxY);
+  const svg = mdlSvg("svg", { viewBox: "0 0 " + W + " " + H, class: "mdl-area", role: "img",
+    "aria-label": "requests per " + S.bucket + " — observed (steel, solid) vs predicted envelope (indigo, dashed)" });
+  for (let k = 0; k <= 4; k++) {
+    const v = maxY * k / 4, gy = Y(v);
+    svg.append(mdlSvg("line", { x1: L, x2: W - R, y1: gy.toFixed(1), y2: gy.toFixed(1), class: "mdl-grid" }));
+    svg.append(mdlSvg("text", { x: L - 6, y: (gy + 3).toFixed(1), class: "mdl-ax", "text-anchor": "end" },
+      v >= 1000 ? mdlFmtTok(v) : String(Math.round(v))));
+  }
+  S.xlabels.forEach(([i, t]) => svg.append(
+    mdlSvg("text", { x: X(i).toFixed(1), y: H - 8, class: "mdl-ax", "text-anchor": i === 0 ? "start" : (i === n - 1 ? "end" : "middle") }, t)));
+  const line = arr => arr.map((v, i) => (i ? "L " : "M ") + X(i).toFixed(1) + " " + Y(v).toFixed(1)).join(" ");
+  const dHi = line(S.envHi), dLo = line(S.envLo);
+  const dBand = dHi + " " + S.envLo.map((v, j, a) => { const i = a.length - 1 - j; return "L " + X(i).toFixed(1) + " " + Y(a[i]).toFixed(1); }).join(" ") + " Z";
+  svg.append(mdlSvg("path", { d: dBand, class: "mdl-band" }));
+  svg.append(mdlSvg("path", { d: dHi, class: "mdl-envline" }));
+  svg.append(mdlSvg("path", { d: dLo, class: "mdl-envline" }));
+  const dObs = line(S.obs);
+  svg.append(mdlSvg("path", { d: dObs + " L " + X(n - 1).toFixed(1) + " " + Y(0).toFixed(1) + " L " + X(0).toFixed(1) + " " + Y(0).toFixed(1) + " Z", class: "mdl-obsfill" }));
+  svg.append(mdlSvg("path", { d: dObs, class: "mdl-obsline" }));
+  let noted = false;
+  S.obs.forEach((v, i) => {
+    if (v <= S.envHi[i]) return;
+    svg.append(mdlSvg("path", { d: "M " + X(i).toFixed(1) + " " + (Y(v) - 14).toFixed(1) + " l 5 8 h -10 Z", class: "mdl-devmk" }));
+    if (!noted) { noted = true;
+      const tx = Math.min(X(i) + 10, W - R - 150);
+      svg.append(mdlSvg("text", { x: tx.toFixed(1), y: (Y(v) - 8).toFixed(1), class: "mdl-devtxt" }, S.note));
+    }
+  });
+  return h("div", {}, svg, h("div", { class: "mdl-chart-leg" },
+    h("span", { class: "s" }, h("i", { class: "ln" }), "observed req/" + S.bucket + " · territory"),
+    h("span", { class: "s" }, h("i", { class: "ln map" }), "predicted envelope · map"),
+    h("span", { class: "s" }, h("i", { class: "tri" }), "over envelope → gateway fallback")));
+}
+
+/* ---------------- section builders ---------------- */
+function mdlRoutingCard(U, winLbl) {
+  const t = h("table", { class: "mdl-tbl" });
+  t.append(h("thead", {}, h("tr", {},
+    ...["Role", "Purpose", "Route — primary → fallback order", "temp", "reqs · " + winLbl, "p95", "fb events"]
+      .map((x, i) => h("th", { class: i >= 3 ? "r" : null }, x)))));
+  const tb = h("tbody");
+  MDL_ROUTING.forEach(r => {
+    const fb = U.roleFb[r.role];
+    tb.append(h("tr", {},
+      h("td", {}, h("span", { class: "mdl-role" }, r.role)),
+      h("td", { style: "color:var(--ink2)" }, r.desc),
+      h("td", {}, mdlChain(r.model, r.fallbacks)),
+      h("td", { class: "mdl-num cfg" }, r.temp.toFixed(1)),
+      h("td", { class: "mdl-num" }, mdlFmtInt(U.roleReqs[r.role])),
+      h("td", { class: "mdl-num" }, r.p95),
+      h("td", { class: "mdl-num " + (fb ? "fbn" : "fb0") }, String(fb))));
+  });
+  t.append(tb);
+  const card = mdlCard([
+    h("span", { class: "lbl" }, "Route table"),
+    h("span", { class: "mdl-gw", title: "LiteLLM gateway — the only egress to any model provider" },
+      h("i", {}), h("b", {}, MDL_GATEWAY.id), MDL_GATEWAY.url + " · " + MDL_GATEWAY.ver + " · up " + MDL_GATEWAY.uptime),
+    h("span", { style: "flex:1" }),
+    h("span", { class: "mdl-tag" }, "fixture · representative"),
+  ], t);
+  card.append(h("div", { class: "mdl-foot-note" },
+    "fallback = automatic gateway reroute on 5xx/timeout · every reroute is ledgered as ",
+    h("span", { style: "color:var(--ink2)" }, "kind=model.fallback"),
+    " · indigo = configured (map), steel = measured (territory)"));
+  return card;
+}
+
+function mdlJudgeCard() {
+  const J = MDL_JUDGE, ok = J.state === "healthy";
+  const age = h("span", { class: "v terr mdl-age" });
+  (function tick(el) {
+    let s = J.lastBeatS;
+    const f = v => Math.floor(v / 60) + "m " + String(v % 60).padStart(2, "0") + "s ago";
+    el.textContent = f(s);
+    if (typeof reduceMotion !== "undefined" && reduceMotion) return;
+    const iv = setInterval(() => { if (!el.isConnected) { clearInterval(iv); return; } s++; el.textContent = f(s); }, 1000);
+  })(age);
+  const kv = h("div", { class: "mdl-kv" });
+  const row = (k, v) => kv.append(h("div", { class: "mdl-kv-r" }, h("span", { class: "k" }, k),
+    typeof v === "string" ? h("span", { class: "v" }, v) : v));
+  row("judge route", mdlChain(J.route.model, J.route.fallbacks));
+  row("cadence", h("span", { class: "v" }, J.schedule + "  ", h("span", { style: "color:var(--ink3)" }, "(" + J.cadence + ")")));
+  row("last heartbeat", age);
+  row("stale after", h("span", { class: "v" }, J.staleAfter + " ", h("span", { style: "color:var(--ink3)" }, "→ escalation")));
+  row("on stale", h("span", { class: "v mdl-esc" }, J.escalation));
+  const beats = h("div", { class: "mdl-beats", role: "img", "aria-label": "last 24 heartbeats, all received, one late" });
+  J.beats.forEach(b => beats.append(h("i", { class: b === 2 ? "late" : "okb", title: b === 2 ? "late beat (+4m)" : "on time" })));
+  beats.append(h("i", { class: "next", title: "next beat due" }));
+  const right = h("div", { class: "col" },
+    h("div", { class: "lbl", style: "margin-bottom:2px" }, "Last 24 heartbeats · territory"),
+    beats,
+    h("div", { style: "font-family:var(--mono);font-size:9.5px;color:var(--ink4);margin-bottom:10px" },
+      "23 on time · 1 late (+4m) · 0 missed"),
+    h("div", { class: "lbl", style: "margin-bottom:6px" }, "Last verdict · signed into ledger"),
+    h("div", { class: "mdl-verdict" }, mdlVerdictLine(J.lastVerdict)));
+  const card = mdlCard([
+    h("span", { class: "lbl" }, "Dead-man switch"),
+    h("span", { style: "font-size:11.5px;color:var(--ink2)" }, "an independent judge must keep proving the agent loop is alive — silence is a failure, not a comfort"),
+    h("span", { style: "flex:1" }),
+    h("span", { class: "mdl-chip " + (ok ? "ok" : "bad") }, h("i", {}), ok ? "HEALTHY" : "STALE"),
+  ], h("div", { class: "mdl-judge" }, h("div", { class: "col" }, kv), right));
+  return card;
+}
+function mdlVerdictLine(s) {
+  const el = h("span", {});
+  s.split(/(verdict=alive|conf=[\d.]+)/).forEach(part =>
+    el.append(/^(verdict=alive|conf=)/.test(part) ? h("b", {}, part) : part));
+  return el;
+}
+
+function mdlCfgCard(m) {
+  const c = h("div", { class: "mdl-cfg" });
+  c.append(h("div", { class: "mdl-cfg-cap" },
+    h("span", { class: "mdl-model pri big" }, m.id), mdlProv(m.provider),
+    h("span", { class: "mdl-tag" }, "ctx " + m.ctx),
+    h("span", { style: "flex:1" }),
+    ...m.roles.map(r => h("span", { class: "mdl-tag role" }, r))));
+  const kv = h("div", { class: "mdl-kv pad" });
+  const row = (k, v) => kv.append(h("div", { class: "mdl-kv-r" }, h("span", { class: "k" }, k),
+    typeof v === "string" ? h("span", { class: "v cfg" }, v) : v));
+  row("temperature", m.temperature.toFixed(1));
+  row("max_tokens", mdlFmtInt(m.max_tokens));
+  row("timeout", m.timeout_s + "s");
+  row("retries", m.retries + " · " + m.backoff);
+  row("fallback", m.fallback.length ? mdlChain(m.fallback[0], m.fallback.slice(1))
+    : h("span", { class: "v dim" }, "none · terminal"));
+  c.append(kv);
+  c.append(h("div", { class: "mdl-keyrow" },
+    mdlSvg("svg", { class: "mdl-keyic", viewBox: "0 0 16 16", width: "13", height: "13", fill: "none", stroke: "currentColor", "stroke-width": "1.4" },
+      mdlSvg("circle", { cx: "5", cy: "8", r: "2.5" }),
+      mdlSvg("path", { d: "M7.5 8H14M11.5 8v2.2M13.5 8v1.6" })),
+    h("span", { class: "mdl-keyref", title: "secret reference — the value never reaches the console" }, m.keyRef),
+    h("span", { class: "mdl-tag" }, "reference"),
+    h("a", { class: "mdl-seclink", href: "#secrets", title: "open in Secrets",
+      onclick: e => { e.preventDefault(); if (typeof views !== "undefined" && views.secrets && typeof route === "function") route("secrets"); } },
+      "Secrets ↗")));
+  const gated = (label) => h("button", { class: "mdl-gbtn", disabled: true,
+    title: "Mutation OFF — read-only preview; config writes unlock at the Phase-2 flip" }, label);
+  c.append(h("div", { class: "mdl-cfg-foot" },
+    gated("Edit params"), gated("Rotate key"), gated("Reorder fallbacks"),
+    h("span", { class: "mdl-gnote" }, "mutation off")));
+  return c;
+}
+
+/* ---------------- nav registration (resilient) ----------------
+   Prefers the shell's addNav(); falls back to a namespace-correct manual
+   insert if the shell helper is absent or throws (e.g. h("svg",{class})
+   hitting the read-only SVGElement.className in strict mode). */
+function mdlAddNav(group, viewKey, label, iconInner, badgeKey) {
+  const rail = $("#rail");
+  const already = () => rail && rail.querySelector('.navi[data-view="' + viewKey + '"]');
+  if (typeof addNav === "function") {
+    try { addNav(group, viewKey, label, iconInner, badgeKey); } catch (e) { /* fall through */ }
+    if (already()) return;
+  }
+  if (!rail || already()) return;
+  const foot = rail.querySelector(".foot");
+  let grp = [...rail.querySelectorAll(".lbl.grp")].find(g => g.textContent.trim().toLowerCase() === group.toLowerCase());
+  let anchor = foot;
+  if (!grp) { grp = h("div", { class: "lbl grp" }, group); rail.insertBefore(grp, foot || null); }
+  else {
+    anchor = grp.nextElementSibling;
+    while (anchor && anchor !== foot && !anchor.classList.contains("grp")) anchor = anchor.nextElementSibling;
+    if (!anchor) anchor = foot;
+  }
+  const ic = mdlSvg("svg", { class: "ic", viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", "stroke-width": "1.4" });
+  ic.innerHTML = iconInner;
+  const a = h("a", { class: "navi", "data-view": viewKey, href: "#" + viewKey,
+    onclick: e => { e.preventDefault(); if (typeof route === "function") route(viewKey); } },
+    ic, h("span", { class: "t" }, label),
+    badgeKey ? h("span", { class: "n", "data-badge": badgeKey }, "—") : null);
+  rail.insertBefore(a, anchor || null);
+}
+
+/* ---------------- the view ---------------- */
+function mdlModelsView() {
+  const win = (typeof facetState !== "undefined" && facetState.models) || "24h";
+  const U = MDL_USAGE[win];
+  const wrap = h("div", { class: "mdl" });
+
+  /* INV-08 — the wall between model tokens and control flow */
+  wrap.append(h("div", { class: "mdl-inv" },
+    mdlSvg("svg", { class: "mdl-invic", viewBox: "0 0 16 16", width: "15", height: "15", fill: "none", stroke: "currentColor", "stroke-width": "1.4" },
+      mdlSvg("path", { d: "M8 2l5 2v4c0 3-2.5 5-5 6-2.5-1-5-3-5-6V4z" }),
+      mdlSvg("path", { d: "M5.5 8.5h5" })),
+    h("span", {}, h("b", {}, "INV-08"),
+      " — no model token becomes control flow. The gateway returns text; only the Go loop’s typed gate can spend it (band classifier → never-auto floor → ledger). A model may propose — it can never act.")));
+
+  /* 1 · ROUTING */
+  wrap.append(mdlSec("Roles → models", "Routing — who thinks with what",
+    h("span", { class: "lbl", style: "font-size:9px" }, "all egress via " + MDL_GATEWAY.id)));
+  wrap.append(mdlRoutingCard(U, win));
+
+  /* 2 · USAGE */
+  wrap.append(mdlSec("Consumption", "Usage — " + U.label,
+    h("span", { class: "lbl", style: "font-size:9px" }, "window set by the facet above")));
+  wrap.append(h("div", { class: "mdl-tiles" },
+    mdlTile("Tokens in", mdlFmtTok(U.tokIn), "prompt side · observed"),
+    mdlTile("Tokens out", mdlFmtTok(U.tokOut), "completion side · observed"),
+    mdlTile("Est. cost", mdlUsd(U.cost),
+      "budget " + mdlUsd(U.budget) + " · " + pct(U.cost / U.budget) + "% consumed", "cost"),
+    mdlTile("Requests", mdlFmtInt(U.reqs),
+      h("span", {}, U.fallbackEvents ? h("span", { class: "dev" }, U.fallbackEvents + " fallback events") : "0 fallback events", " · ledgered")),
+    mdlTile("p50 latency", U.p50, "gateway-measured · all roles"),
+    mdlTile("p95 latency", U.p95, "ceiling: agent-loop timeout 120s")));
+  wrap.append(h("div", { class: "mdl-usage" },
+    mdlCard([h("span", { class: "lbl" }, "Cost by model"), h("span", { style: "flex:1" }), h("span", { class: "mdl-tag" }, U.label)],
+      h("div", { class: "bd" }, mdlDonut(U.costByModel, U.cost))),
+    mdlCard([h("span", { class: "lbl" }, "Tokens by role"), h("span", { style: "flex:1" }), h("span", { class: "mdl-tag" }, U.label)],
+      h("div", { class: "bd" }, mdlHbar(U.tokensByRole)))));
+  wrap.append(mdlCard([
+    h("span", { class: "lbl" }, "Requests — observed vs predicted envelope"),
+    h("span", { style: "font-size:11px;color:var(--ink3)" }, "the router’s own capacity map, graded against what actually arrived"),
+    h("span", { style: "flex:1" }), h("span", { class: "mdl-tag" }, U.label)],
+    h("div", { class: "bd" }, mdlReqChart(U.series))));
+
+  /* 3 · JUDGE LIVENESS */
+  wrap.append(mdlSec("Governance judge", "Judge liveness — the loop’s pulse"));
+  wrap.append(mdlJudgeCard());
+
+  /* 4 · MODEL CONFIG */
+  wrap.append(mdlSec("Per-model parameters", "Model config — read-only preview"));
+  wrap.append(h("div", { class: "mdl-gatenote" },
+    mdlSvg("svg", { class: "ic", viewBox: "0 0 16 16", width: "14", height: "14", fill: "none", stroke: "currentColor", "stroke-width": "1.5" },
+      mdlSvg("rect", { x: "3.5", y: "7", width: "9", height: "6", rx: "1" }),
+      mdlSvg("path", { d: "M5.5 7V5a2.5 2.5 0 0 1 5 0v2" })),
+    h("span", {}, h("b", {}, "MUTATION OFF"),
+      " — model configuration is a read-only preview. Param edits, key rotation, and fallback reordering stay disabled until the Phase-2 flip. Provider keys are shown as references only; values never reach the console.")));
+  wrap.append(h("div", { class: "mdl-cfgs" }, ...MDL_MODELS.map(mdlCfgCard)));
+
+  return wrap;
+}

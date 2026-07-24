@@ -1,0 +1,14 @@
+asyncapi: 2.6.0
+info:
+  title: Territory Grounder events
+  version: "1"
+  x-provenance:
+    generated_at: "2026-07-21T13:29:28Z"
+    source_hash: "af7ba55a78497c99f6053b8309ac22df9502360c772f20df72f6e4707ee4a1cb"
+    coverage_scope: "routes=41;entities=16"
+channels:
+  triage.requested:
+    subscribe:
+      message:
+        payload:
+          $ref: '#/components/schemas/IncidentEnvelope'

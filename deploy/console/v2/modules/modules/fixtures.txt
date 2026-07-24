@@ -1,0 +1,99 @@
+/* ===================== modules — fixtures ===================== */
+/* [key, LABEL, description] */
+const MODS_FAMS = [
+  ["ingest",        "INGEST",        "alert + telemetry intake"],
+  ["cmdb",          "CMDB",          "estate graph sources"],
+  ["tracker",       "TRACKER",       "case / ticket sync"],
+  ["notifier",      "NOTIFIER",      "human channels"],
+  ["actuation",     "ACTUATION",     "execution surfaces"],
+  ["model",         "MODEL",         "gateway + inference"],
+  ["observability", "OBSERVABILITY", "TG self-telemetry"]
+];
+
+/* 31 modules. auth[] holds secret REFERENCES only (env:VAR / file:path) — never values.
+   map[] (ingest only) is the normalizer field mapping: [source field, canonical field]. */
+const MODS_FLEET = [
+  /* ingest (8) */
+  {id:"librenms",      fam:"ingest", ver:"1.4.2", enabled:true,  scope:"READ", health:"live", last:"12s", poll:"30s",   rate:"60 rpm · burst 10", timeout:"8s",
+   ep:"https://librenms.dc1.lan/api/v0", auth:["env:TG_LIBRENMS_TOKEN"],
+   map:[["hostname","host"],["rule","rule"],["severity","sev"],["timestamp","ts"],["alert_id","src_ref"]]},
+  {id:"prometheus",    fam:"ingest", ver:"2.1.0", enabled:true,  scope:"READ", health:"live", last:"4s",  poll:"15s",   rate:"120 rpm · burst 20", timeout:"5s",
+   ep:"http://prom.dc1.lan:9090/api/v1", auth:["env:TG_PROM_BEARER"],
+   map:[["labels.instance","host"],["labels.alertname","rule"],["labels.severity","sev"],["startsAt","ts"],["fingerprint","src_ref"]]},
+  {id:"alertmanager",  fam:"ingest", ver:"2.1.0", enabled:true,  scope:"READ", health:"live", last:"9s",  poll:"15s",   rate:"120 rpm · burst 20", timeout:"5s",
+   ep:"http://prom.dc1.lan:9093/api/v2", auth:["env:TG_AM_BEARER"],
+   map:[["labels.instance","host"],["labels.alertname","rule"],["labels.severity","sev"],["startsAt","ts"],["fingerprint","src_ref"]]},
+  {id:"crowdsec",      fam:"ingest", ver:"0.9.3", enabled:true,  scope:"READ", health:"live", last:"31s", poll:"60s",   rate:"30 rpm · burst 5", timeout:"6s",
+   ep:"https://crowdsec.dc1.lan:8080/v1", auth:["env:TG_CROWDSEC_KEY"],
+   map:[["machine_id","host"],["scenario","rule"],["decisions[0].type","sev"],["created_at","ts"],["decisions[0].id","src_ref"]]},
+  {id:"syslog",        fam:"ingest", ver:"1.1.0", enabled:true,  scope:"READ", health:"live", last:"1s",  poll:"stream", rate:"unbounded · drop>5k eps", timeout:"—",
+   ep:"udp://0.0.0.0:5514 (rfc5424)", auth:[],
+   map:[["HOSTNAME","host"],["APP-NAME","rule"],["PRI&7","sev"],["TIMESTAMP","ts"],["MSGID","src_ref"]]},
+  {id:"snmp-trap",     fam:"ingest", ver:"0.8.1", enabled:true,  scope:"READ", health:"idle", last:"42m", poll:"stream", rate:"unbounded", timeout:"—",
+   ep:"udp://0.0.0.0:1162", auth:["file:/run/secrets/snmp_community"],
+   map:[["agent-addr","host"],["trap-oid","rule"],["generic-trap","sev"],["time-stamp","ts"]]},
+  {id:"graylog",       fam:"ingest", ver:"0.6.0", enabled:false, scope:"READ", health:"dark", last:"—",   poll:"45s",   rate:"60 rpm", timeout:"8s",
+   ep:"https://graylog.dc2.lan:9000/api", auth:["env:TG_GRAYLOG_TOKEN"],
+   map:[["source","host"],["event_definition","rule"],["priority","sev"],["timestamp","ts"]]},
+  {id:"uptime-kuma",   fam:"ingest", ver:"0.9.7", enabled:true,  scope:"READ", health:"live", last:"18s", poll:"60s",   rate:"30 rpm", timeout:"6s",
+   ep:"https://kuma.dc1.lan/api", auth:["env:TG_KUMA_KEY"],
+   map:[["monitor.name","host"],["heartbeat.msg","rule"],["heartbeat.status","sev"],["heartbeat.time","ts"]]},
+
+  /* cmdb (4) */
+  {id:"netbox",        fam:"cmdb", ver:"2.3.1", enabled:true,  scope:"READ", health:"live", last:"2m", poll:"5m",  rate:"30 rpm", timeout:"12s",
+   ep:"https://netbox.dc1.lan/api", auth:["env:TG_NETBOX_TOKEN"]},
+  {id:"proxmox-pve",   fam:"cmdb", ver:"1.7.0", enabled:true,  scope:"READ", health:"live", last:"1m", poll:"2m",  rate:"30 rpm", timeout:"10s",
+   ep:"https://dc2pve02.lan:8006/api2/json", auth:["file:/run/secrets/pve_ro_token"]},
+  {id:"librenms-cmdb", fam:"cmdb", ver:"1.4.2", enabled:true,  scope:"READ", health:"live", last:"3m", poll:"10m", rate:"20 rpm", timeout:"12s",
+   ep:"https://librenms.dc1.lan/api/v0/devices", auth:["env:TG_LIBRENMS_TOKEN"]},
+  {id:"truenas",       fam:"cmdb", ver:"0.5.2", enabled:true,  scope:"READ", health:"idle", last:"3h", poll:"15m", rate:"10 rpm", timeout:"15s",
+   ep:"https://dc2nas01.lan/api/v2.0", auth:["env:TG_TRUENAS_KEY"]},
+
+  /* tracker (2) */
+  {id:"youtrack",      fam:"tracker", ver:"1.2.4", enabled:true,  scope:"READ", health:"live", last:"5m", poll:"5m", rate:"20 rpm", timeout:"10s",
+   ep:"https://yt.dc1.lan/api", auth:["env:TG_YOUTRACK_TOKEN"]},
+  {id:"gitlab-issues", fam:"tracker", ver:"0.3.0", enabled:false, scope:"READ", health:"dark", last:"—", poll:"10m", rate:"20 rpm", timeout:"10s",
+   ep:"https://gitlab.dc1.lan/api/v4", auth:["env:TG_GITLAB_PAT"]},
+
+  /* notifier (5) */
+  {id:"slack",         fam:"notifier", ver:"1.5.0", enabled:true,  scope:"READ", health:"live", last:"6m",  poll:"on-event", rate:"1 msg/s", timeout:"6s",
+   ep:"https://hooks.slack.example/services/…", auth:["env:TG_SLACK_WEBHOOK"]},
+  {id:"telegram",      fam:"notifier", ver:"1.5.0", enabled:true,  scope:"READ", health:"live", last:"6m",  poll:"on-event", rate:"1 msg/s", timeout:"6s",
+   ep:"https://api.telegram.example/bot…", auth:["env:TG_TELEGRAM_BOT"]},
+  {id:"email-smtp",    fam:"notifier", ver:"1.0.3", enabled:true,  scope:"READ", health:"idle", last:"2d",  poll:"on-event", rate:"12 msg/h", timeout:"20s",
+   ep:"smtps://mail.dc2.lan:465", auth:["env:TG_SMTP_USER","file:/run/secrets/smtp_pass"]},
+  {id:"webhook",       fam:"notifier", ver:"1.1.1", enabled:true,  scope:"READ", health:"live", last:"6m",  poll:"on-event", rate:"5 msg/s", timeout:"6s",
+   ep:"https://n8n.dc1.lan/webhook/tg", auth:["env:TG_WEBHOOK_HMAC"]},
+  {id:"ntfy",          fam:"notifier", ver:"0.4.0", enabled:false, scope:"READ", health:"dark", last:"—",   poll:"on-event", rate:"1 msg/s", timeout:"6s",
+   ep:"https://ntfy.dc2.lan", auth:["env:TG_NTFY_TOKEN"]},
+
+  /* actuation (5) — all MUTATE, none executable while MUTATION OFF */
+  {id:"ssh",           fam:"actuation", ver:"2.0.1", enabled:true,  scope:"MUTATE", health:"live", last:"5m (probe)", poll:"probe 5m", rate:"4 exec/m", timeout:"30s",
+   ep:"tcp/22 · per-host from estate graph", auth:["file:/run/secrets/tg_ed25519"]},
+  {id:"kubernetes",    fam:"actuation", ver:"1.3.0", enabled:true,  scope:"MUTATE", health:"live", last:"2m (probe)", poll:"probe 2m", rate:"10 req/m", timeout:"15s",
+   ep:"https://dc1k8s-api.lan:6443", auth:["file:/run/secrets/kubeconfig"]},
+  {id:"proxmox",       fam:"actuation", ver:"1.7.0", enabled:true,  scope:"MUTATE", health:"idle", last:"1h (probe)", poll:"probe 10m", rate:"6 req/m", timeout:"15s",
+   ep:"https://dc2pve02.lan:8006/api2/json", auth:["file:/run/secrets/pve_rw_token","env:TG_PVE_FPRINT"]},
+  {id:"mcp-exec",      fam:"actuation", ver:"0.7.2", enabled:true,  scope:"MUTATE", health:"idle", last:"3h (probe)", poll:"probe 15m", rate:"2 req/m", timeout:"20s",
+   ep:"stdio://tg-mcp-bridge", auth:["env:TG_MCP_TOKEN"]},
+  {id:"ansible-runner",fam:"actuation", ver:"0.2.0", enabled:false, scope:"MUTATE", health:"dark", last:"—", poll:"on-plan", rate:"1 run/m", timeout:"120s",
+   ep:"local:///srv/tg/runner", auth:["file:/run/secrets/vault_pass"]},
+
+  /* model (3) */
+  {id:"litellm",       fam:"model", ver:"3.0.4", enabled:true,  scope:"READ", health:"live", last:"2s",  poll:"health 30s", rate:"200k tok/m", timeout:"120s",
+   ep:"http://litellm.dc1.lan:4000/v1", auth:["env:TG_LITELLM_KEY"]},
+  {id:"vllm-local",    fam:"model", ver:"0.3.1", enabled:true,  scope:"READ", health:"idle", last:"4h",  poll:"health 60s", rate:"40k tok/m", timeout:"120s",
+   ep:"http://dc1gpu01.lan:8000/v1", auth:[]},
+  {id:"embedder",      fam:"model", ver:"1.0.0", enabled:true,  scope:"READ", health:"live", last:"40s", poll:"health 60s", rate:"60 req/m", timeout:"30s",
+   ep:"http://litellm.dc1.lan:4000/v1/embeddings", auth:["env:TG_LITELLM_KEY"]},
+
+  /* observability (4) */
+  {id:"prom-exporter", fam:"observability", ver:"1.2.0",  enabled:true, scope:"READ",   health:"live", last:"15s", poll:"scraped 15s", rate:"—", timeout:"—",
+   ep:":9464/metrics (scraped by prometheus)", auth:[]},
+  {id:"otel",          fam:"observability", ver:"0.11.0", enabled:true, scope:"READ",   health:"live", last:"3s",  poll:"push 10s", rate:"batch 512", timeout:"10s",
+   ep:"grpc://otel.dc1.lan:4317", auth:["env:TG_OTLP_HEADERS"]},
+  {id:"grafana-annot", fam:"observability", ver:"0.5.1",  enabled:true, scope:"MUTATE", health:"dark", last:"26m", poll:"on-event", rate:"30 req/m", timeout:"8s",
+   ep:"https://grafana.dc1.lan/api/annotations", auth:["env:TG_GRAFANA_SA"]},
+  {id:"healthz-probe", fam:"observability", ver:"1.0.2",  enabled:true, scope:"READ",   health:"live", last:"5s",  poll:"10s", rate:"—", timeout:"3s",
+   ep:":8080/healthz (self)", auth:[]}
+];

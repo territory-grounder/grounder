@@ -1,0 +1,365 @@
+/* Territory Grounder — operator console design system: "Grounded Instrument".
+   A governed-autonomy operations deck. The three risk bands (AUTO / AUTO_NOTICE / POLL_PAUSE) are the only
+   meaningful colour; everything else is a grounded slate instrument. Colour never carries meaning alone —
+   every band/verdict also has a text label + aria state. */
+
+:root {
+  /* base — a powered instrument panel, deep grounded slate with a faint green undertone (not pure black) */
+  --bg: #0a0f0e;
+  --bg-grid: #0d1413;
+  --surface: #111917;
+  --surface-2: #0e1614;
+  --raised: #16211e;
+  --line: #223029;
+  --line-bright: #2f4238;
+
+  /* ink */
+  --ink: #e4ede9;
+  --ink-dim: #93a89f;
+  --ink-faint: #7f9089; /* meets WCAG AA (>=4.5:1) for small text on the grounded base */
+
+  /* the risk bands — the semantic core (meaningful colour only) */
+  --auto: #48c26d;   /* AUTO — autonomous + safe */
+  --notice: #e3b341; /* AUTO_NOTICE — act + notify */
+  --pause: #f2726f;  /* POLL_PAUSE — pause for a human */
+  --auto-dim: #48c26d22;
+  --notice-dim: #e3b34122;
+  --pause-dim: #f2726f22;
+
+  /* instrument accent — schematic cyan, interactive/focus (distinct from the band greens) */
+  --accent: #38c6c6;
+  --accent-dim: #38c6c61f;
+
+  /* hazard — the never-auto floor */
+  --hazard: #f2726f;
+
+  --radius: 4px;
+  --gap: 20px;
+  --bar-h: 60px;
+
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  background-image:
+    linear-gradient(var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: -1px -1px;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- micro-label: the instrument labelling vernacular (uppercase, tracked, mono) ---- */
+.eyebrow, .label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+h1, h2, h3, h4 { font-family: var(--sans); font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+
+/* mono for every identifier / hash / telemetry value */
+code, .mono, [data-mono] { font-family: var(--mono); }
+
+/* =========================================================================================== */
+/*  App shell — the instrument bar + panel deck                                                */
+/* =========================================================================================== */
+
+.deck { max-width: 1360px; margin: 0 auto; padding: 0 24px 64px; }
+
+/* --- the instrument bar (fixed chrome) --- */
+.bar {
+  position: sticky; top: 0; z-index: 20;
+  height: var(--bar-h);
+  display: flex; align-items: center; gap: 22px;
+  padding: 0 24px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+
+.wordmark { display: flex; align-items: baseline; gap: 9px; }
+.wordmark b, .wordmark h1 {
+  font-family: var(--sans); font-weight: 600; font-size: 15px; letter-spacing: -0.02em; color: var(--ink);
+  margin: 0; line-height: 1;
+}
+.wordmark .tg {
+  font-family: var(--mono); font-weight: 600; font-size: 13px; color: var(--bg);
+  background: var(--accent); padding: 2px 6px; border-radius: 3px; letter-spacing: 0.04em;
+}
+.bar .spacer { flex: 1; }
+
+/* --- the SIGNATURE: the mutation breaker --- */
+.breaker {
+  display: inline-flex; align-items: stretch; height: 34px;
+  border: 1px solid var(--line-bright); border-radius: var(--radius); overflow: hidden;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em;
+  background: #0c1210;
+}
+.breaker .k { display: flex; align-items: center; padding: 0 11px; color: var(--ink-faint); text-transform: uppercase; }
+.breaker .sw {
+  display: flex; align-items: center; gap: 8px; padding: 0 13px;
+  border-left: 1px solid var(--line);
+  position: relative; text-transform: uppercase; font-weight: 500;
+}
+/* the physical toggle nub */
+.breaker .nub {
+  width: 26px; height: 14px; border-radius: 8px; position: relative;
+  background: #1c2723; border: 1px solid var(--line-bright); flex: none;
+}
+.breaker .nub::after {
+  content: ""; position: absolute; top: 1px; left: 1px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--ink-faint); transition: transform .35s cubic-bezier(.6,0,.2,1), background .35s;
+}
+.breaker[data-mode="read-only"] .sw { color: var(--auto); }
+.breaker[data-mode="read-only"] .nub { border-color: color-mix(in srgb, var(--auto) 55%, var(--line-bright)); background: var(--auto-dim); }
+.breaker[data-mode="read-only"] .nub::after { background: var(--auto); }
+.breaker[data-mode="operational"] .sw { color: var(--notice); }
+.breaker[data-mode="operational"] .nub { border-color: var(--notice); background: var(--notice-dim); }
+.breaker[data-mode="operational"] .nub::after { background: var(--notice); transform: translateX(12px); }
+
+/* --- live status readout (SSE + clock) --- */
+.readout { display: flex; align-items: center; gap: 18px; font-family: var(--mono); font-size: 11px; color: var(--ink-dim); }
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 7px; vertical-align: middle; background: var(--ink-faint); }
+.dot.connected { background: var(--auto); box-shadow: 0 0 0 0 var(--auto); animation: pulse 2.4s infinite; }
+.dot.connecting { background: var(--notice); }
+.dot.disconnected { background: var(--pause); animation: blink 1s steps(2) infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--auto) 50%, transparent); } 70% { box-shadow: 0 0 0 5px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+@keyframes blink { 50% { opacity: .25; } }
+
+/* --- band spectrum strip under the bar: the grounding scale --- */
+.spectrum {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+  margin: 0 0 var(--gap); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--line);
+}
+.spectrum .seg { padding: 9px 14px; background: var(--surface-2); display: flex; align-items: center; justify-content: space-between; }
+.spectrum .seg b { font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em; }
+.spectrum .seg .n { font-family: var(--mono); font-size: 12px; color: var(--ink-dim); }
+.spectrum .auto b { color: var(--auto); } .spectrum .auto { box-shadow: inset 3px 0 0 var(--auto); }
+.spectrum .notice b { color: var(--notice); } .spectrum .notice { box-shadow: inset 3px 0 0 var(--notice); }
+.spectrum .pause b { color: var(--pause); } .spectrum .pause { box-shadow: inset 3px 0 0 var(--pause); }
+
+/* --- the panel deck grid --- */
+.grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--gap); align-items: start; }
+.col-7 { grid-column: span 7; } .col-5 { grid-column: span 5; }
+.col-6 { grid-column: span 6; } .col-12 { grid-column: span 12; }
+
+/* =========================================================================================== */
+/*  Panels rendered as instrument cards (styled via their semantic structure)                  */
+/* =========================================================================================== */
+
+.panel {
+  background: linear-gradient(180deg, var(--surface), var(--surface-2));
+  border: 1px solid var(--line); border-radius: var(--radius);
+  animation: rise .5s cubic-bezier(.2,.7,.2,1) backwards;
+  overflow: hidden; /* clip the manifest chain's connector arrows to the card edge */
+}
+.panel > header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 13px 16px; border-bottom: 1px solid var(--line);
+}
+.panel > header .h { display: flex; align-items: baseline; gap: 10px; }
+.panel > header h2 { font-size: 13px; }
+.panel .body { padding: 16px; }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* The panels emit <section aria-label="…"> as their root; frame each as a card. */
+.body > section[aria-label] > h2,
+.body > section[aria-label] > h3 { font-size: 13px; margin-bottom: 12px; }
+
+/* generic list reset inside panels */
+.body ul, .body ol { list-style: none; margin: 0; padding: 0; }
+
+/* --- approval decision card --- */
+article[data-band] {
+  border: 1px solid var(--line); border-left: 3px solid var(--line-bright);
+  border-radius: var(--radius); padding: 14px; margin-bottom: 12px; background: var(--surface-2);
+}
+article[data-band="POLL_PAUSE"] { border-left-color: var(--pause); }
+article[data-band="AUTO_NOTICE"] { border-left-color: var(--notice); }
+article[data-band="AUTO"] { border-left-color: var(--auto); }
+article[data-band] > header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding: 0; border: 0; }
+article[data-band] [role="status"] { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); }
+article[data-band] section[aria-label^="Proposed plan"] { margin: 10px 0; padding: 10px 12px; background: #0c1210; border-radius: var(--radius); border: 1px solid var(--line); }
+article[data-band] section[aria-label^="Proposed plan"] h3 { font-size: 11px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: .12em; font-family: var(--mono); margin-bottom: 8px; font-weight: 500; }
+article[data-band] ol li { padding: 4px 0 4px 22px; position: relative; color: var(--ink); font-size: 13px; }
+article[data-band] ol { counter-reset: appr; }
+article[data-band] ol li::before { counter-increment: appr; content: counter(appr, upper-alpha); position: absolute; left: 0; top: 4px; font-family: var(--mono); font-size: 10px; color: var(--accent); border: 1px solid var(--line-bright); border-radius: 3px; width: 15px; height: 15px; display: grid; place-items: center; }
+article[data-band] > p { font-size: 12.5px; color: var(--ink-dim); margin: 6px 0; }
+
+/* --- interactive controls (buttons) — quiet, instrument-grade --- */
+[role="group"] { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+button, [role="button"] {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink); background: var(--raised); border: 1px solid var(--line-bright);
+  border-radius: var(--radius); padding: 7px 13px; cursor: pointer;
+  transition: border-color .15s, background .15s, color .15s;
+}
+button:hover, [role="button"]:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+button[data-action="veto"]:hover, [data-action="veto"]:hover, [data-kind="disable"]:hover { border-color: var(--pause); color: var(--pause); background: var(--pause-dim); }
+
+/* --- ledger: the hash chain --- */
+[aria-label*="ledger" i] ul li, .ledger-entry {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center;
+  font-family: var(--mono); font-size: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); position: relative;
+}
+[aria-label*="tamper" i], [data-verified="false"] { color: var(--pause); }
+[data-verified="true"] { color: var(--auto); }
+
+/* --- manifest timeline: one chain keyed by action id --- */
+ol[aria-label="manifest stages"] { display: flex; gap: 0; margin: 4px 0; flex-wrap: wrap; }
+ol[aria-label="manifest stages"] > li {
+  flex: 1; min-width: 90px; position: relative; padding: 12px 10px; text-align: center;
+  border: 1px solid var(--line); background: var(--surface-2);
+}
+ol[aria-label="manifest stages"] > li + li { border-left: 0; }
+ol[aria-label="manifest stages"] > li::after { content: "→"; position: absolute; right: -8px; top: 50%; transform: translateY(-50%); color: var(--accent); z-index: 2; font-family: var(--mono); }
+ol[aria-label="manifest stages"] > li:last-child::after { content: ""; }
+/* the stage name and its status are distinct lines, not one run-together token */
+ol[aria-label="manifest stages"] > li > span { display: block; }
+ol[aria-label="manifest stages"] > li > span:first-child { font-family: var(--mono); font-size: 12px; color: var(--ink); }
+ol[aria-label="manifest stages"] > li > span:last-child { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); margin-top: 4px; }
+ol[aria-label="manifest stages"] > li[data-status="recorded"] > span:last-child { color: var(--auto); }
+ol[aria-label="manifest stages"] > li[data-status="mismatch"] { border-color: var(--pause); }
+ol[aria-label="manifest stages"] > li[data-status="mismatch"] > span:last-child { color: var(--pause); }
+
+/* --- autonomy layers: each row is a managed layer — name on the left, its server-computed band on the right --- */
+[data-testid="autonomy-controls"] > div {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  flex-wrap: wrap; padding: 11px 0; border-bottom: 1px solid var(--line);
+}
+[data-testid="autonomy-controls"] > div:last-child { border-bottom: 0; }
+[data-testid^="layer-name-"] { color: var(--ink); font-size: 13px; }
+[data-testid^="band-current-"] { font-family: var(--mono); font-size: 11px; letter-spacing: .04em; color: var(--ink-dim); }
+
+/* --- band / verdict / status chips (add data-tone where emitted) --- */
+[data-tone="auto"], [data-band-chip="AUTO"] { color: var(--auto); }
+[data-tone="notice"], [data-band-chip="AUTO_NOTICE"] { color: var(--notice); }
+[data-tone="pause"], [data-band-chip="POLL_PAUSE"] { color: var(--pause); }
+
+/* --- the never-auto floor: a hazard line --- */
+.floor {
+  margin: 14px 0; height: 12px; border-radius: 3px;
+  background: repeating-linear-gradient(45deg, var(--hazard) 0 8px, #0c1210 8px 16px);
+  opacity: .5;
+}
+.floor + .floor-label, .floor-label { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--hazard); }
+
+/* restrictive / empty states — direction, not mood */
+[role="status"] { color: var(--ink-dim); }
+
+/* focus — always visible (a11y floor) */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+/* =========================================================================================== */
+/*  Skills / flywheel panel (spec/014) — library, A/B trials with arm-fill, version history     */
+/* =========================================================================================== */
+
+/* status/verdict chips — text carries the meaning; colour is a secondary signal (spec/010 a11y) */
+.chip {
+  display: inline-block; font-family: var(--mono); font-size: 10px; letter-spacing: .06em;
+  text-transform: uppercase; padding: 2px 6px; margin-left: 8px; border-radius: 3px;
+  border: 1px solid var(--line-bright); color: var(--ink-dim); vertical-align: middle;
+}
+.chip[data-phase="active"], .chip[data-status="trial"] { color: var(--notice); border-color: color-mix(in srgb, var(--notice) 45%, var(--line-bright)); }
+.chip[data-phase="completed"], .chip[data-status="production"] { color: var(--auto); border-color: color-mix(in srgb, var(--auto) 45%, var(--line-bright)); }
+.chip[data-phase="aborted"], .chip[data-status="rejected"], .chip[data-status="retired"], .chip[data-tone="pause"] { color: var(--pause); border-color: color-mix(in srgb, var(--pause) 45%, var(--line-bright)); }
+
+/* two columns: the library selects, the detail shows history — stacks on a narrow deck */
+.skills-split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: var(--gap); margin-top: 18px; align-items: start; }
+.skills-split > section { min-width: 0; }
+
+/* --- flywheel trial cards --- */
+.trial-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin: 8px 0 4px; }
+.trial { border: 1px solid var(--line); border-left: 3px solid var(--line-bright); border-radius: var(--radius); padding: 12px 14px; background: var(--surface-2); }
+.trial[data-phase="active"] { border-left-color: var(--notice); }
+.trial[data-phase="completed"] { border-left-color: var(--auto); }
+.trial[data-phase="aborted"] { border-left-color: var(--pause); }
+.trial > header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; padding: 0; border: 0; }
+.trial .trial-dim { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); }
+.trial .arm-summary { font-family: var(--mono); font-size: 11.5px; color: var(--ink); margin: 4px 0 8px; }
+.trial .trial-meta, .trial .trial-verdict { font-size: 12px; color: var(--ink-dim); margin: 6px 0 0; }
+
+/* --- the arm-fill bars: the exceed-proof made legible --- */
+.arms { display: flex; flex-direction: column; gap: 7px; }
+.arm-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.arm-label { font-family: var(--mono); font-size: 11px; color: var(--ink); text-transform: capitalize; }
+.arm-ver { color: var(--ink-faint); }
+.arm-count { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); }
+.arm-full { color: var(--auto); }
+.arm-bar { height: 6px; margin-top: 3px; background: #0c1210; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.arm-bar-fill { height: 100%; background: var(--accent); transition: width .4s cubic-bezier(.4,0,.2,1); }
+.arm[data-filled="true"] .arm-bar-fill { background: var(--auto); }
+
+/* --- the skill library list (selectable rows) --- */
+.skill-list { display: flex; flex-direction: column; gap: 4px; }
+.skill-row {
+  display: grid; grid-template-columns: 1fr auto; grid-auto-rows: auto; gap: 2px 12px; width: 100%; text-align: left;
+  padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius);
+  text-transform: none; letter-spacing: normal; font-family: var(--sans);
+}
+.skill-row[data-selected="true"] { border-color: var(--accent); background: var(--accent-dim); }
+.skill-row .skill-name { font-size: 13px; color: var(--ink); }
+.skill-row .skill-prod { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); justify-self: end; }
+.skill-row .skill-meta { grid-column: 1 / -1; font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); }
+
+/* --- version history (rationale visible per version) --- */
+.version-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.version-row { border: 1px solid var(--line); border-radius: var(--radius); padding: 11px 13px; background: var(--surface-2); }
+.version-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.version-slug { font-family: var(--mono); font-size: 12px; color: var(--ink); }
+.version-src { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); }
+.version-seq { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); margin-left: auto; }
+.version-applies { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin: 7px 0 2px; }
+.version-rationale { font-size: 12.5px; color: var(--ink-dim); margin: 4px 0 0; line-height: 1.45; }
+
+/* --- write forms (session-only: draft + transition-rationale gate) --- */
+.draft-form, .transition-gate { margin: 10px 0; padding: 12px; border: 1px dashed var(--line-bright); border-radius: var(--radius); background: #0c1210; }
+.sk-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+.sk-field:last-of-type { margin-bottom: 8px; }
+.sk-field-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.sk-field-row .sk-field { flex: 1; min-width: 140px; }
+.sk-field-label { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint); }
+.sk-field input, .sk-field textarea {
+  font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--raised);
+  border: 1px solid var(--line-bright); border-radius: var(--radius); padding: 8px 10px; width: 100%; resize: vertical;
+}
+.sk-error { color: var(--pause); font-family: var(--mono); font-size: 11.5px; margin: 4px 0 8px; }
+.transition-verbs { margin-top: 10px; }
+
+/* =========================================================================================== */
+/*  Responsive + reduced motion                                                                */
+/* =========================================================================================== */
+@media (max-width: 960px) {
+  .col-7, .col-5, .col-6 { grid-column: span 12; }
+  .readout .clock { display: none; }
+  .skills-split { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .bar { gap: 12px; padding: 0 14px; }
+  .breaker .k { display: none; }
+  .deck { padding: 0 14px 48px; }
+  .spectrum { grid-template-columns: 1fr; }
+  /* the manifest chain runs top-to-bottom on a phone; the connector points down */
+  ol[aria-label="manifest stages"] { flex-direction: column; }
+  ol[aria-label="manifest stages"] > li { min-width: 0; }
+  ol[aria-label="manifest stages"] > li::after { content: "↓"; right: 50%; top: auto; bottom: -9px; transform: translateX(50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

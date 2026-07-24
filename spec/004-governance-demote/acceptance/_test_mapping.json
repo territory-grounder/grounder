@@ -1,0 +1,72 @@
+{
+  "feature": "governance-demote.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes; pending = specified behavior whose implementation (core/governance worker + judge-liveness monitor, Phase 2-3) does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior). Every scenario is pending: no Go implementation exists yet.",
+  "scenarios": [
+    {
+      "name": "A genuine repeat-offender tuple is auto-demoted to analysis-only",
+      "req": "REQ-301",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A tuple recurring three times in thirty days is classified a demote candidate",
+      "req": "REQ-302",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A tuple recurring twice is not classified a demote candidate",
+      "req": "REQ-302",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "An intentional known-transient tuple is excluded from demotion",
+      "req": "REQ-303",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A demotion auto-expires after thirty days",
+      "req": "REQ-304",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "The judge-liveness monitor computes the judged fraction from judge-independent tables",
+      "req": "REQ-305",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A non-recent session is excluded from the judged fraction",
+      "req": "REQ-305",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A judged fraction below one half over more than three sessions raises a judge-death warning",
+      "req": "REQ-306",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A judged fraction below one half with three or fewer eligible sessions raises no warning",
+      "req": "REQ-306",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A governance demotion decision is appended to the immutable audit spine",
+      "req": "REQ-301",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A raw judged transcript is purgeable while the judged fraction fact is retained",
+      "req": "REQ-305",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    }
+  ]
+}

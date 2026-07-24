@@ -1,0 +1,15 @@
+{
+ "nav": {
+  "group": "CONFIG",
+  "label": "Modules",
+  "view_key": "modules",
+  "badge": "modules",
+  "icon_svg_inner": "<rect x=\"2\" y=\"2\" width=\"5\" height=\"5\"/><rect x=\"9\" y=\"2\" width=\"5\" height=\"5\"/><rect x=\"2\" y=\"9\" width=\"5\" height=\"5\"/><path d=\"M9 11.5h5M11.5 9v5\"/>"
+ },
+ "view_meta": [
+  "Modules",
+  "Active connector fleet \u2014 31 loadable modules across 7 families; registry + per-module config"
+ ],
+ "purpose": "MODULES \u2014 the active connector-fleet registry (configuration domain): ~31 loadable modules grouped by family with rollup health, gated ENABLED toggles, READ/MUTATE capability scope, health (live/idle/dark) with color+glyph+label, per-row 24h poll-latency sparklines (observed=territory/steel/solid vs expected budget=map/indigo/dashed), and a per-module CONFIG drawer (endpoint, secret REFERENCES, scope, schedule/rate limits, ingest normalizer mapping, gated test-connection, health-history chart). Leads with the invariant: a disabled module has NO execution path.",
+ "notes": "Syntax-verified with node --check. Design decisions, in the console's language: (1) The invariant banner uses hazard tokens because \"disabled = no execution path\" is the safety-critical fact of this view; it carries a MUTATION OFF chip so the registry can never be read as an actuation surface. (2) Health is triple-encoded everywhere (stripe color + glyph \u25cf/\u25d0/\u2715 + lowercase label); disabled rows keep their glyph but drop to --ink4 so a deliberately-off module never reads as an alarm, while an ENABLED-but-dark module (grafana-annot) reads deviation-red. (3) Row and drawer sparklines obey the map/territory chart law: observed poll latency is steel/solid (territory), the expected latency budget is an indigo dashed line (map), missed polls are deviation-red baseline ticks; the drawer version adds a legend + min/p50/max/budget stats line (per dataviz: single observed series direct-labeled via legend, grid recessive, text in ink tokens, never series color). History is deterministic per module id (FNV-seeded LCG) so fixtures are stable across re-renders. (4) Every write-shaped control is present but gated: the ENABLED switch is a role=\"switch\" aria-disabled state display titled \"config write \u2014 gated: MUTATION OFF\", and TEST CONNECTION is disabled with \"design preview, no connector runtime\". MUTATE-scoped rows carry a hazard GATED tag. (5) Secrets render as env:/file: reference chips with a key glyph and an explicit \"values never stored/shown\" hint. (6) Drawer is self-contained (scrim + aside appended to body, ESC/scrim/\u2715 close, focus captured and restored, aria-modal); if the host later exposes a generic openDrawer(node), modsOpenDrawer's body can be dropped into it \u2014 it does NOT reuse openSession, which is session-shaped. All animation (drawer slide, smooth scroll-to-family) is guarded by reduceMotion plus a prefers-reduced-motion media query. All names are prefixed mods/MODS_ (helpers: modsRng, modsHist, modsSparkInto, modsSpark, modsSparkLg, modsHealth, modsScopeChip, mod"
+}
