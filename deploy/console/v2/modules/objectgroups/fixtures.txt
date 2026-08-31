@@ -1,0 +1,12 @@
+/* OBJECT GROUPS module — HONESTY CONTRACT: this surface has NO fixture. Every value it shows is fetched
+   live from GET /v1/estate/groups (AuthTraceRead — the same elevated tier credentials/native reads at,
+   because group membership reveals actuation-policy structure) — there is no representative/sample data
+   to fall back to. Unauthenticated the console shows only the auth gate; authenticated, a 403 renders the
+   honest elevated-read state with a step-up affordance (never sample rows), any other failure renders its
+   own honest reason with RETRY, and an empty store renders an honest empty state, never a manufactured
+   row (INV-15). Writes (POST/DELETE /v1/estate/groups/entries) proxy through the worker's ledger-first
+   objectgroup.ObjectGroupWriteWorkflow; every outcome and refusal shown is the backend's own answer,
+   verbatim where the text is load-bearing (a validator refusal, a typed 404).
+   State is held module-locally (ogList / ogForm / ogMsg / ogDel — see js.txt), NOT on liveState: this read
+   is elevated exactly like credentials/native, and a shared liveAdopt-chain fetch would lose the status
+   code a 403 needs to render the elevate affordance instead of a generic error. */

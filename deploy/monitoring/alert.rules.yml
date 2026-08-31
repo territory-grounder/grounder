@@ -1,0 +1,1246 @@
+# Territory Grounder — Phase-2 canary safety alert rules.
+# CI-guarded: the `monitoring-rules` job (.gitlab-ci.yml) runs `promtool check rules` on this file on change,
+# so a malformed rule (worst case: an incident that silently never fires) cannot land on main.
+#
+# The load-bearing rule is ActuationPermittedWhileModeForbidsIt: tg_may_actuate must be 1 ONLY while the
+# owner-set mode (tg_policy_mode) is an actuating one (Semi-auto/Full-auto). A 1 under Shadow/HITL — or
+# with the mode series unreadable — pages immediately. The other rules cover an armed-breaker trip, an
+# observed post-execution deviation, and a blind monitor (target down).
+groups:
+  - name: territory-grounder-safety
+    rules:
+      # CRITICAL: actuation is possible while the OWNER-SET MODE forbids it.
+      #
+      # This rule used to be a bare `mutation_enabled == 1`, with the comment "under Phase 0/1 this must
+      # NEVER fire". That is an assumption, not a reading, and it went stale the moment the estate left
+      # Phase 0/1. The owner set Semi-auto on 2026-07-30; the rule had therefore been firing CRITICAL,
+      # with repeat_interval 5m, continuously for six days — over entirely correct behaviour. Nobody saw
+      # it only because the Alertmanager receiver notifies nobody (TG-333). Wired up, it would have paged
+      # every five minutes forever and been muted within a day, taking the real signal with it.
+      #
+      # It is now a COMPARISON: the gate is open AND the declared mode is a non-actuating one. Shadow and
+      # HITL never actuate; Semi-auto and Full-auto legitimately do. In an actuating mode this is silent,
+      # which is what makes it meaningful when it fires.
+      #
+      # `unless on(job)` rather than `and`: if tg_policy_mode disappears entirely — worker down, metric
+      # renamed — the rule must NOT silently stop firing. An absent mode series leaves the left side
+      # intact, so the alert fires and someone finds out the mode became unreadable. Fail loud.
+      - alert: ActuationPermittedWhileModeForbidsIt
+        # TG-112: written on tg_may_actuate alone. The deprecated mutation-binary alias that once rode in
+        # an OR-leg is fully retired — no process emits it any more, so an OR would be a dead limb that
+        # made the rule LOOK wider than it reads. (The alert itself was renamed from
+        # MutationEnabledWhileModeForbidsIt in the same change.)
+        expr: >-
+          (tg_may_actuate == 1)
+          unless on(job) (tg_policy_mode{mode=~"Semi-auto|Full-auto"} == 1)
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Actuation possible on {{ $labels.job }} while the declared mode does not permit it"
+          description: >-
+            tg_may_actuate == 1 but tg_policy_mode reports no actuating mode (Semi-auto/Full-auto) for
+            this job — or reports nothing at all, which is equally alertable because the mode is then
+            unreadable. Either the chokepoint and the persisted mode disagree, or the mode series is
+            missing. HALT if unexpected: POST /halt on the worker admin surface disables the gate; it is
+            one-way and cannot re-enable.
+
+      # CRITICAL: the armed mutation breaker tripped open (gauge 2) — an auto-halt fired on a deviation/chain-gap.
+      - alert: MutationBreakerOpen
+        expr: circuit_breaker_state{name="mutation"} == 2
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Mutation breaker OPEN on {{ $labels.job }}"
+          description: "circuit_breaker_state{name=\"mutation\"} == 2 — the armed breaker tripped and disabled the gate. Investigate the deviation before any re-enable (re-enabling is owner-gated)."
+
+      # WARNING: any post-execution deviation observed by the mutation breaker. While the mode withholds actuation: stays flat.
+      - alert: MutationDeviationObserved
+        expr: increase(deviation_count[5m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Post-execution deviation(s) observed on {{ $labels.job }}"
+          description: "deviation_count increased over 5m — the mechanical verifier caught a post-state deviation. While the mode withholds actuation this must stay flat at zero."
+
+      # WARNING: a scrape target is unreachable — the safety monitor is blind to it.
+      - alert: MetricsTargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Metrics target {{ $labels.job }} is DOWN"
+          description: "Prometheus cannot scrape {{ $labels.instance }} — the safety monitor cannot see its actuation-posture/breaker gauges."
+
+  # Model-gateway health (spec/012 REQ-1120): the proactive surface for the tg_model_* observability family.
+  # A batch/governance caller (the offline admission gate, the judge cron, the skill generator, the calibrator)
+  # degrades a failed model call SILENTLY into a conservative outcome, so these rules announce a systemic model
+  # problem that would otherwise only be visible to someone reading /metrics — the exact blind spot the family
+  # was built to close. Observe-only signals; they never gate.
+  - name: territory-grounder-model-gateway
+    rules:
+      # WARNING: a large fraction of model-gateway completions are failing over 15m (timeout | rate_limit |
+      # provider_error | transport | auth | bad_request). Floored at >=5 calls so a single failure on a quiet
+      # worker does not fire. "empty" (a reasoning model that spent its budget thinking) is NOT counted a failure.
+      - alert: ModelCallFailuresElevated
+        expr: |
+          (
+            sum(increase(tg_model_calls_total{outcome!~"ok|empty"}[15m]))
+            / clamp_min(sum(increase(tg_model_calls_total[15m])), 1) > 0.3
+          )
+          and (sum(increase(tg_model_calls_total[15m])) >= 5)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated model-gateway call failures (>30% non-ok over 15m)"
+          description: "More than 30% of model-gateway completions returned a non-ok/empty outcome over 15m. Break it down with tg_model_calls_total{outcome=...} (timeout | rate_limit | provider_error | transport | auth | bad_request) and tg_model_call_seconds_total{model=...} for per-tier latency. A batch path (offline admission gate, judge cron, generator, calibrator) may be silently degrading into conservative outcomes; check the LiteLLM provider ladder."
+
+      # WARNING: model-call TIMEOUTS are recurring. Post-MR the offline gate runs on the fast tier, so a
+      # sustained timeout stream means a provider is slow/overloaded or a caller's deadline is too tight —
+      # the exact failure that once made the flywheel admit nothing ("context deadline exceeded").
+      - alert: ModelCallTimeouts
+        expr: sum(increase(tg_model_calls_total{outcome="timeout"}[15m])) >= 3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Recurring model-gateway timeouts (>=3 over 15m)"
+          description: "model-gateway calls are hitting the client/context deadline (tg_model_calls_total{outcome=\"timeout\"}). Check tg_model_call_seconds_total{model=...} — a reasoning tier (e.g. kimi-k3 ~50s) on a large prompt, or an overloaded provider, is exceeding the deadline. A batch caller times out and fails closed."
+
+      # ---------------------------------------------------------------------------------------------------
+      # CONFIDENCE CALIBRATION (spec/020 REQ-2022, REQ-2024). The agent emits a 0..1 confidence with every
+      # proposal; the calibrator joins it to the LLM-free verified outcome and scores the curve.
+      #
+      # ★ READ THE `outcome` LABEL BEFORE ACTING ON ANY OF THESE. Every rule below is scoped to
+      # outcome="blast_radius_exact", which means the prediction verified with NO over- and NO
+      # under-prediction (fp=0 AND fn=0). That is a STRICTER and DIFFERENT claim from "the diagnosis was
+      # correct". Measured 2026-07-27 over the same population: Brier 0.4633 against blast-radius exactness
+      # (N=64) versus Brier 0.0555 against DIAGNOSIS CORRECTNESS (N=619), where the agent is in fact slightly
+      # UNDER-confident above 0.7. So a firing rule here does not license "the agent is overconfident" —
+      # blast-radius precision is separately near chance, and a bad score against a near-unpredictable target
+      # indicts the target. These fired first on 2026-07-27 and that is exactly how they were misread, by the
+      # author of the alert, within the hour.
+      #
+      # Every rule REQUIRES tg_confidence_samples > 0. Without that guard a fresh deployment — where the gauges
+      # are legitimately absent or zero — would either fire spuriously or, worse, read as perfectly calibrated.
+      - alert: ConfidenceWorseThanACoin
+        expr: tg_confidence_brier{outcome="blast_radius_exact"} > 0.25 and tg_confidence_samples{outcome="blast_radius_exact"} > 0
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Stated confidence scores worse than a coin against BLAST-RADIUS EXACTNESS (Brier > 0.25)"
+          description: "tg_confidence_brier{outcome=blast_radius_exact} exceeds 0.25, the Brier score of ALWAYS PREDICTING 0.5. Note 0.25 is the COIN reference, not the no-skill reference — read tg_confidence_skill (measured against always stating tg_confidence_base_rate) for the sharper statement. And note WHAT is being scored: exact blast-radius (fp=0 AND fn=0), not diagnosis correctness; against diagnosis the same confidences scored Brier 0.0555 over 619 samples. Check the distribution too: a near-constant 0.85-0.95 means the model is expressing certainty rather than measuring it. OBSERVE-ONLY: the policy min_confidence clamp is OFF and this alert does not change that. It exists so the clamp stays off DELIBERATELY rather than by neglect."
+
+      - alert: ConfidenceMiscalibrated
+        expr: tg_confidence_ece{outcome="blast_radius_exact"} > 0.20 and tg_confidence_samples{outcome="blast_radius_exact"} > 0
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Confidence is badly calibrated (ECE > 0.20)"
+          description: "tg_confidence_ece{outcome=blast_radius_exact} is the mean gap between stated confidence and the observed rate of EXACT blast-radius prediction; above 0.20 the number is off by more than 20 percentage points on average. Scored against diagnosis correctness instead, the same population gives ECE 0.1354 with the agent UNDER-confident above 0.7 — so confirm the outcome variable before concluding the agent is overconfident. Compare tg_confidence_mce (the WORST bin) — an acceptable average can still hide a bucket where the agent was most confident and most wrong. Do NOT enable the min_confidence clamp while this fires."
+
+      # The SHARPEST of the calibration alerts, and the one to read first. Brier alone invites comparison
+      # against 0.25 — but 0.25 is what always-guessing-0.5 scores, which is the COIN reference, not the
+      # no-skill reference. The no-skill reference is the BASE RATE: a forecaster that ignores every input
+      # and always states the observed frequency. Measured live: base rate 0.2656, so that constant scores
+      # 0.1951 while TG's stated confidence scored 0.4633 — a skill of -1.375, i.e. the stated confidence
+      # carried LESS information than looking at nothing.
+      # WITHHELD when undefined (degenerate base rate), so this rule cannot fire on a meaningless ratio.
+      - alert: ConfidenceHasNoSkill
+        expr: tg_confidence_skill{outcome="blast_radius_exact"} < 0 and tg_confidence_samples{outcome="blast_radius_exact"} > 0
+        for: 6h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Stated confidence carries LESS information than a constant"
+          description: "tg_confidence_skill has been below 0 for 6h: the Brier Skill Score against always stating the base rate is negative, so the agent's stated confidence is worse than a forecaster that ignores every input. Read tg_confidence_base_rate beside it — that is the constant being beaten. NOTE what the outcome variable IS before concluding the agent is merely overconfident: 'clean' means the blast-radius prediction verified with NO over- and NO under-prediction (fp=0 AND fn=0), which is a stricter and different claim than 'the diagnosis was correct'. A negative skill against a near-unpredictable target may indict the target, not the forecaster."
+      # ABSENT is not ZERO, and the distinction is the whole point. `tg_confidence_samples == 0` says the
+      # calibrator RAN and found no evidence. If the goroutine never started, the interval was misparsed, the
+      # DB pool was nil, or the pass panicked, the gauge is not 0 — it does not exist, and a `== 0` rule is
+      # silent forever. That silence is indistinguishable from health, which is the failure mode this whole
+      # family of alerts exists to prevent (REQ-2022).
+      # Deliberately separate from ConfidenceCalibratorUnfed: same symptom for a reader, different remedy.
+      # Unfed => go look at whether triage is persisting confidence. Silent => go look at the worker.
+      - alert: ConfidenceCalibratorSilent
+        expr: absent(tg_confidence_samples)
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "The confidence calibrator is not reporting at all"
+          description: "tg_confidence_samples has been ABSENT for 1h — not zero, absent. The calibrator publishes one pass at worker start and then every TG_CALIBRATION_INTERVAL, so a healthy worker always has this gauge. Absence means the pass is not running: check TG_CALIBRATION_INTERVAL parses, the DSN is set (the calibrator stays dark without one), and the worker is up. NOTE this also fires if the worker itself is down, which its own alert covers; treat that as the primary."
+      - alert: ConfidenceCalibratorUnfed
+        expr: tg_confidence_samples == 0
+        for: 24h
+        labels:
+          severity: info
+        annotations:
+          summary: "The confidence calibrator is running but has no evidence"
+          description: "tg_confidence_samples has been 0 for 24h: the calibrator is alive but no paired confidence x verified-outcome rows exist. That is an honest 'no evidence yet', NOT a clean bill of health — the three score gauges are deliberately withheld at N=0 precisely so an unmeasured system cannot look like a flawless one. Check that triage sessions are persisting a confidence and that the falsify writeback is producing verified outcomes."
+
+      # TG-250: a seam that is BOUND, RUNNING, and producing NOTHING.
+      #
+      # Distinct from tg_wiring_seam_dark (never bound at boot) — this is the larger half of the class, and
+      # the half the boot-time manifest is blind to. Measured against the nine defects fixed 2026-08-01,
+      # six were bound AND running.
+      #
+      # These gauges did not exist in production until !994: they reached Prometheus only through the
+      # observability exporter loop, gated on TG_OBSERVABILITY_EXPORT_INTERVAL, which was empty. The
+      # detector was in exactly the state it exists to detect, and was already reporting vote.inbound
+      # starved — 10 events offered, 0 votes delivered — with nothing able to alert on it.
+      - alert: WiringSeamStarved
+        expr: tg_wiring_seam_starved == 1
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "seam {{ $labels.seam }} is wired and running but has produced nothing"
+          description: >-
+            Work was offered to this seam and none came out. Read tg_wiring_seam_offered_total against
+            tg_wiring_seam_produced_total for the same seam: a gap is the filter doing its job, a total gap
+            is starvation. `for: 30m` matches TG_WIRING_YIELD_INTERVAL's default re-report cadence, so a
+            single quiet interval does not page.
+
+      # UNOBSERVED IS DELIBERATELY NOT AN ALERT.
+      #
+      # tg_wiring_seam_yield_unobserved IS still published, and it is a real finding: a seam nothing calls
+      # Observe for could be producing nothing and no report would know. But it is a COVERAGE BACKLOG, not
+      # an incident, and it must not page.
+      #
+      # It shipped as an alert (info, for: 24h) in !994 and went PENDING on 22 series within minutes. That
+      # is not a bad threshold, it is the design working: the register's vacuity floor reports every seam
+      # as unobserved at boot, so after any restart every uninstrumented seam queues up and 24h later the
+      # estate emits ~22 notifications that all say "still on the backlog".
+      #
+      # TG-250's own reasoning applies to its detector: alarming on every gap "trains an operator to
+      # ignore the register", and a register that cries wolf "gets muted, and then it cannot report real
+      # starvation either". Twenty-two backlog notifications would take WiringSeamStarved down with them,
+      # and starvation is the signal actually worth having.
+      #
+      # Query the gauge for the backlog; alert only on starvation.
+
+      # TG-336: TG'S OWN INPUT. The estate went deaf for five days and nothing fired.
+      #
+      # Measured 2026-08-05: ingest_alert 564 rows/day (07-30) -> 6 (08-01) -> 0 (08-05), with
+      # session_triage following it to zero. Workers healthy, pipelines green, docker ps clean. TG-250
+      # instrumented the internal seams and left the front door unwatched, so the one signal that mattered
+      # did not exist.
+      #
+      # Every rule below is a PAIR, never a bare age: a source that alerts weekly is not broken, and a
+      # source that delivered 500 alerts this week and nothing today is the estate going deaf. The
+      # denominator is what separates those, and without it this family would page on quiet estates and be
+      # muted within a week.
+      - alert: AlertSourceWentSilent
+        # AGGREGATED, because intake liveness is a FLEET fact, not a per-worker one. Both workers compute
+        # it from the same ingest_alert table, so an un-aggregated rule fires once per worker: measured
+        # 2026-08-05, AlertSourceWentSilent x8 for four silent sources and AlertIntakeStopped x2. Doubling
+        # every notification is how a correct alert becomes one people filter out.
+        #
+        # TG-393: gated on the source HAVING undelivered alerts (tg_ingest_upstream_available, the TG-344
+        # upstream probe). Silence from a source whose upstream is EMPTY is the estate being quiet, not the
+        # feed breaking. Measured 2026-08-08: both feeds silent 18h with tg_ingest_upstream_available=0 and
+        # tg_ingest_upstream_readable=1, and the un-gated rule fired on a healthy estate — the exact
+        # "critical that fires on calm" this file warns about elsewhere. Only "reachable AND has alerts it
+        # did not deliver" is a broken feed. Source UNREACHABLE is a different fault, carried by
+        # UpstreamProbeUnreadable, so the `>0` gate correctly leaves it to that rule.
+        expr: >-
+          max by(source_id) (tg_ingest_source_last_seen_seconds) > 21600
+          and on(source_id) max by(source_id) (tg_ingest_source_recent_total) > 0
+          and on(source_id) max by(source_id) (tg_ingest_upstream_available) > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "alert source {{ $labels.source_id }} is REACHABLE with active alerts but has stopped delivering"
+          description: >-
+            This source is reachable and its upstream currently HAS active alerts, yet none has reached TG
+            for over 6h though it delivered within the baseline window — a broken delivery PATH, not a quiet
+            estate. TG cannot triage what it never receives. Check the source's transport and TG's own poll
+            config: pve-liveness died on 2026-07-31 because TG_PROXMOX_BASE_URL / TG_PROXMOX_TOKEN_REF were
+            never set, and announced it in one boot log line. (A reachable source with an empty upstream is
+            silent by this rule — that is the estate being calm; an unreachable source is UpstreamProbeUnreadable.)
+
+      # TG-371: refusals climbing — a source is SHOUTING and TG is turning it away. This is the OPPOSITE
+      # observable to AlertSourceWentSilent (nothing arriving): here the payload IS arriving and being
+      # refused, and the two call for opposite operator actions — fix the sender's credential/payload vs.
+      # investigate a dead feed — so they must be separable alerts. reason=auth is a wrong/absent bearer (the
+      # most likely silent-refusal cause, TG-371 item 4, counted at the auth layer); malformed is a payload
+      # that stopped matching the source's grammar; unknown_source is an unregistered/disabled feed.
+      # increase() because tg_ingest_refused_total is a COUNTER — a level check would read a counter reset as
+      # a drop (the TG-336 mistake). The >3/15m threshold + 10m `for` keeps a single stray bad request from
+      # paging while a source that is genuinely, repeatedly refused does. A 429 from the reject-brake is NOT
+      # in this series (it is deliberately uncounted), so this reflects real turn-aways, not brake back-pressure.
+      - alert: AlertSourceRejected
+        expr: >-
+          sum by(source_type, reason) (increase(tg_ingest_refused_total[15m])) > 3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ingest source {{ $labels.source_type }} is being REFUSED (reason: {{ $labels.reason }})"
+          description: >-
+            TG is turning away this source's deliveries — it is trying and failing, which
+            tg_ingest_source_last_seen_seconds cannot tell apart from a genuinely quiet source. Fix the SENDER
+            (reason=auth → its bearer/token; malformed → its payload shape; unknown_source → it is not a
+            registered/enabled ingest capability) rather than investigating a dead feed.
+
+      # THE ESTATE-DEAF RULE. A per-source alert cannot see every source stopping at once, which is what
+      # actually happened — four sources degraded over four days until nothing arrived at all.
+      - alert: AlertIntakeStopped
+        # Same aggregation, same reason: one estate, one answer to "is anything arriving".
+        #
+        # TG-393: gated on max(tg_ingest_upstream_available) > 0 — SOME source's upstream HAS active alerts
+        # it has not delivered. Without it this fired CRITICAL whenever the whole estate was merely calm
+        # (measured 2026-08-08: both upstreams reachable, 0 active alerts, 18h silence — and this paged
+        # critical on health). A critical that fires on a quiet estate is worse than no alert: the one time
+        # intake genuinely dies it looks identical to every calm night and has already been muted.
+        expr: >-
+          max(tg_ingest_last_seen_seconds) > 21600
+          and max(tg_ingest_recent_total) > 0
+          and max(tg_ingest_upstream_available) > 0
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          summary: "NO alerts reach TG from ANY source in over 6h WHILE a source has undelivered alerts"
+          description: >-
+            tg_ingest_last_seen_seconds exceeds 6h, the baseline window is non-empty, AND at least one
+            source's upstream currently HAS active alerts it has not delivered (tg_ingest_upstream_available
+            > 0): TG is deaf while there is genuinely something to hear. Everything downstream — triage,
+            prediction, actuation — is idle by starvation, and every health surface reads green because the
+            components are fine; they have nothing to work on. (If every reachable upstream is empty, the
+            estate is calm and this stays silent — that is not an outage.)
+
+      # ABSENT IS NOT ZERO, applied to the watcher itself. If the intake read fails or the table is
+      # unreadable, every per-source series above disappears and both rules go quiet — silence that reads
+      # exactly like health. This gauge is always emitted, so that state is itself alertable.
+      - alert: IngestFreshnessBlind
+        # max() rather than a bare comparison so ONE worker being unable to read the table does not fire
+        # while the other reads it fine — but absent() is kept, because every worker losing the series is
+        # exactly the blind state this rule exists to catch.
+        expr: max(tg_ingest_sources_known) == 0 or absent(tg_ingest_sources_known)
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "TG cannot see any alert sources at all"
+          description: >-
+            tg_ingest_sources_known is 0 or absent — the intake table is empty or unreadable, so the two
+            rules above are asserting nothing. This is the vacuity floor for the dead-man: a watcher that
+            has stopped watching must not be indistinguishable from an estate that is healthy.
+
+      # TG-291: a source this deployment DECLARES that has never delivered anything at all.
+      #
+      # Distinct from AlertSourceWentSilent, which needs a non-zero baseline to fire. A source with zero
+      # rows has no row to go stale, so the freshness pair is structurally blind to it — CrowdSec is
+      # advertised in the boot log and has never appeared in ingest_alert in the table's whole history.
+      #
+      # 24h before firing: a genuinely new source needs room to deliver its first alert without paging.
+      - alert: DeclaredAlertSourceNeverDelivered
+        expr: max by(source_type) (tg_ingest_source_never_delivered) == 1
+        for: 24h
+        labels:
+          severity: warning
+        annotations:
+          summary: "declared alert source type {{ $labels.source_type }} has NEVER delivered"
+          description: >-
+            This deployment configures this source and enables it, and not one alert has ever arrived from
+            it. That is a wiring or credential problem at the source end, not a quiet estate — a quiet
+            source has old rows, this one has none. Labelled by source_type (the registry's unit), not the
+            per-site source_id: one declared type can legitimately produce several observed ids, and
+            comparing the two marks every multi-site source as dead.
+
+      # ---- THE HUMAN GATE, WATCHED (TG-173, OWASP Agentic T10 overwhelming-HITL) ----
+      #
+      # The rate governor answers load by clamping auto -> APPROVE: under pressure it routes MORE decisions
+      # to the operator, exactly when the operator can least keep up. Nothing measured the result until
+      # tg_poll_queue_* existed, so a flood of the approval queue and a quiet estate published identically.
+
+      - alert: ApprovalQueueFloodedByRepetition
+        # The PAIR, not the depth. 60 waiting polls across 60 distinct proposals is a real incident and the
+        # queue is doing its job; 60 across 3 is one fault fanning out — and it is also what a manufactured
+        # flood looks like, because volume is far easier to manufacture than variety. Reviewing those one at
+        # a time burns the only reviewer and trains them to click approve.
+        expr: tg_poll_queue_largest_shape >= 10
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $value }} near-identical proposals are waiting for one human decision"
+          description: >-
+            One review would settle {{ $value }} of the open polls. Collapse them, or fix the fault that is
+            fanning out. If nothing in the estate explains the repetition, treat it as a manufactured flood:
+            the point of drowning the queue is to hide one real proposal among many trivial ones.
+
+      - alert: ApprovalQueueOldestPollAging
+        # SHALLOW-and-old is a different failure from DEEP-and-new, which is why this is written on the age
+        # and not on the depth. A single poll open for four hours is an operator who has stopped voting, or
+        # a poll whose workflow died and can never be resolved (see PendingStore.ReapAbandoned).
+        expr: tg_poll_queue_oldest_seconds > 14400
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "a poll has been waiting {{ $value | humanizeDuration }} for a human"
+          description: >-
+            The action behind it is blocked for as long as this stays open. Either nobody is voting, or the
+            workflow that opened it is gone and no vote can ever reach it.
+
+      - alert: ApprovalQueueUnmeasured
+        # THE VACUITY FLOOR AS A RULE. Every alert above goes quiet when the series stops being published,
+        # and quiet reads as healthy — which is the exact failure this family exists to prevent. The depth
+        # gauge is emitted at 0 for an empty queue, so its ABSENCE means the job is not running (no database
+        # pool, or the worker is gone), never that nobody is waiting.
+        expr: absent(tg_poll_queue_open)
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "the human approval queue is not being measured"
+          description: >-
+            tg_poll_queue_open is emitted at zero for an empty queue, so an absent series is the watcher
+            being gone rather than the queue being empty. Every other approval-queue rule is silent while
+            this is firing.
+
+      # ---- THE EGRESS POSTURE (TG-324 item 1) ----
+      #
+      # TG-160 built the egress meter; TG-324 item 1 flipped it to enforce. Verified live 2026-08-07:
+      # tg_egress_enforcing = 1 on BOTH planes, 0 refusals and 0 off-allowlist destinations across 28,294
+      # metered requests (reset-safe increase() over the retained window, whose true extent is ~2.2 days —
+      # the [7d] selector reads far less than its name suggests).
+      #
+      # NOTHING WATCHED ANY OF THAT. A security control verified once and never again is a control that
+      # drifts silently: the posture is an env var, the allowlist is config, and both change without a
+      # commit. These three rules cover the three ways this stops protecting anything, and the third
+      # covers the way it protects TOO MUCH.
+      #
+      # `tg_egress_enforcing` is always emitted (0 or 1) by a running worker, so `== 0` is the reverted
+      # posture and an ABSENT series is the worker being gone — which the process-level alerts own. That
+      # split is deliberate: this rule must not double as a liveness check, or a restart would page as a
+      # security regression.
+
+      - alert: EgressEnforcementOff
+        expr: tg_egress_enforcing == 0
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "egress metering is NOT enforcing on {{ $labels.job }} — destinations are recorded, not refused"
+          description: >-
+            TG_EGRESS_MODE has fallen back to meter (or was never set) on this plane. In meter mode an
+            off-allowlist destination is counted and then CONTACTED: the control reports on exfiltration
+            rather than preventing it, and tg_egress_offallowlist_requests_total staying flat then proves
+            only that nothing has tried yet. Compare the planes — worker and worker-actuate are configured
+            separately and one can revert alone.
+
+      # THE NUMERATOR FLOOR (TG-415). EgressAllowlistEmpty above covers a zero DENOMINATOR — the meter
+      # comparing against nothing. Nothing covered a zero NUMERATOR: a meter that is enforcing, has a
+      # healthy rule count, and has never actually SEEN a request.
+      #
+      # That is not hypothetical. Measured on the grounder 2026-08-07, in the same second its boot log
+      # resolved four bao: references:
+      #
+      #     tg_egress_enforcing{component="grounder"}        1
+      #     tg_egress_allowlist_rules{component="grounder"}  15
+      #     tg_egress_requests_total{component="grounder"}   0
+      #
+      # vault.New builds its own http.Transport to carry the CA/mTLS config, so OpenBao traffic never
+      # touched http.DefaultTransport where the meter installs. Every dashboard read this as a clean
+      # estate: enforcing, non-empty allowlist, zero off-allowlist, zero refusals. "The meter is ON" and
+      # "the meter is SEEING anything" are different claims, and only the first was ever checked.
+      #
+      # The window is long on purpose. A process legitimately reports 0 for a while after boot, and a
+      # plane can be genuinely idle, so this must not page on a restart — it fires when a process has been
+      # enforcing for hours having metered nothing at all, which means its traffic is going around it.
+      - alert: EgressMeterHasSeenNoTrafficAtAll
+        expr: tg_egress_enforcing == 1 and tg_egress_allowlist_rules > 0 and tg_egress_requests_total == 0
+        for: 6h
+        labels: { severity: warning }
+        annotations:
+          summary: "egress meter on {{ $labels.job }} is enforcing but has metered ZERO requests — traffic is bypassing it"
+          description: >-
+            This plane reports an enforcing meter and a non-empty allowlist while its request counter has
+            never moved. A process that makes no outbound HTTP at all is possible; a process that holds a
+            tg-egress grant and makes none is not, because the grant is only issued against an enumerated
+            destination (deploy/egress_parity_test.go). The likely cause is a client that installs its OWN
+            http.Transport and therefore never reaches http.DefaultTransport, which is where the meter is
+            installed — TG-415 found exactly that for every OpenBao call. Check the boot log for
+            "EGRESS[...]: outbound meter installed" and compare against what the process demonstrably
+            dialled. Do NOT read a flat tg_egress_offallowlist_requests_total as reassurance here: with a
+            zero numerator it is measuring nothing.
+
+      - alert: EgressAllowlistEmpty
+        # THE VACUOUS-COMPARISON GUARD. A zero rule count makes every destination off-allowlist under
+        # enforce (total outage) or every destination silently fine under meter — and in BOTH modes a flat
+        # off-allowlist series looks identical to a healthy one. This is the precondition TG-324 names
+        # explicitly: "a zero there means the meter is comparing against an empty declaration, so a flat
+        # off-allowlist series proves nothing."
+        expr: tg_egress_allowlist_rules == 0
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "the egress allowlist on {{ $labels.job }} is EMPTY — the meter is comparing against nothing"
+          description: >-
+            Measured 2026-08-07 this reads 33 on worker and 10 on worker-actuate. At zero the comparison
+            is vacuous: no reading from tg_egress_offallowlist_requests_total means anything, in either
+            mode. Check the module endpoint config and TG_EGRESS_ALLOW.
+
+      - alert: EgressRefusingTraffic
+        # THE REVERT SIGNAL. TG-324 states the risk of item 1 in one line — "a wrong allowlist under
+        # enforcement takes production off the network" — and the standing rule for enforce-flips is to
+        # revert immediately on degradation. This is the only thing that would say so. It fires on the
+        # FIRST refusal rather than on a rate, because one refused destination is already a capability TG
+        # has silently lost.
+        expr: increase(tg_egress_refused_total[15m]) > 0
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "egress enforcement REFUSED {{ $value | printf \"%.0f\" }} request(s) on {{ $labels.job }}"
+          description: >-
+            A destination TG tried to reach is not on the allowlist and enforcement blocked it. Either an
+            exfiltration attempt was stopped (the control working) or a legitimate destination was never
+            declared and TG has lost that capability silently — the failure surfaces inside whatever
+            subsystem made the call, not here. Identify it from the worker log, then either declare it via
+            the module endpoint config / TG_EGRESS_ALLOW or leave it refused deliberately.
+
+      # ---- THE MUTATION GATE'S INPUT (TG-343) ----
+      #
+      # credential_plane.go: "a mutation gate reasoning over an empty graph is a gate that cannot refuse."
+      # The interceptor's host-match and blast-radius checks are evaluated against this graph, and nothing
+      # published its size until now — so "no host matched, refuse" and "there were no hosts to match"
+      # were the same observable state.
+
+      - alert: EstateGraphCollapsed
+        # TG-395 channel (b). A PARTIAL collapse had no expressible rule: EstateGraphEmpty catches only
+        # the total case (== 0), and nothing spoke about a graph that lost most of itself and kept going.
+        # On 2026-08-06 a dead hypervisor correctly reported no guests, 52 `runs_on` edges vanished, and
+        # the two warnings an operator did get that morning were 17-edge wobbles at the other site.
+        #
+        # THE THRESHOLD IS MEASURED, NOT GUESSED. Over 27.5h of live series (331 samples) the largest
+        # step-over-step relative DROPS were:
+        #
+        #     79.5%   13.3%   0.9%   0.9%
+        #
+        # Ordinary churn is <=0.9%; the two real events are 13.3% and 79.5%. 10% sits an order of
+        # magnitude above the noise and an order below the smaller real event, so it separates them
+        # without a judgement call. Verified against live Prometheus before merging: SILENT on the
+        # healthy estate (0 series), and 2 series carry a 1h peak so it is fireable rather than decorative.
+        #
+        # Compared against its own recent PEAK rather than an absolute floor, because the right size of
+        # this graph is deployment-shaped and changes as the estate grows. A legitimate decommission
+        # fires this for an hour and then clears on its own — reporting the fact is the intent, exactly
+        # as the refresh log line does.
+        expr: tg_estate_edges < 0.9 * max_over_time(tg_estate_edges[1h])
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "the estate graph on {{ $labels.job }} lost >10% of its edges ({{ $value }} now)"
+          description: >-
+            The mutation gate's host-match and blast-radius checks evaluate against this graph, so a
+            collapse silently narrows what TG can refuse — a target whose dependencies vanished looks
+            like a target that has none. Two causes, both worth knowing and distinguishable from the
+            worker log: a source that failed (the drop may be missing data) or every source succeeding
+            (a real topology change — a decommission, or a node that died and correctly reports no
+            guests). Check `estate refresh: WARNING` on the worker, which now names which of the two
+            happened. Clears by itself an hour after the graph stabilises at its new size.
+
+      - alert: EstateGraphEmpty
+        # Guarded on the worker being otherwise configured, so this cannot fire during a cold start before
+        # the first seed completes. An empty graph on a running, configured worker is the real condition.
+        expr: tg_estate_edges == 0 and tg_egress_allowlist_rules > 0
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "the estate graph is EMPTY on {{ $labels.instance }} — the mutation gate cannot refuse"
+          description: >-
+            Host-match and blast-radius evaluate against this graph. Empty, they find no impact for every
+            target, which is indistinguishable from a target that genuinely has none. Check
+            tg_estate_sources_failed: non-zero is a LOUD failure (a denied credential, already in the log);
+            ZERO alongside this is the silent one — a source that resolved and returned nothing, which is
+            what a mis-scoped read-only token does.
+            Fail-closed direction, so this is a capability outage rather than an unsafe state.
+
+      - alert: SpendGuardUnarmed
+        # TG spends real money on every triage — 3.18M model tokens on this deployment as of 2026-08-06 —
+        # and core/cost/ is a complete spend guard that is configured entirely with zeros. Until now that
+        # posture published NOTHING: every cost gauge sat behind `if a.cost != nil`, so `tg_cost_breaker_state`
+        # returned zero series and an operator's dashboard showed no cost panel at all, which renders exactly
+        # like a healthy one.
+        #
+        # INFO, not warning, and deliberately so. An unarmed spend guard is a decision the owner is entitled
+        # to make — this rule exists so it is a VISIBLE decision rather than an invisible default. It fires
+        # continuously while unarmed, which is correct: the condition is not an incident, it is a standing
+        # posture, and a posture nobody can see is how this one survived.
+        expr: tg_cost_enforcing == 0
+        for: 30m
+        labels: { severity: info }
+        annotations:
+          summary: "no spend ceiling is armed — the cost breaker cannot trip"
+          description: >-
+            tg_cost_enforcing is 0, so no positive TG_COST_DAILY_BUDGET_USD or TG_COST_SESSION_CEILING_USD is
+            set and the cost breaker has nothing to open it. Read tg_cost_breaker_state=0 accordingly: it
+            means "nothing can trip this", not "within budget". Check tg_cost_metering to tell a completely
+            unconfigured worker (0 — the model gateway is not even wrapped) from a metering-only one (1).
+            Arming a ceiling force-Shadows the mode when it is crossed, so the number is an owner decision.
+
+      - alert: SpendGuardUnmeasured
+        # The vacuity floor for the whole cost family. tg_cost_metering is emitted at 0 for an unconfigured
+        # worker, so an ABSENT series means the exporter is gone — never that cost tracking is off.
+        # SpendGuardUnarmed is silent while this fires.
+        expr: absent(tg_cost_metering)
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "the spend guard's posture is not being published"
+          description: >-
+            tg_cost_metering is absent, not zero. Every other cost series is conditional on configuration, so
+            this is the one that proves the exporter is alive. Its disappearance means the worker's /metrics
+            is not being scraped or the admin surface stopped emitting — not that spending stopped.
+
+      - alert: EstateGraphUnmeasured
+        # The vacuity floor as a rule. tg_estate_edges is emitted at 0 for an empty graph, so an ABSENT
+        # series means the exporter is gone — never that the estate is empty. EstateGraphEmpty is silent
+        # while this fires.
+        expr: absent(tg_estate_edges)
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "the estate graph size is not being published"
+          description: >-
+            tg_estate_edges is always emitted, including at zero, so its absence is the worker or its
+            exporter being gone. EstateGraphEmpty cannot fire while this is true.
+
+      # ---- THE UPSTREAM DENOMINATOR (TG-344) ----
+      #
+      # Every other ingest gauge counts what ARRIVED. These count what was AVAILABLE, so the rule below
+      # can finally be written: on 2026-08-06 the intake read zero for five days and only a hand-run
+      # `GET /api/v0/alerts?state=1` proved TG was behaving correctly rather than failing silently.
+
+      - alert: IngestConnectorDeafToItsUpstream
+        # The one honest connector-broken signal. Both halves are required: the upstream must be READABLE
+        # (or the count means nothing) AND holding alerts AND nothing arriving. A quiet estate has
+        # available == 0 and never fires this.
+        #
+        # THE THIRD LEG WAS increase(tg_ingest_source_recent_total[1h]) == 0 AND COULD NOT BE TRUE (2026-08-06).
+        # tg_ingest_source_recent_total is a GAUGE — "alerts this source delivered in the baseline window",
+        # its own HELP text — and increase() is defined for counters. A gauge that drifts DOWN as old alerts
+        # age out of the window reads as a series of counter resets, so increase() extrapolates a large
+        # positive number instead of 0. Measured on the live series at the moment TG had received nothing for
+        # 6.8 hours:
+        #
+        #   increase(tg_ingest_source_recent_total{source_id="librenms-dc1"}[1h]) = 4276.64
+        #   tg_ingest_source_recent_total{source_id="librenms-dc1"}               = 524
+        #
+        # So the leg never held, and THE ONE HONEST CONNECTOR-BROKEN SIGNAL HAS NEVER BEEN ABLE TO FIRE —
+        # while 83 alerts sat unread upstream and both LibreNMS connectors were silent for most of a day.
+        # `== 0` is not the fix either: the gauge is 524, because its window is far wider than an hour.
+        #
+        # AND THE SECOND LEG WAS WRONG FOR A PUSH SOURCE, which is what this deployment runs. `available > 0`
+        # with nothing arriving means "broken" only for a PULL connector. LibreNMS intake here is PUSH —
+        # the worker says so every boot ("alert intake is PUSH — LibreNMS transports POST /v1/ingest/librenms
+        # … active-alert pull OFF") — and a transport fires on a STATE TRANSITION, not continuously. A stable
+        # set of long-firing alerts therefore produces no pushes at all, and that is CORRECT behaviour.
+        #
+        # Measured over 10h on the live series, which is the case that settles it:
+        #
+        #   02:29  0   02:59  80   03:29  85   03:59  83   04:29 … 10:59  83   (flat for 7 hours)
+        #
+        # 83 alerts held upstream, nothing arriving, and the connector perfectly healthy — the estate simply
+        # had no new transitions. A rule keyed on `available > 0` fires continuously through that, which is
+        # the SidecarDown pathology: an always-on critical that teaches an operator to ignore the signal.
+        #
+        # delta() over the gauge is the honest predicate for both intake styles: the upstream set GREW and
+        # nothing arrived. It is also the gauge-appropriate function — see
+        # TestNoAlertAppliesACounterFunctionToAGauge, which forbids increase()/rate() here for the reason
+        # above but deliberately permits delta()/idelta().
+        #
+        # Verified against live Prometheus before this edit, all three expressions:
+        #   increase(...recent_total[1h]) == 0        -> 0 series (could never fire)
+        #   available > 0 + stale last_seen           -> 2 series (would fire on the HEALTHY state above)
+        #   delta(available[1h]) > 0 + stale last_seen -> 0 series (correctly silent)
+        expr: >-
+          (tg_ingest_upstream_readable == 1)
+          and on(source_id) (delta(tg_ingest_upstream_available[1h]) > 0)
+          and on(source_id) (tg_ingest_source_last_seen_seconds > 3600)
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.source_id }} gained alerts upstream in the last hour and TG received none"
+          description: >-
+            The upstream's firing-alert count GREW in the last hour and nothing arrived. This is the
+            connector-broken case, and it is deliberately keyed on the GROWTH rather than the level: a
+            stable set of long-firing alerts produces no pushes from an edge-triggered transport, so a
+            level-based rule would fire continuously through a perfectly healthy estate. A quiet estate
+            (delta == 0) and a stable-but-loud one both stay silent. Check the ingest credential and the
+            push path for this source.
+
+      - alert: UpstreamProbeUnreadable
+        # A probe that cannot read its source publishes readable=0 and NO available count, deliberately.
+        # Without this rule that state is silent, and IngestConnectorDeafToItsUpstream simply never fires
+        # for the source — a gap that looks exactly like health.
+        expr: tg_ingest_upstream_readable == 0
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "cannot read what {{ $labels.source_id }} has upstream"
+          description: >-
+            The upstream count could not be obtained (credential, transport, or the source refused), so
+            there is no denominator for this source and a broken connector on it would be invisible.
+
+      - alert: UpstreamProbeAbsent
+        # The vacuity floor. tg_ingest_upstream_probed is emitted at 0 when nothing is probed, so an
+        # ABSENT series means the job is gone — never that there is nothing to probe.
+        expr: absent(tg_ingest_upstream_probed)
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "the upstream probe is not running"
+          description: >-
+            tg_ingest_upstream_probed is emitted at zero when no source is probed, so its absence is the
+            job being gone. Both rules above are silent while this is firing, and a quiet estate and a
+            broken connector are indistinguishable again.
+
+      # ---- TG'S PRODUCTION BRAIN (TG-231) ----
+      #
+      # Since 2026-07-31 TG runs SINGLE-BRAIN on Opus 5 via the tg-opus-sidecar, deliberately with NO
+      # fallback: an outage fails triage loudly rather than silently swapping brains. Measured 2026-08-06,
+      # Prometheus scraped four targets and none of them was the brain — the most important container in
+      # the estate had zero monitoring.
+
+      # ★ THE PREMISE BEHIND A DECISION, WATCHED (TG-345, splitting TG-302).
+      #
+      # TG-302 declined to seal agent_step_evidence at rest, and the argument is entirely empirical: the live
+      # corpus held 0 redaction markers, 0 PEM blocks, 0 provider keys and 0 assigned-secret shapes, so what
+      # is stored is screened host output with no credential material in it. Re-measured 2026-08-06: still
+      # 0 of 354, on a corpus that had doubled since that decision counted 172.
+      #
+      # That premise is a property of what the estate's hosts PRINT, not of the design. It stops being true
+      # the first time a tool reads a file containing a key — and a decision with a measured premise and no
+      # watcher is a decision that silently expires.
+      #
+      # WARNING, not critical: the table is screened, scrubbed and reaped on a retention floor, so a hit is
+      # a hygiene signal and a prompt to re-open TG-302 — not an incident. The by-shape series says WHERE to
+      # look without anyone querying the database.
+      - alert: EvidenceCorpusHoldsSecretShapedRows
+        expr: tg_evidence_secret_shaped_rows > 0
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "agent_step_evidence now holds {{ $value }} credential-shaped row(s) — TG-302's premise has lapsed"
+          description: >-
+            TG-302 decided NOT to encrypt this table at rest because the corpus measurably contained no
+            credential material. That is no longer true. Read tg_evidence_secret_shaped_rows_by_shape to see
+            which shape matched (redaction_marker / pem_block / provider_key / assigned_value), then re-open
+            TG-302 rather than muting this. A redaction_marker hit is the screen WORKING and still means
+            credential-shaped text reached it.
+
+      # ANY BREAKER, NOT A HAND-WRITTEN LIST (TG-397).
+      #
+      # circuit_breaker_state's label set is OPEN: cmd/worker/admin.go emits one series for the "mutation"
+      # breaker plus one for EVERY ROW in the shared breaker store, so a name enters the metric the moment
+      # anything writes a row (core/governance/judge_liveness.go does exactly that with "judge-death").
+      #
+      # The two rules that existed selected name="mutation" and name=~"model-.*" — a CLOSED selector over
+      # an OPEN producer. Measured live 2026-08-06, five breakers were publishing:
+      #
+      #   mutation  model-primary  model-fast  model-embed-nomic  judge-death
+      #
+      # `judge-death` matched neither rule. If it tripped, nothing fired. This rule has NO name selector,
+      # so it cannot fall behind the producer; the two specific rules stay for their tailored guidance and
+      # will fire alongside it, which is correct — a mutation trip genuinely is both events.
+      - alert: AnyCircuitBreakerOpen
+        expr: circuit_breaker_state == 2
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "circuit breaker {{ $labels.name }} is OPEN on {{ $labels.job }}"
+          description: >-
+            A named breaker has tripped. If it is `mutation` or a `model-*` breaker, the specific rule
+            beside this one carries the runbook. If it is neither, this is the only signal you will get —
+            which is the point: the breaker name set is open (any row in the shared store publishes one)
+            and a hand-written selector silently misses whatever it did not anticipate.
+
+      # THE TWO PLANES MODEL DIFFERENT ESTATES (TG-346).
+      #
+      # EstateGraphEmpty below catches a plane whose graph is ZERO. It does not catch the state that
+      # actually occurred and is still live: measured 2026-08-06 and re-measured today,
+      #
+      #   tg_estate_edges{job="worker"}          392      nodes 369
+      #   tg_estate_edges{job="worker-actuate"}   17      nodes  20
+      #   tg_estate_sources_failed                 0 on BOTH — nothing is erroring
+      #
+      # The actuation plane models 4% of the estate the triage plane models, and no source is failing, so
+      # every existing signal reads healthy. TG-343's gauge found this within minutes of shipping and then
+      # had no rule that could fire on it.
+      #
+      # WHAT IT COSTS, precisely — and it is NOT permissiveness. The site authority
+      # (estate.Graph.SiteOf) excludes a surprise deviation candidate only when it knows BOTH the
+      # candidate's and the target's site; an unknown site is NEVER excluded. So a smaller graph makes the
+      # actuation plane MORE conservative, not laxer: unrelated activity at another site is counted as a
+      # deviation. That is the failure recorded at governance_ledger seq 6555 — a 59-second sensor flap at
+      # the OTHER site scored a deviation, demoted restart-container auto->approve, and discarded ~80
+      # hands-off clean runs.
+      #
+      # Ratio rather than difference: the estate grows, and an absolute edge gap would need re-tuning every
+      # time it does. `max > 0` guards the 0/0 case, and the ABSENT case belongs to EstateGraphUnmeasured.
+      - alert: EstateGraphDivergesBetweenPlanes
+        expr: >-
+          (min(tg_estate_edges) / max(tg_estate_edges)) < 0.5
+          and max(tg_estate_edges) > 0
+        for: 1h
+        labels: { severity: warning }
+        annotations:
+          summary: "the two worker planes model different estates — the smaller has {{ $value | humanizePercentage }} of the larger's edges"
+          description: >-
+            Compare tg_estate_edges by job. Both planes gate on their OWN graph, so the plane with fewer
+            edges resolves fewer sites, excludes fewer coincidental cross-site deviations, and demotes
+            op-classes for activity that had nothing to do with its action. Check which topology sources
+            each plane declares (TG_NETBOX_URL, TG_DISCOVERY_*, TG_LIBRENMS_DEPLOYMENTS, TG_PVE_URL) —
+            and note that adding one to the actuation plane is NOT free: the credential-plane split is
+            enforced on the SECRET REFERENCE, not the env-key name, so a read-triage-classified secret
+            makes that worker refuse to boot.
+
+      # THE HIGH-RISK CATEGORY DRIVER IS UNREACHABLE, NOT QUIET (TG-405).
+      #
+      # safety.HighRiskCategory forces a POLL_PAUSE for {maintenance, security-incident, deployment},
+      # read from env.Labels["category"]. The Alertmanager module passes EVERY label through raw, and this
+      # estate uses that same key for SUBSYSTEMS — measured over all 3,165 ingest_alert rows, 39 carried a
+      # category (mesh-bgp, storage-write-path, iac-hygiene, agentic-platform, ...) and ZERO were in the
+      # high-risk set. The driver has never been able to fire.
+      #
+      # This fires on the COLLISION, not on the absence: a source that sets no category at all is a
+      # recorded, deliberate position (deploy/ingest_category_floor_test.go, TG-241). A source that sets a
+      # category TG does not recognise is a vocabulary mismatch nobody declared.
+      - alert: AlertCategoryVocabularyMismatch
+        expr: tg_ingest_category_unrecognised > 0
+        for: 6h
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $value }} alert(s) carry a category TG's safety path does not recognise"
+          description: >-
+            Read tg_ingest_category_present beside tg_ingest_category_high_risk by source_id. present > 0
+            with high_risk == 0 means the operator is using labels["category"] for one vocabulary while
+            TG reads it as a safety input expecting another — so the poll-forcing driver is UNREACHABLE
+            rather than calm. Note the reverse risk: the day a subsystem is named "maintenance", every
+            alert from it starts force-clamping to POLL_PAUSE for a reason nobody will connect to a
+            dashboard label.
+
+      # The vacuity floor. tg_ingest_category_unrecognised is published on every scrape including at zero,
+      # so an ABSENT series is the register being gone rather than a clean vocabulary.
+      - alert: CategoryCoverageUnwatched
+        expr: absent(tg_ingest_category_unrecognised)
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "nothing is measuring whether the high-risk category driver can be reached"
+          description: >-
+            Without this register, "no alert was high-risk" and "the driver cannot see a high-risk value"
+            are the same quiet zero — which is how the collision went unnoticed across 3,165 alerts.
+
+      # A BUILT LOOP THAT HAS NEVER CLOSED (TG-348).
+      #
+      # Measured 2026-08-06: 369 world-manifest drafts / 0 approved, 10 op-class candidates / 0 ratified,
+      # 460 executions / 0 graduation credits. Each producing half is real and its output makes the
+      # dashboards look healthy; each consuming half has never been exercised, so a defect in it is
+      # undiscovered by construction.
+      #
+      # Deliberately a LONG `for`, and deliberately gated on a non-zero denominator. Zero-against-zero is
+      # an idle loop, not a broken one — flagging that would make this noise on every fresh deployment and
+      # the operator would learn to ignore it before it ever said anything true.
+      - alert: BuiltLoopHasNeverClosed
+        expr: tg_loops_never_closed > 0
+        for: 24h
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $value }} built loop(s) have produced work and closed none of it"
+          description: >-
+            Read tg_loop_generated_total and tg_loop_closed_total by `loop` to see which. This is not a
+            request to go and approve something: it is the statement that the consuming half of that loop
+            has no exercise, so nothing distinguishes "nobody has needed to yet" from "it would fail if
+            anyone tried". Close one end to end — even once — or record on the ticket why the loop is
+            expected to stay open.
+
+      # The vacuity floor. tg_loops_never_closed is published on every scrape including at zero, so an
+      # ABSENT series is the register being gone rather than every loop closing healthily.
+      - alert: LoopClosureRegisterUnwatched
+        expr: absent(tg_loops_never_closed)
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "nothing is measuring whether TG's built loops ever complete"
+          description: >-
+            The loop-closure register publishes at zero on every scrape, so its absence means the job is
+            gone — not that every loop is closing. Without it, a loop whose consuming half is dead reads
+            exactly like one nobody has needed yet.
+
+      # THE POLICY RATE GOVERNOR IS ARMED BUT ENFORCING NOTHING (TG-339).
+      #
+      # This governor spent its whole life dark: WithRateGovernor had exactly one caller and it was a spec
+      # acceptance test, so rateGov was nil in every production worker while
+      # core/policy/templates/conservative.json advertised "rate_limit": 30. It is wired now — and being
+      # wired is not the same as enforcing. If the resolved limit reaches clamp() as <= 0, every call takes
+      # the no-governor branch and the control is decoration.
+      #
+      # A clamp counter alone cannot see that: zero clamps looks identical whether nothing needed clamping
+      # or nothing was ever governed. This rule reads the RATIO instead — traffic is being governed-checked
+      # and NONE of it had a limit in force.
+      - alert: PolicyRateGovernorEnforcingNothing
+        expr: >-
+          increase(tg_policy_rate_ungoverned_total[1h]) > 0
+          and increase(tg_policy_rate_governed_total[1h]) == 0
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "the policy rate governor saw {{ $value }} verdict(s) in an hour and governed none of them"
+          description: >-
+            Every call resolved rate_limit <= 0, so the governor returned the verdict untouched. The
+            template advertises a budget that is not reaching clamp(). This is the exact state TG-339
+            found the control in, and it is invisible in a clamp count — check that the policy params
+            carry rate_limit through to the engine.
+
+      # The vacuity floor. tg_policy_rate_governed_total is absent when there is NO governor at all (no
+      # pool -> no engine), which is a legitimate deployment — so this is deliberately NOT an absent()
+      # page. It watches the case that matters: a governor that exists and has never once been consulted.
+      - alert: PolicyRateGovernorNeverConsulted
+        expr: >-
+          (tg_policy_rate_governed_total + tg_policy_rate_ungoverned_total) == 0
+          and on(job) tg_up == 1
+        for: 6h
+        labels: { severity: warning }
+        annotations:
+          summary: "the policy rate governor has never been consulted on {{ $labels.job }}"
+          description: >-
+            The series exists, so a governor was built and handed to the metrics surface, but neither
+            counter has ever moved. Either no policy verdict has been decided at all, or Refine is not
+            reaching the governor. Read beside the session volume before acting — on a genuinely quiet
+            estate this is honest.
+
+      # THE GOVERNANCE LEDGER, same question, worse consequences (TG-57 item 1).
+      #
+      # The ledger is written with NO redaction screen on the path (core/audit/ledger.go) and its `reason`
+      # column runs to 4,886 characters of model-influenced text. Measured 2026-08-06: 9,417 rows, 0 on
+      # every shape — clean, unscreened, and clean only because of what has happened to be written.
+      #
+      # CRITICAL rather than warning, unlike the evidence corpus above, for one reason: the ledger is
+      # hash-chained and append-only, so a row that leaks CANNOT be redacted afterwards without breaking
+      # the chain. There is no remediation for an existing row — only disclosure. The evidence corpus can
+      # be scrubbed and reaped; this cannot.
+      - alert: GovernanceLedgerHoldsSecretShapedRows
+        expr: tg_ledger_secret_shaped_rows > 0
+        for: 15m
+        labels: { severity: critical }
+        annotations:
+          summary: "governance_ledger now holds {{ $value }} credential-shaped row(s) — and they cannot be redacted"
+          description: >-
+            The governance ledger is append-only and hash-chained, so these rows cannot be removed or
+            redacted without breaking the audit chain. Treat the matched rows as DISCLOSED. Read
+            tg_ledger_secret_shaped_rows_by_shape for the shape (redaction_marker / pem_block /
+            provider_key / assigned_value), then screen the ledger WRITE path — it has never had one, which
+            is the open half of TG-57 item 1.
+
+      # The ledger watcher's own vacuity floor, for the same reason as the evidence one below it.
+      - alert: GovernanceLedgerUnwatched
+        expr: absent(tg_ledger_rows)
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "nothing is counting governance_ledger for credential-shaped text"
+          description: >-
+            tg_ledger_rows is published on every scrape including at zero, so an ABSENT series means the
+            watcher is gone rather than the ledger being clean. Deleting the job would silence
+            GovernanceLedgerHoldsSecretShapedRows and look identical to health.
+
+      # The vacuity floor. tg_evidence_secret_shaped_rows is published at zero on every scrape, so an ABSENT
+      # series is the watcher being gone — not the corpus being clean. Without this, deleting the job would
+      # silence the alert above and look identical to health.
+      - alert: EvidenceCorpusUnwatched
+        expr: absent(tg_evidence_rows)
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "nothing is counting agent_step_evidence — TG-302's premise is unwatched"
+          description: >-
+            tg_evidence_rows is missing. Either the worker lost its database pool (it says so at boot) or the
+            job was removed. While this fires, EvidenceCorpusHoldsSecretShapedRows cannot fire either.
+
+      - alert: SidecarDown
+        # `up` for this job IS the liveness signal — the sidecar exposes /metrics itself, so this needs no
+        # blackbox probe. CRITICAL because there is no fallback by design: TG is brainless, not degraded.
+        expr: up{job="opus-sidecar"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "the Opus sidecar is NOT SCRAPEABLE — TG may have no brain"
+          description: >-
+            `up == 0` means Prometheus could not scrape the target. That is a UNION of three states and
+            this rule cannot tell them apart: the sidecar is down, the scrape PATH is broken, or the
+            scrape config is wrong. Measured 2026-08-06: this fired while the sidecar was serving
+            normally — `http://dc1claude01:8094/metrics` returned 200 from the host and TIMED OUT
+            from inside the Prometheus container, and the completion endpoint on :8095 answered 401
+            (alive, auth required). The old summary asserted "unreachable — TG has no brain" and sent
+            the reader to restart a healthy service.
+            CHECK BOTH before acting - from the host: `curl -s -o /dev/null -w '%{http_code}'
+            http://dc1claude01:8094/metrics`, then the SAME url from inside the Prometheus
+            container. Host 200 + container timeout = a network path fault, not a dead brain.
+            If it really is down: TG runs single-brain with no fallback by owner decision, so triage
+            fails rather than silently swapping models. Revert path is
+            deploy/litellm-config.yaml.bak-preopus + compose up; token re-mint is `claude setup-token`
+            then POST /admin/rotate-token.
+
+      # ★ THE FAILURE THAT WAS INVISIBLE (2026-08-06). The sidecar shed 334 requests in 24 h and NOTHING
+      # reported it: a shed request never becomes a completion, so `sidecar_up` stayed 1 and
+      # `sidecar_completions_total{outcome="error"}` stayed 0. The only trace was a warn! line in the
+      # container log. Meanwhile the eval gate lost half its sessions, the model breaker tripped, and the
+      # judge-death dead-man latched OPEN against a brain that was answering fine.
+      #
+      # Shedding is not automatically a fault — the bound exists because each spawn is ~245 MiB. It IS a
+      # fault when it is sustained, because every shed is a 503 no LiteLLM fallback absorbs and TG's model
+      # breaker counts as a failure. Raise SIDECAR_MAX_INFLIGHT (memory permitting) or
+      # SIDECAR_QUEUE_WAIT_MS (patience must exceed the mean completion, measured 9.0 s).
+      - alert: SidecarShedding
+        expr: increase(sidecar_shed_total[15m]) > 0
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "the Opus sidecar is refusing requests it has no slot for"
+          description: >-
+            Sustained 503 `sidecar at capacity`. Each one reaches TG as a model-call failure and counts
+            toward the tier breaker. Read beside sidecar_inflight and SIDECAR_MAX_INFLIGHT: a shed means
+            no slot came free within SIDECAR_QUEUE_WAIT_MS, so either concurrency is too low for the
+            offered load or the patience is shorter than a completion takes.
+
+      # The vacuity floor for the rule above: sidecar_shed_total only exists from the release that added
+      # it, and an absent counter makes SidecarShedding permanently silent — which is exactly the state
+      # that hid the 334 sheds. `absent()` says so out loud instead.
+      - alert: SidecarSheddingUnmeasured
+        expr: absent(sidecar_shed_total)
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "the sidecar publishes no shed counter, so SidecarShedding cannot fire"
+          description: >-
+            sidecar_shed_total is missing. Either the deployed image predates it, or the scrape is gone
+            (see SidecarUnmonitored). While this fires, load shedding is invisible again.
+
+      - alert: SidecarUnmonitored
+        # The vacuity floor, and the state this ticket was filed in. `up` exists for every configured
+        # target, so an ABSENT series means the scrape job is gone — not that the sidecar is fine.
+        # SidecarDown is silent while this fires.
+        expr: absent(up{job="opus-sidecar"})
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "the Opus sidecar is not being scraped at all"
+          description: >-
+            SidecarDown cannot fire without this series. Absence means the scrape job was removed, which is
+            exactly the state TG-231 was opened on — the estate's most important container, unwatched.
+
+      - alert: ModelBreakerOpen
+        # THE TG-SIDE DEAD-MAN this ticket asks for, built on series that already exist (TG-221). litellm
+        # has no fallback to mask a failing tier, so a tripped per-tier breaker IS "N consecutive triage
+        # LLM calls failed" — surfaced rather than only logged.
+        #
+        # Deliberately excludes name="mutation" and name="judge-death": those are governance breakers with
+        # their own rules and their own meanings, and folding them in here would page the wrong person.
+        expr: circuit_breaker_state{name=~"model-.*"} == 2
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "model tier {{ $labels.name }} has tripped its breaker"
+          description: >-
+            The per-tier bounded-failure guard opened, so calls on this tier are being refused rather than
+            degrading unbounded. With single-brain and no fallback, a tripped primary tier means triage is
+            not running. Read beside SidecarDown: a reachable sidecar with an open breaker is a different
+            fault from an unreachable one.
+
+      # ---- THE LAST-RESORT BOUND ON HOW MUCH TG CAN CHANGE (TG-286, watched by TG-339) ----
+      #
+      # core/actuate/limiter.go is the ceiling on actuation: at most N per session and M per target inside a
+      # rolling window, charged on ATTEMPT rather than success so a subverted agent cannot buy retries by
+      # failing. TG-339 found it wired at interceptor.go and publishing nothing; the four series now exist
+      # (tg_actuation_limit{scope}, tg_actuation_limit_window_seconds, tg_actuation_admitted_total,
+      # tg_actuation_refused_total) and NOTHING watched them. Measured 2026-08-06: zero matching rules.
+      #
+      # There is deliberately no "limit raised too high" rule. The limiter cannot spell unlimited — a
+      # non-positive configured limit takes the conservative default — so the dangerous value does not
+      # exist, and alerting on a large-but-chosen number would page an operator for a decision they made.
+
+      - alert: ActuationCeilingUnpublished
+        # THE VACUITY FLOOR, and the state TG-339 found. tg_actuation_limit is emitted at boot by any process
+        # holding the interceptor, so ABSENT means the bound is unknown — not that it is generous, and not
+        # that nothing actuates. Every rule below is silent while this fires.
+        expr: absent(tg_actuation_limit)
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "the actuation ceiling is not being published"
+          description: >-
+            tg_actuation_limit is emitted at boot wherever the actuation interceptor is constructed, so its
+            absence means no process is reporting a bound. TG's last-resort limit on how much of production
+            it may change in a window is unobservable, and ActuationCeilingHit cannot fire. This is exactly
+            the state TG-339 measured: the limiter was genuinely wired and published nothing at all.
+
+      - alert: ActuationCeilingHit
+        # TG refused its OWN actuation. Not necessarily a fault — a genuinely busy incident can reach the
+        # ceiling — but it is always worth knowing, because the other cause is a loop retrying a target.
+        # Silent while mutation is off, correctly: nothing is attempted, so nothing is refused.
+        expr: increase(tg_actuation_refused_total[30m]) > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "TG hit its own actuation ceiling ({{ $value }} refusal(s) in 30m)"
+          description: >-
+            The rate governor refused an actuation that policy had already approved. Two very different
+            causes: a real incident touching more hosts than the window allows, or an agent looping on one
+            target. Read tg_actuation_admitted_total beside it — refusals with almost no admissions is the
+            loop, refusals alongside steady admissions is the busy estate. Charging is on ATTEMPT, so a
+            failing action still consumes budget by design.
+
+      # ---- A TRIP NOBODY RE-ARMED (TG-347) ----
+      #
+      # circuit_breaker_state says a breaker is OPEN. It never said for how long, so a latch that fired days
+      # ago on a dependency that has since recovered looks exactly like one that fired a minute ago on a real
+      # fault. Measured 2026-08-06: judge-death read OPEN on both planes for days while the judge was
+      # demonstrably alive (its cron armed, four dimensions written that morning), and every skill-trial
+      # graduation was refused the whole time — "REFUSING to graduate on unverified judgment". Nothing said
+      # the trip was stale, and the only way to learn when it happened was to read the worker log.
+      #
+      # circuit_breaker_opened_at_seconds is emitted ONLY while a breaker is open, so `absent` means closed
+      # and no rule below can fire on a healthy breaker by accident.
+
+      - alert: CircuitBreakerLatchedOpen
+        # 6h is chosen against the re-arm paths, not picked round: the model tiers half-open on their own
+        # cooldown in minutes, so anything still open after six hours is not waiting for a cooldown — it is
+        # waiting for a person. Governance breakers (mutation, judge-death) never self-re-arm at all.
+        expr: time() - circuit_breaker_opened_at_seconds > 6 * 3600
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "breaker {{ $labels.name }} has been OPEN for {{ $value | humanizeDuration }}"
+          description: >-
+            A breaker open this long is no longer riding out a transient. Either the dependency is still
+            broken — in which case the thing it protects has been degraded for that whole period — or it
+            recovered and the trip was never re-armed, which is the failure TG-347 describes: judge-death
+            latched OPEN on a live judge and blocked every skill graduation for days. Check whether the
+            re-arm condition is met BEFORE re-arming; a breaker that is re-armed while its dependency is
+            still failing simply trips again and teaches everyone to ignore it.
+
+      # ---- CAN TG READ THE HOSTS IT IS ASKED ABOUT? (TG-271) ----
+      #
+      # Host diagnostics verify the target's key against TG_HOSTDIAG_KNOWN_HOSTS and fail closed. That file
+      # covered 16 of 38 alerted hosts for WEEKS and nothing noticed, because each read returned a valid
+      # "(host was unreachable or the read errored)" sentinel — a perfectly ordinary return value that no
+      # invocation count can tell from success.
+      #
+      # SEVERITY IS WARNING ON PURPOSE. Measured 2026-08-06 there are still 26 resolvable hosts with no key
+      # (every switch, both routers, the Synology, all four DMZ hosts, both grskg hypervisors). A critical
+      # rule shipped against a config that does not yet satisfy it is a fail-closed gate turned on before
+      # the migration — it pages immediately, gets silenced, and then never speaks again.
+
+      - alert: HostDiagnosticsCannotReachAlertedHosts
+        # Only RESOLVABLE hosts count. Alertmanager's host label carries k8s component names (cilium-agent,
+        # coredns, node-exporter, tetragon) that TG must never hold a key for; counting them makes this
+        # permanently red, and a permanently red alarm trains an operator to stop reading alarms.
+        expr: tg_hostdiag_hosts_uncovered_resolvable > 0
+        for: 1h
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $value }} alerted host(s) have no host key — TG cannot diagnose them at all"
+          description: >-
+            These hosts resolve in DNS, TG has been alerted about them, and their key is absent from
+            TG_HOSTDIAG_KNOWN_HOSTS — so check-host-services/-disk/-memory/-load fail closed on every one.
+            The agent reaches the tool, gets an unreachable sentinel, and stops without a verdict. Add the
+            keys the way TG-271 did: cross-verify each against an independently-established known_hosts
+            before trusting it. Do NOT TOFU them to make this number go down.
+
+      - alert: HostDiagnosticCoverageUnmeasured
+        # The vacuity floor. tg_hostdiag_hosts_alerted is emitted at zero whenever the job runs at all, so
+        # ABSENT means no measurement — never "no hosts". The rule above is silent while this fires.
+        expr: absent(tg_hostdiag_hosts_alerted)
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "host-diagnostic reach is not being measured"
+          description: >-
+            tg_hostdiag_hosts_alerted is emitted at zero whenever the coverage job runs, so its absence means
+            the job is not running — no verifier, no database, or an unreadable known_hosts file. In that
+            state HostDiagnosticsCannotReachAlertedHosts cannot fire, and a completely blind diagnostic lane
+            is indistinguishable from a fully covered one. That is the state TG-271 was filed in.
+
+      - alert: SchemaUndeclaredTable
+        # TG-383. The credential-plane guard (migration 0060) enforces that every table declares which plane
+        # may write it, but it ran against a FIXTURE built from this repo's migrations — so a table created
+        # by hand in production was structurally invisible, and one already was (policy_ruleset_bak_handsoff,
+        # the only one of 60 tables tg_runtime cannot SELECT, in no migration). TG-383 made the gauge read
+        # the RUNNING database and exempted schema_migrations (the migration runner's own bookkeeping, which
+        # no CREATE TABLE or plane COMMENT can ever attach to) so the gauge can reach zero and therefore
+        # carry this alert. Verified against live Prometheus: the gauge reads 1 (the real hand-made table),
+        # so this is fireable rather than decorative, and SILENT the moment every table is declared. No
+        # paging receiver is wired (TG-333), so it surfaces in Alertmanager without a page.
+        expr: tg_schema_undeclared_tables > 0
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $value }} undeclared table(s) in the live schema on {{ $labels.job }}"
+          description: >-
+            A table exists in `public` that no migration in this build creates, so no credential-plane
+            COMMENT governs it and the plane-split guard cannot see it — the exact blind spot TG-383 closed
+            by reading the RUNNING database instead of the migration fixture. Declare the table (a migration
+            plus its plane COMMENT) or drop it; the gauge returns to zero and this clears. Fail-closed
+            direction: an ungoverned table is a gap in the write-plane split, not an unsafe actuation.
+
+      - alert: SchemaDriftUnmeasured
+        # The vacuity floor, matching every *Unmeasured rule here. tg_schema_undeclared_tables is published on
+        # every drift check, so ABSENT means the check is not running — never "no drift". While it is absent,
+        # SchemaUndeclaredTable above cannot fire and a hand-made table would pass unseen, indistinguishable
+        # from a fully-declared schema. `for: 30m` rides out a deploy window where the grounder is restarting.
+        expr: absent(tg_schema_undeclared_tables)
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "the live-schema drift check is not being measured"
+          description: >-
+            tg_schema_undeclared_tables is published whenever the grounder's schema-drift check runs, so its
+            absence means the check is not running — grounder down, or the drift reader unwired. In that
+            state SchemaUndeclaredTable cannot fire and an undeclared table is invisible. That is the blind
+            spot TG-383 was filed in.
+
+  # TG-394 — TG's OWN dependency-placement concentration. The metric and its rule ship together (guarded by
+  # deploy/self_dependency_concentration_test.go): a rule over a series nothing publishes is permanently
+  # silent, which is the exact state that hid 7 of 26 dependency hosts on one hypervisor until it failed.
+  - name: territory-grounder-self-dependency
+    rules:
+      # WARNING: 2+ of TG's own dependency hosts (one capability) share a single hypervisor — a silent failure
+      # of that node degrades TG's own faculties, which is how retrieval went lexical-only for 11h12m during
+      # the pve03 cascade with nothing reporting it. Knowable at BOOT, not at the outage. for:1h so a brief
+      # mid-refresh estate flap does not page; the concentration is a standing property, not a transient.
+      - alert: SelfDependencyConcentration
+        expr: tg_self_dependency_concentration >= 2
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} of TG's {{ $labels.capability }} dependency hosts share hypervisor {{ $labels.parent }}"
+          description: >-
+            tg_self_dependency_concentration{parent,capability} reports 2+ of TG's OWN dependency hosts on one
+            hypervisor: a single silent failure of {{ $labels.parent }} takes them all at once and degrades
+            TG's {{ $labels.capability }} faculty (embedding/journal-evidence/etc.), exactly as the shared
+            node did. Spread the placement across parents, or accept the risk explicitly. Coverage is beside it in
+            tg_self_dependency_hosts_resolved{capability} / tg_self_dependency_globs_declared{capability}.
+      # The vacuity floor: the concentration series only appears when 2+ share a parent, so its absence is
+      # AMBIGUOUS (no concentration, OR the exporter is gone). hosts_resolved is emitted on every scrape when
+      # the graph is present, so ITS absence is unambiguously "the check is not running".
+      - alert: SelfDependencyConcentrationUnmeasured
+        expr: absent(tg_self_dependency_hosts_resolved)
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "TG's self-dependency concentration check is not publishing"
+          description: >-
+            tg_self_dependency_hosts_resolved is absent, so TG-394's concentration guardrail is producing
+            nothing — a deploy that predates the exporter, a nil estate holder, or a broken scrape. While it
+            is silent, a 2+ dependency-host concentration on one hypervisor would reach nobody, which is the
+            blindness this signal exists to end.

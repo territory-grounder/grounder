@@ -1,0 +1,54 @@
+{
+ "feature": "commit-confirmed.feature",
+ "note": "Owner sign-off recorded 2026-08-14 (TG-488 B5). T-029-1 and T-029-2 are built: the REQ-2904 and REQ-2901 scenarios are PRESENT with runnable oracles. Every other scenario stays pending until its owning task builds the behavior — the lattice reads the honest count, never an absence. REQ-2906 stays pending: T-029-2 delivered the arm/abort/elapse ledger appends (asserted in its drills), but the scenario's own bar includes the fired-revert page + breaker, which is T-029-3.",
+ "scenarios": [
+  {
+   "name": "A commit-confirmed effect cannot execute without its armed revert",
+   "req": "REQ-2901",
+   "status": "present",
+   "test": "temporal/runner/commit_confirm_test.go: TestRunnerRefusesForwardWhenCommitConfirmUnarmable (full-workflow, mutation ON, executed killing mutation: arm-failure fall-through → effect ran unarmed → red) + TestRunnerExecutedEffectConfirmsFromTerminus (arm STARTS before execute, history-order oracle; renamed at T-029-3 when the interim keeps-armed claim became the confirm claim) + core/db/commit_confirm_test.go (durable once-only state, executed guard-drop mutation)"
+  },
+  {
+   "name": "Only the mechanical match confirms — an unverifiable post-state does not",
+   "req": "REQ-2902",
+   "status": "present",
+   "test": "temporal/runner/commit_confirm_test.go: TestConsultCommitConfirmRoutesTheTerminus (match+verified is the ONLY confirming reading; executed killing mutation: unverifiable→confirmed flip, red at two layers) + TestCommitConfirmChildElapseRoutesByTerminus/unverifiable_holds + TestCommitConfirmChildHoldFiresOnObservedDeviation (HOLD+page; inverse only on a POSITIVELY observed deviation; failed reads never fire — TestConsultCommitConfirmObservesPositively)"
+  },
+  {
+   "name": "The fired inverse traverses the full interceptor chain",
+   "req": "REQ-2903",
+   "status": "present",
+   "test": "temporal/runner/commit_confirm_test.go: the fire path dispatches ONLY SealRollbackExecuteActivity (the TG-462/464-drilled full-chain execute; no bypass exists) with the forward's captured basis — TestBuildRollbackRequestCarriesTheSealedBandAndBasis (band=sealed band, Approved=basis, InvertsActionID) — and a chain/seal refusal PAGES and resolves revert_failed (TestCommitConfirmChildElapseRoutesByTerminus/deviation_fires...), never a silent skip"
+  },
+  {
+   "name": "A class without a registry inverse is never eligible",
+   "req": "REQ-2904",
+   "status": "present",
+   "test": "core/actuate/opschema/commit_confirmed_test.go: TestCommitConfirmedWithoutAnyInverseIsRefused + TestDanglingRollbackOpClassRefusesTheRegistry (executed registry-refusal drill)"
+  },
+  {
+   "name": "A staged-canary class cannot execute unconfirmed",
+   "req": "REQ-2905",
+   "status": "present",
+   "test": "temporal/runner/commit_confirm_test.go: TestCommitConfirmArmActivityEnforcesTheCanaryMandate (both posture sources — the pinned allowlist and the AUTO_NOTICE rung — refuse an ineligible class; eligibility satisfies the mandate by arming; RungApprove is not a stage; executed killing mutation: mandate block dropped → a staged class executes with no armed revert → red)"
+  },
+  {
+   "name": "Every commit-confirmed transition is on the ledger and a failed revert pages and trips the breaker",
+   "req": "REQ-2906",
+   "status": "present",
+   "test": "temporal/runner/commit_confirm_test.go: ledger appends asserted for arm/abort/elapse-family transitions (capture sink); a fired revert PAGES (the fire drills route NotifyActivity); revert_failed pages AND trips the mutation breaker — executed killing mutation: breaker-trip dispatch dropped, red at two drills (trips=0). Console timeline chips remain T-029-5. + the RENDERED half (T-029-5): core/httpapi/session_detail_test.go TestSessionDetailCarriesTheCommitConfirmChip (the chip rides the walk; nil seam / no window / chip error all omit, never fabricate or 503; executed killing mutation: enrichment dropped → queryable-but-not-rendered → red) + the console render (wfCommitConfirmChip, assemble.py-built)"
+  },
+  {
+   "name": "Graduation credits only the confirmed outcome",
+   "req": "REQ-2907",
+   "status": "present",
+   "test": "temporal/runner/commit_confirm_test.go: TestResolveCommitConfirmFeedsTheLadderConfirmedOnly (confirmed = the one promoting outcome; fired/failed revert demote; aborted/elapsed/held feed nothing; duplicate resolves feed nothing — executed killing mutation: reverted→clean flip → promotion on a fired revert → red) + TestTerminusWithholdsGraduationForCommitConfirmedClasses (the terminus withhold; executed killing mutation: withhold dropped → double claim → red)"
+  },
+  {
+   "name": "An empty pre-action diff is a refused no-op before anything arms",
+   "req": "REQ-2908",
+   "status": "present",
+   "test": "temporal/runner/commit_confirm_test.go: TestCommitConfirmArmActivityRefusesTheFreeNoOp (already-desired refuses before arming; unestablished/unwired fail toward arming) + TestRunnerRefusesNoOpWhenTargetRecoversAfterSeal (the TOCTOU e2e: not-running at seal, recovered by arm → refused:no-op, zero executions, zero window state; executed killing mutation: guard dropped → red at both layers)"
+  }
+ ]
+}

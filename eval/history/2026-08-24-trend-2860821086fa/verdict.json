@@ -1,0 +1,84 @@
+{
+  "runs": 3,
+  "overall_baseline": 4.27,
+  "overall_candidate": 3.21,
+  "overall_delta": -1.06,
+  "overall_max_drop": 0.15,
+  "overall_band": 0.19,
+  "overall_pass": false,
+  "dims": [
+    {
+      "dim": "appropriate_band",
+      "baseline": 3.82,
+      "candidate": 3.88,
+      "delta": 0.06,
+      "max_drop": 0.1,
+      "pass": true
+    },
+    {
+      "dim": "correct_diagnosis",
+      "baseline": 4.65,
+      "candidate": 3.92,
+      "delta": -0.73,
+      "max_drop": 0.3,
+      "pass": false,
+      "band": 0.24,
+      "samples": 60
+    },
+    {
+      "dim": "evidence_grounded",
+      "baseline": 4.55,
+      "candidate": 3.42,
+      "delta": -1.13,
+      "max_drop": 0.3,
+      "pass": false,
+      "band": 0.23,
+      "samples": 60
+    },
+    {
+      "dim": "falsifiable_prediction",
+      "baseline": 4.5,
+      "candidate": 1.61,
+      "delta": -2.89,
+      "max_drop": 0.3,
+      "pass": false,
+      "band": 0.24,
+      "samples": 10
+    },
+    {
+      "dim": "sensible_proposal",
+      "baseline": 3.85,
+      "candidate": 3.22,
+      "delta": -0.63,
+      "max_drop": 0.3,
+      "pass": false,
+      "band": 0.25,
+      "samples": 60
+    }
+  ],
+  "rates": [
+    {
+      "name": "proposal_recall",
+      "candidate": 0.56,
+      "floor": 0.5,
+      "pass": true
+    }
+  ],
+  "control_n": 0,
+  "control_violations": null,
+  "control_pass": true,
+  "pass": false,
+  "outcome": "fail",
+  "unmeasured": [
+    "negative controls: every control supplied was EXCLUDED as unobservable on the live estate (host absent from LibreNMS or administratively disabled), so the benign-incident bar was never applied — refresh the control corpus with hosts whose benignness can be READ"
+  ],
+  "reasons": [
+    "overall Δ -1.06 \u003c -0.15, beyond the ±0.19 sample-aware band at n=180/60 sessions",
+    "dim correct_diagnosis Δ -0.73 \u003c -0.30, beyond the ±0.24 sample-aware band at n=60",
+    "dim evidence_grounded Δ -1.13 \u003c -0.30, beyond the ±0.23 sample-aware band at n=60",
+    "dim falsifiable_prediction Δ -2.89 \u003c -0.30, beyond the ±0.24 sample-aware band at n=10",
+    "dim sensible_proposal Δ -0.63 \u003c -0.30, beyond the ±0.25 sample-aware band at n=60",
+    "UNMEASURED — negative controls: every control supplied was EXCLUDED as unobservable on the live estate (host absent from LibreNMS or administratively disabled), so the benign-incident bar was never applied — refresh the control corpus with hosts whose benignness can be READ; the gate cannot certify a capability the run never exercised, so this run certifies nothing"
+  ],
+  "warnings": null
+}

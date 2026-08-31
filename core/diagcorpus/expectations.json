@@ -1,0 +1,32 @@
+{
+  "_comment": "OPERATOR-DECLARED diagnosis expectations. Which op-class correctly addresses a fault class is an estate policy question, not a property of the code — this file is the answer, and core/diagcorpus scores against it rather than against a compiled opinion. `accept` is a LIST because more than one answer can be right. `unhealable` EXCLUDES a class from the score rather than failing it.",
+  "expectations": [
+    {
+      "fault_type": "device-down",
+      "accept": ["start-guest"],
+      "_why": "the guest is stopped at the hypervisor; starting it is the heal. A restart-* op-class cannot reach a stopped guest."
+    },
+    {
+      "fault_type": "disk-fill",
+      "accept": [],
+      "stand_down_is_correct": true,
+      "_why": "NO declared op-class can address disk-fill on this estate, so the correct answer is a reasoned STAND-DOWN and any proposal is the error. Every guest in the pool is an LXC whose root filesystem is a loopback device (/dev/loopN — verified directly on wallos-mylab01, cloudbeaver01 and mealie01), and disk-grow cannot grow a loop-mounted rootfs. Measured over 95 items: TG correctly declined on 63, citing the loopback constraint and naming the consuming path (/var/tmp, journal), and proposed disk-grow on 30. NONE of those 30 executed — the fail-closed AWX lane refused all 24 manifests. This entry previously read `accept: [disk-grow]`, which scored the 63 correct stand-downs as diagnosis failures and the 30 inapplicable proposals as successes: the sign was inverted, and it produced a published-looking 31.6%.",
+      "_change_this_when": "an op-class that can actually reclaim space on a loop-mounted LXC rootfs is declared (prune-path / vacuum-journal / trim-tmp). Then clear stand_down_is_correct and list it in accept — standing down stops being correct the moment a legal move exists."
+    },
+    {
+      "fault_type": "container-down",
+      "accept": ["restart-container"],
+      "_why": "docker restart brings a stopped container back; the guest itself stays up throughout."
+    },
+    {
+      "fault_type": "service-down",
+      "accept": ["start-service", "restart-service"],
+      "_why": "BOTH are correct. An inactive unit is properly started; a hung one is properly restarted, and the agent cannot always distinguish them from the alert alone. Scoring one of these wrong would manufacture a diagnosis failure that is really a vocabulary preference."
+    },
+    {
+      "fault_type": "mem-pressure",
+      "unhealable": true,
+      "_why": "EXCLUDED, not failed. Detection is measured at 1/14 on this estate, so counting its misses as diagnosis failures would score an INSTRUMENTATION gap as a capability gap. Remove this flag once the LibreNMS rule scope is fixed."
+    }
+  ]
+}

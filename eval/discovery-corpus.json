@@ -1,0 +1,53 @@
+{
+  "_comment": "The DISCOVERY set of the three-set eval flywheel: a rolling holding area of live-scored DEVIATIONS captured by core/falsify.Scorer (a committed prediction reality falsified — the observed cascade carried a surprise host the prediction never named). This file is DRAINED from the worker's in-memory rolling corpus (falsify.MemDiscoveryCorpus) via eval.DiscoveryCorpus.IngestCaptured, and PROMOTED into the falsifiability regression suite by `go run ./tools/evalgate --discovery`. It is NOT the gate and NOT the sealed holdout — capturing here is additive and cannot weaken the gate. 'key' is the falsify.DiscoveryRecord.DeviationKey signature (target|site|sorted-surprise-hosts). The two settleable, reproduced cases below are grounded in the same placement facts as the frozen fixture (pve04 hosts cap01/claude01/dmz01; pve01 hosts cl01file01/code01/redis02) so they catch a real cascade over estate_fixture.json; the under-reproduced and operator-held cases document the conservative promotion gate.",
+  "cases": [
+    {
+      "key": "dc1pve04|dc1|dc1redis02",
+      "target_host": "dc1pve04",
+      "site": "dc1",
+      "observed": [
+        {"host": "dc1cap01", "rule": "HostDown", "site": "dc1"},
+        {"host": "dc1claude01", "rule": "HostDown", "site": "dc1"},
+        {"host": "dc1dmz01", "rule": "HostDown", "site": "dc1"},
+        {"host": "dc1redis02", "rule": "HostDown", "site": "dc1"}
+      ],
+      "surprise_hosts": ["dc1redis02"],
+      "reproductions": 3,
+      "source_action_id": "act-disc-pve04-redis02",
+      "first_seen": "2026-07-18T09:12:00Z",
+      "last_seen": "2026-07-20T02:40:00Z"
+    },
+    {
+      "key": "dc1pve01|dc1|dc1n8n01",
+      "target_host": "dc1pve01",
+      "site": "dc1",
+      "observed": [
+        {"host": "dc1cl01file01", "rule": "HostDown", "site": "dc1"},
+        {"host": "dc1code01", "rule": "HostDown", "site": "dc1"},
+        {"host": "dc1cloudbeaver01", "rule": "HostDown", "site": "dc1"},
+        {"host": "dc1n8n01", "rule": "HostDown", "site": "dc1"}
+      ],
+      "surprise_hosts": ["dc1n8n01"],
+      "reproductions": 1,
+      "source_action_id": "act-disc-pve01-n8n01",
+      "first_seen": "2026-07-19T22:05:00Z",
+      "last_seen": "2026-07-19T22:05:00Z"
+    },
+    {
+      "key": "dc1sw01|dc1|dc1freeipa01",
+      "target_host": "dc1sw01",
+      "site": "dc1",
+      "observed": [
+        {"host": "dc1ap01", "rule": "HostDown", "site": "dc1"},
+        {"host": "dc1ap03", "rule": "HostDown", "site": "dc1"},
+        {"host": "dc1freeipa01", "rule": "HostDown", "site": "dc1"}
+      ],
+      "surprise_hosts": ["dc1freeipa01"],
+      "reproductions": 4,
+      "hold": true,
+      "source_action_id": "act-disc-sw01-freeipa01",
+      "first_seen": "2026-07-17T14:20:00Z",
+      "last_seen": "2026-07-20T01:15:00Z"
+    }
+  ]
+}

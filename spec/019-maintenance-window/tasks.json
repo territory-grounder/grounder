@@ -1,0 +1,63 @@
+{
+  "spec": "019-maintenance-window",
+  "tasks": [
+    {
+      "id": "T-019-1",
+      "title": "core/schedule: vendor-neutral maintenance/freeze window + scheduled-job model, the WindowGuard seam, and the fail-closed-safe MaintenanceWindow query",
+      "files_owned": [
+        "core/schedule/schedule.go",
+        "core/schedule/recurrence.go",
+        "core/schedule/directive.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-1901",
+        "REQ-1902",
+        "REQ-1903",
+        "REQ-1904",
+        "REQ-1905",
+        "REQ-1906"
+      ],
+      "acceptance": {
+        "feature": "maintenance-window.feature",
+        "scenarios": [
+          "A maintenance window and scheduled jobs are derived from real scheduler events",
+          "A change-freeze overrides an overlapping maintenance window",
+          "Outside a sanctioned window the actuation is deferred to POLL_PAUSE",
+          "An unreadable schedule fails closed to outside the window"
+        ]
+      },
+      "budget": { "max_loc_delta": 400, "max_wall_clock_minutes": 120 },
+      "status": "completed"
+    },
+    {
+      "id": "T-019-2",
+      "title": "modules/schedule/cronicle: native read-only Cronicle REST connector (X-API-Key SecretRef, re-read-by-id) deriving the core/schedule Calendar",
+      "files_owned": [
+        "modules/schedule/cronicle/cronicle.go",
+        "modules/schedule/cronicle/derive.go"
+      ],
+      "deps": [
+        "T-019-1"
+      ],
+      "req_ids": [
+        "REQ-1900",
+        "REQ-1901",
+        "REQ-1902",
+        "REQ-1907",
+        "REQ-1908"
+      ],
+      "acceptance": {
+        "feature": "maintenance-window.feature",
+        "scenarios": [
+          "A maintenance window and scheduled jobs are derived from real scheduler events",
+          "The connector re-reads each event by id and reflects an upstream change",
+          "The API key is a sealed SecretRef and a wrong key fails closed",
+          "The connector reads over a native HTTP client and actuates nothing"
+        ]
+      },
+      "budget": { "max_loc_delta": 450, "max_wall_clock_minutes": 120 },
+      "status": "completed"
+    }
+  ]
+}

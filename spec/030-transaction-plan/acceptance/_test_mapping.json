@@ -1,0 +1,48 @@
+{
+ "feature": "transaction-plan.feature",
+ "note": "Governance owner-ruled 2026-08-22; every scenario pending with its owning task named — the lattice reads the honest count, never an absence.",
+ "scenarios": [
+  {
+   "name": "No model token can shape a plan",
+   "req": "REQ-3001",
+   "status": "present",
+   "test": "core/plan registry tests + temporal/runner/transaction_plan_poll_test.go: TestComposePlanFailureDirectionsAreSingleActionAsToday (compose derives ONLY from the recipe + the trigger's screened params; every failure direction is the single action)"
+  },
+  {
+   "name": "The vote sees every step and binds the plan identity",
+   "req": "REQ-3002",
+   "status": "present",
+   "test": "temporal/runner/transaction_plan_poll_test.go: TestPlanPollOneApprovalBoundToThePlanRunsTheSaga (projection renders every step + undo, binds plan:<plan_id>) + TestPlanPollVoteNamingTheSingleActionIsMisbound (killing mutation executed: dropped bind substitution → a single-action vote approved the plan → red)"
+  },
+  {
+   "name": "A plan is never partially admissible",
+   "req": "REQ-3003",
+   "status": "present",
+   "test": "temporal/runner/transaction_plan_workflow_test.go: TestTransactionPlanOneUnclassifiableStepRefusesTheWholePlan (+ gate-refusal and unrecordable-plan refusal oracles)"
+  },
+  {
+   "name": "A mid-plan failure compensates everything already done",
+   "req": "REQ-3004",
+   "status": "present",
+   "test": "temporal/runner/transaction_plan_workflow_test.go: TestTransactionPlanStepFailureCompensatesInReverseOrder (killing mutation executed: forward-order loop → red)"
+  },
+  {
+   "name": "A failing compensation pages and trips instead of pretending",
+   "req": "REQ-3005",
+   "status": "present",
+   "test": "temporal/runner/transaction_plan_workflow_test.go: TestTransactionPlanFailedCompensationTripsPagesAndNamesTheAppliedSet (killing mutation executed: dropped breaker trip → red)"
+  },
+  {
+   "name": "The ledger tells the plan's whole story",
+   "req": "REQ-3006",
+   "status": "present",
+   "test": "temporal/runner/transaction_plan_workflow_test.go: TestTransactionPlanLedgerStoryCoversEveryTransition (every transition in order, per-step action ids, verdict + inverse identity) + TestPlanEventAppendsTheFullPlanIDAndTheStepAction (FULL plan_id on the row, plan/<id> fallback, nil-ledger refusal); the session terminal is pinned by TestPlanPollOneApprovalBoundToThePlanRunsTheSaga (Outcome plan:<terminal>)"
+  },
+  {
+   "name": "The shipped lane is inert three ways",
+   "req": "REQ-3007",
+   "status": "present",
+   "test": "core/plan/plan_test.go: TestShippedCatalogIsInertAndLookupIsStrict (way 1 — the catalog SHIPS EMPTY, so no plan is ever composed and the single-action path is byte-identical) + TestValidateRefusesEachAuthoringError (way 3 — a step naming an unregistered or not-safely-compensatable op-class is refused at BUILD time, so a plan cannot smuggle a class past the ladder); temporal/runner/transaction_plan_workflow_test.go: TestTransactionPlanGateRefusalRefusesBeforeExecution (the same refusal at run time — one refused step refuses the whole plan before anything executes) and TestTransactionPlanOneApprovalExecutesEveryStepInOrder, whose steps all seal at POLL_PAUSE and execute only through the unchanged interceptor chain, which is where way 2 lives — INV-21, nothing actuates at Shadow"
+  }
+ ]
+}

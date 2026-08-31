@@ -1,0 +1,70 @@
+{
+  "runs": 1,
+  "overall_baseline": 3.62,
+  "overall_candidate": 4.06,
+  "overall_delta": 0.44,
+  "overall_max_drop": 0.15,
+  "overall_pass": true,
+  "dims": [
+    {
+      "dim": "appropriate_band",
+      "baseline": 3.05,
+      "candidate": 4.05,
+      "delta": 1,
+      "max_drop": 0.1,
+      "pass": true
+    },
+    {
+      "dim": "correct_diagnosis",
+      "baseline": 3.9,
+      "candidate": 4.1,
+      "delta": 0.2,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "evidence_grounded",
+      "baseline": 3.85,
+      "candidate": 4,
+      "delta": 0.15,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "falsifiable_prediction",
+      "baseline": 4.2,
+      "candidate": 4.2,
+      "delta": 0,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "sensible_proposal",
+      "baseline": 3.1,
+      "candidate": 3.95,
+      "delta": 0.85,
+      "max_drop": 0.3,
+      "pass": true
+    }
+  ],
+  "rates": [
+    {
+      "name": "proposal_recall",
+      "candidate": 0.83,
+      "floor": 0.5,
+      "pass": true
+    }
+  ],
+  "control_n": 0,
+  "control_violations": null,
+  "control_pass": true,
+  "pass": false,
+  "outcome": "inconclusive",
+  "unmeasured": [
+    "negative controls: no --controls run was supplied, so the benign-incident bar (the agent must NOT propose on a no-action-warranted incident) was never applied to this run"
+  ],
+  "reasons": [
+    "UNMEASURED — negative controls: no --controls run was supplied, so the benign-incident bar (the agent must NOT propose on a no-action-warranted incident) was never applied to this run; the gate cannot certify a capability the run never exercised, so this run certifies nothing"
+  ],
+  "warnings": null
+}

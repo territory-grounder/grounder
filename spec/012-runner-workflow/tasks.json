@@ -1,0 +1,345 @@
+{
+  "spec": "012-runner-workflow",
+  "tasks": [
+    {
+      "id": "T-012-1",
+      "title": "Read-only Runner Temporal workflow + activities + worker: investigate -> classify -> gate -> stop-at-propose; execute/verify no-op under mutation OFF; no OS execution in the workflow + the vote-consuming approval wait (REQ-1105) + the terminal reconcile close-out and reconcile->escalation re-check hand-off (REQ-1113/1115)",
+      "files_owned": [
+        "temporal/runner/workflow.go",
+        "temporal/runner/budget.go",
+        "temporal/runner/activities.go",
+        "temporal/runner/suppress.go",
+        "temporal/runner/reconcile.go",
+        "temporal/runner/register.go",
+        "cmd/worker/main.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-1101",
+        "REQ-1102",
+        "REQ-1103",
+        "REQ-1104",
+        "REQ-1105",
+        "REQ-1107",
+        "REQ-1108",
+        "REQ-1109",
+        "REQ-1112",
+        "REQ-1113",
+        "REQ-1115",
+        "REQ-1116",
+        "REQ-1117"
+      ],
+      "acceptance": {
+        "feature": "runner-workflow.feature",
+        "scenarios": [
+          "An ingested incident flows to a sealed gated proposal with no mutation",
+          "The action_id is threaded from derivation through the sealed manifest",
+          "An incident the agent cannot propose for ends without an action",
+          "An approved poll threads the human authorization into the execute path",
+          "A denied poll stands the session down without mutation",
+          "An unanswered poll times out to deny \u2014 never a silent approval",
+          "A vote bound to a different action is recorded and ignored \u2014 it releases nothing",
+          "The interceptor's effect leaf is read-only by default and inert while mutation is off",
+          "A gated execution binds evidence, wires an observer, and constructs the argv",
+          "A mispredicted post-state verifies as a deviation, not a clean match",
+          "A finished session drives a terminal ticket close-out on the governance ledger",
+          "A confirmed-clear auto session is closed out to Done",
+          "A terminal reconcile never auto-closes an executed action whose post-state deviated",
+          "An unanswered poll hands the orphaned incident off to the escalation re-check lane",
+          "A persistently failing pipeline activity is retried a bounded number of times then surfaces",
+          "A session that exhausts its wall-clock budget stops to the terminal human-handoff"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 1100,
+        "max_wall_clock_minutes": 180
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-012-2",
+      "title": "Semantic retrieval plane (TG-40 / audit R1): pgvector knowledge_embedding migration + embeddings client + RRF-fused retriever with honest lexical fallback + bounded sync/backfill write path",
+      "files_owned": [
+        "core/knowledge/semantic.go",
+        "core/knowledge/semantic_test.go",
+        "core/knowledge/index.go",
+        "core/knowledge/index_test.go",
+        "core/db/knowledge_embedding.go",
+        "core/db/knowledge_embedding_test.go",
+        "core/db/migrations/0013_semantic_retrieval.up.sql",
+        "core/db/migrations/0013_semantic_retrieval.down.sql",
+        "adapters/model/embed.go",
+        "adapters/model/embed_test.go"
+      ],
+      "deps": [
+        "T-012-1"
+      ],
+      "req_ids": [
+        "REQ-1110",
+        "REQ-1111"
+      ],
+      "acceptance": {
+        "feature": "runner-workflow.feature",
+        "scenarios": [
+          "Precedent ranked by both channels fuses above single-channel precedent",
+          "A semantic match below the similarity floor never enters the seed",
+          "Retrieval without an embedding model is exactly the lexical behavior",
+          "An embedding outage degrades that query to the lexical ranking"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 900,
+        "max_wall_clock_minutes": 180
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-012-3",
+      "title": "Machine-parseable seed-block delimiters (design-wisdom #4): wrap each seed block in a typed XML-style envelope with a trusted/untrusted preamble; neutralize forged envelope delimiters in untrusted data; per-block soft budget; additive to the input screen. Wired through InvestigateActivity (T-012-1 owns activities.go).",
+      "files_owned": [
+        "temporal/runner/compose_seed.go",
+        "temporal/runner/seed_envelope_test.go"
+      ],
+      "deps": [
+        "T-012-1"
+      ],
+      "req_ids": [
+        "REQ-1112"
+      ],
+      "acceptance": {
+        "feature": "runner-workflow.feature",
+        "scenarios": [
+          "The seed wraps each block in a typed envelope and a forged guidance delimiter is neutralized"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-012-4",
+      "title": "Scheduled FireDue (Gulli ch12 \u2014 recovery must be reachable): the escalation requeue lane driven as a Temporal CRON workflow/activity so every due re-check fires/re-escalates/pages/stands down; fail-safe (a FireDue error is captured, never a crash); armed from cmd/worker/main.go (owned by T-012-1)",
+      "files_owned": [
+        "temporal/escalation/schedule.go"
+      ],
+      "deps": [
+        "T-012-1"
+      ],
+      "req_ids": [
+        "REQ-1114"
+      ],
+      "acceptance": {
+        "feature": "runner-workflow.feature",
+        "scenarios": [
+          "The scheduled FireDue cron fires every due escalation re-check",
+          "A FireDue error is captured and never crashes the cron run"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-012-R1",
+      "title": "Every terminal outcome records a durable triage row",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-1106"
+      ],
+      "acceptance": {
+        "go_test": "temporal/runner: TestRunnerRecordsTriageAtTerminalOutcomes, TestRunnerStopsWhenAgentDoesNotPropose, TestRunnerEscalateWithoutProposalSealsNothingAndOpensNoPoll"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-012-R2",
+      "title": "The execute activity carries the CURRENT band, not the band frozen into the stored manifest",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-1118"
+      ],
+      "acceptance": {
+        "go_test": "temporal/runner: TestExecuteActivityHonorsFreshBandOverStoredManifestBand, TestRunnerWritebackUsesFreshVerdictOverFrozen"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-012-R3",
+      "title": "The precedent corpus is the UNION of the read-only seed and the learned file",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-1119"
+      ],
+      "acceptance": {
+        "go_test": "temporal/runner: TestComposeSeedLayout, TestInvestigateInjectsPrecedent, TestInvestigateSkipsPoisonedPrecedentSnippet"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-012-R4",
+      "title": "Every model-gateway completion is observed exactly once at the boundary",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-1120"
+      ],
+      "acceptance": {
+        "go_test": "temporal/runner: TestInvestigateRecordsFiveMetricFamily (the five tg_model_* families are emitted per completion); adapters/models carries the boundary observer"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-012-R5",
+      "title": "A mechanical verdict is reported ONLY for a session that itself executed",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-1121"
+      ],
+      "acceptance": {
+        "go_test": "temporal/runner: TestVerifyPublishesNothingWhenThisSessionDidNotExecute, TestVerifyRecordsVerdict"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-012-R6",
+      "title": "The lost-signal belt is scoped to THIS incident's rule and consumed at most once",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-1122"
+      ],
+      "acceptance": {
+        "go_test": "temporal/runner: TestRecoveredSinceActivity (rule-scoped; an empty alert_rule fails closed rather than acting as a wildcard) + the clear-confirm-belt-once workflow version guard"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-012-R7",
+      "title": "The terminus back-fills whether the session ACTUALLY executed a mutation",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-1124"
+      ],
+      "acceptance": {
+        "go_test": "temporal/runner: TestTerminusBackfillsMutated, TestTerminusDoesNotInventAMutation, TestTerminusMutatedMarkIsFailOpen, TestMutationControl_MutatedFieldDrivesTheBackfill"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-012-R8",
+      "title": "The terminus feeds the graduation ladder EXACTLY ONCE \u2014 dispatched at one attempt",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-1223"
+      ],
+      "acceptance": {
+        "go_test": "temporal/runner: TestGraduationActivityCreditsExactlyOnce, TestReconcileDoesNotDoubleWriteWhenGraduationIsDispatchedSeparately, TestLegacyExecutionStillCreditsInline, TestUnconfirmedTerminusIsCreditedNotClean, TestReconcileFeedsNothingWhenNothingExecuted"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed",
+      "id": "T-012-R9",
+      "title": "The runner wires the durable open-incident baseline arm into the interceptor and the deferred verify",
+      "req_ids": [
+        "REQ-1125"
+      ],
+      "acceptance": {
+        "go_test": "core/actuate: TestDegradedPairArmStillAdjudicatesViaHostArm; core/db: TestOpenIncidentsBaselineFailsClosed"
+      }
+    },
+    {
+      "id": "T-012-R10",
+      "title": "Corroboration reads OPEN incidents \u2014 the recency window is inexpressible",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-1126"
+      ],
+      "acceptance": {
+        "go_test": "temporal/runner: TestCorroborateCommonCause; core/db: TestOpenIncidentCorroborationSeesWhatTheRecencyWindowMisses, TestOpenIncidentCorroborationIsImmuneToSuppression"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-012-R11",
+      "title": "Per-domain actor-evidence observability: which reader is contributing is a measured fact, not an assertion",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-1123"
+      ],
+      "acceptance": {
+        "go_test": "core/attribution/readertally: TestAZeroRowReadIsRecordedNotOmitted (an asked-and-empty reader still counts as a read and emits rows=0 EXPLICITLY, so an absent series cannot masquerade as a zero one), TestSummarySeparatesNeverAskedFromAskedAndEmpty (never-asked / asked-and-empty / failed stay three distinct states with three different remedies), TestTallyIsConcurrencySafeAndNilTolerant, TestAnUnarmedEstateEmitsNoSeries; cmd/worker: TestFanOutTalliesEveryDomainItReads drives the REAL makeActorEvidenceReader and asserts the emitted /metrics series \u2014 the wiring control that the package's own five controls structurally cannot be \u2014 plus TestFanOutErrorsWhenEveryReaderFails preserving the total-outage error and TestFanOutToleratesANilTally"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    }
+  ]
+}

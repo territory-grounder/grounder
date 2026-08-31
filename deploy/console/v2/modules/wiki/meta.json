@@ -1,0 +1,17 @@
+{
+ "nav": {
+  "group": "Evidence",
+  "label": "Wiki",
+  "view_key": "wiki",
+  "badge": "wiki",
+  "icon_svg_inner": "<path d=\"M4 1.8h5.5L12.5 5v9.2H4z\"/><path d=\"M9.5 1.8V5h3\"/><path d=\"M6.3 8h4M6.3 10.5h4\"/>"
+ },
+ "view_meta": [
+  "Wiki",
+  "the living wiki — lessons the verifier confirmed, runbooks embedded in the binary, the skill library by reference (REQ-521)"
+ ],
+ "facets": [["lessons", "Lessons"], ["runbooks", "Runbooks"], ["skills", "Skills"]],
+ "purpose": "WIKI surface (evidence domain, REQ-521): the living wiki, three sections each with its own epistemic standing — a LESSON is TERRITORY (distilled only from a confirmed-clean resolution: verdict match + confirmed clear, the same corpus the retriever reloads); a RUNBOOK is the operating manual of the shipped code, embedded in the binary; SKILLS is a reference join to the versioned library (#skills). Rendered from a FIXTURE (WK_FIX) in preview; live via wkLoadIndex() once a session lands.",
+ "notes": "Nothing here is invented: empty corpus = empty section, said plainly. The wiki wiring wraps liveAdopt (defined by the live layer emitted before this module), so wiki JS is appended AFTER the live layer in assemble.py (LATE_JS). Lands on the populated `runbooks` facet by default, not the honestly-empty `lessons` tab. Reuses the console design system (wk- prefix).",
+ "provenance": "#55: back-ported OUT of the hand-maintained deploy/console/v2/index.html INTO the assemble.py pipeline source. index.html is byte-unchanged; assemble.py now reproduces it (guarded by `make console-verify` / the CI console-drift job). Do not edit index.html by hand — edit these part-files and re-run assemble.py."
+}

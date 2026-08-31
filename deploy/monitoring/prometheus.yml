@@ -1,0 +1,78 @@
+# Prometheus scrape config for the Territory Grounder Phase-2 canary safety plane.
+#
+# It scrapes the READ-ONLY /metrics surfaces of the grounder (public :8080) and the worker (admin :8444) —
+# it cannot mutate anything. The gauges it collects (tg_may_actuate, tg_policy_mode,
+# circuit_breaker_state, deviation_count) drive the alert rules in alert.rules.yml; the critical one is
+# ActuationPermittedWhileModeForbidsIt (tg_may_actuate == 1 under a non-actuating declared mode). Targets
+# are reached by compose service name on the internal network.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    stack: territory-grounder
+
+rule_files:
+  - /etc/prometheus/alert.rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: grounder
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["grounder:8080"]
+  - job_name: worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["worker:8444"]
+  # THE ACTUATION WORKER IS SCRAPED TOO, and it was not until 2026-08-05.
+  #
+  # worker-actuate runs the same binary on the split-planes profile and exposes its admin surface on :8445.
+  # Nothing scraped it, so every egress/safety series here described the TRIAGE plane only — while the plane
+  # that actually mutates the estate went unobserved. TG-324's precondition for switching the egress meter to
+  # enforce is "tg_egress_offallowlist_requests_total flat at 0"; read from one worker, that zero says
+  # nothing about the other, which is the shape of measurement that hides the defect it is meant to find.
+  #
+  # This target requires COMPOSE_PROFILES to name split-planes (deploy/.env.example sets it). If a
+  # deployment deliberately runs single-plane, this target is down and MetricsTargetDown fires — that alert
+  # is correct: it means the fleet and the scrape config disagree, which is exactly what went unnoticed here.
+  - job_name: worker-actuate
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["worker-actuate:8445"]
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # TG'S PRODUCTION BRAIN (TG-231). Since 2026-07-31 TG runs SINGLE-BRAIN on Opus 5 via this sidecar,
+  # deliberately with NO fallback: an outage fails triage loudly rather than silently swapping brains
+  # (owner decision after the fault-1406 e2e). That makes it the estate's most important container, and
+  # measured 2026-08-06 it had ZERO monitoring — Prometheus scraped four targets and none was the brain.
+  #
+  # It already exposes /metrics, so this needs no blackbox exporter: `up` for this job IS the liveness
+  # signal, and sidecar_* gives cost, latency and pool behaviour for free.
+  #
+  # REPOINTED ON-BOX (TG-413/TG-324). This read `dc1claude01:8094` until the sidecar was migrated onto
+  # this host — and the stale target is the reason the repoint matters more than a hostname edit:
+  #
+  #   the target stayed `health=up` after the cutover, because the OLD proxy is still running as a cold
+  #   spare. So every sidecar_* series Prometheus held described a machine serving ZERO production
+  #   traffic, while the sidecar actually answering every completion was not scraped at all. Green, and
+  #   about the wrong subject — measured 2026-08-07: the cold spare reported completions_total{ok} 2179
+  #   while the live one, at the same instant, was unmonitored.
+  #
+  # A decommission of that box (TG-414) would then have looked like "the brain went down".
+  #
+  # Verified before repointing: `sidecar:8094/metrics` serves the same series set as the old target
+  # (sidecar_up, sidecar_inflight, sidecar_completions_total all present on both; the same image), so no
+  # alert changes behaviour and no vacuity floor starts firing on the swap.
+  - job_name: opus-sidecar
+    static_configs:
+      # A compose service name, NOT an estate host. This is what removed Prometheus's tg-egress grant:
+      # it was the only off-host target in this file, so the whole reason the scraper could reach off the
+      # box went with it.
+      - targets: ["sidecar:8094"]
+

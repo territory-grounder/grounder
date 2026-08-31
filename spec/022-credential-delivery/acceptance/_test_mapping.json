@@ -1,0 +1,56 @@
+{
+  "feature": "credential-delivery.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes (must name a test); pending = specified behavior whose implementation does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior, INV-22). Nothing is built yet, so every scenario is pending — this is the DESIGN GATE for the credential-delivery refactor (owner-approved 2026-07-22, from audits TG-153/TG-154). Scenarios bind to real code as tasks T-022-* land.",
+  "scenarios": [
+    {
+      "name": "High-value secrets are delivered as SecretRefs, never as plaintext environment values",
+      "req": "REQ-2200",
+      "status": "present",
+      "test": "core/credential/delivery_test.go: TestDeliveryResolvesFromSubstrate (a declared ref resolves THROUGH the substrate) + TestDeliveryValidateRedactsLiteralToken (an inline literal where a reference belongs is refused and never echoed) + TestDeliveryDisabledIsBehaviourPreserving; core/preflight/secretpolicy_test.go pins the boot gate that makes it enforceable"
+    },
+    {
+      "name": "An unresolvable credential refuses the operation with no plaintext fallback",
+      "req": "REQ-2204",
+      "status": "present",
+      "test": "core/credential/delivery_test.go: TestDeliveryUnresolvableRefusesNoFallback + TestDeliveryEnabledRequiresInjectedResolver + TestDeliveryValidateFailClosed (every misconfigured direction refuses rather than degrading to a plaintext scheme)"
+    },
+    {
+      "name": "The master key never resides in the worker and seal/unseal calls the external key service",
+      "req": "REQ-2201",
+      "status": "present",
+      "test": "core/seal/master_test.go: TestSealerTransitRoundTrip (the wrapped DEK IS the Transit ciphertext and the calls hit /v1/transit/encrypt|decrypt/<key>; a refused DEK fails closed) + TestNewTransitWrapperFailClosed; core/seal/fromenv_test.go: TestTransitWinsOverALocalMasterKeyWhenBothAreConfigured (killing mutation executed)"
+    },
+    {
+      "name": "The actuation SSH identity is resolved just-in-time and not persisted between actuations",
+      "req": "REQ-2202",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "A leased actuation credential expires after its bounded lifetime",
+      "req": "REQ-2207",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "The read-only triage plane cannot resolve an actuation credential",
+      "req": "REQ-2203",
+      "status": "present",
+      "test": "TestTriagePlaneCannotReachAnyActuationCredential",
+      "note": "TG-153 (2026-08-04). The SUBSTRATE half is enforced by OpenBao (policy tg-triage-ro DENIES tg/actuator + tg/proxmox; verified live: triage token 403 on tg/actuator, 200 on hostdiag). The PROCESS half is this oracle in cmd/worker: with the full actuation .env present, a triage-plane process resolves \"\" for every actuation reference, and the boot SSH preflight does not even enumerate the mutate key. Siblings: TestTriagePlaneRefusesAnyActuationRef (core/credential — a triage process handed an actuation ref refuses to BOOT) and TestActuationActivityIsScheduledOnTheActuationQueue (temporal/runner — the mutating activity is dispatched to tg.actuate, which only the actuation worker polls)."
+    },
+    {
+      "name": "A resolved secret value never reaches a log, export, or error output",
+      "req": "REQ-2205",
+      "status": "present",
+      "test": "core/config/config_test.go: TestRedactedAndLoggableRefNeverEchoThePayload; core/credential/plane_split_test.go: TestPlaneSplitValidationNeverEchoesALiteralSecret; modules/credsource/vault/vault_test.go: TestResolveRefMalformedErrorsNeverEchoThePayload (killing check executed on this arm); modules/credsource/ansible/ansible_test.go: TestAnsibleResolveRefMalformedErrorsNeverEchoThePayload; modules/credsource/oidctoken/oidctoken_test.go: TestOIDCResolveRefMalformedErrorsNeverEchoThePayload"
+    },
+    {
+      "name": "The image-signing key is resolved from the substrate, not a plaintext CI variable",
+      "req": "REQ-2206",
+      "status": "pending",
+      "test": "",
+      "note": "RETIRED 2026-08-10 by owner ruling (TG-417): REQ-2206 is retired (see the requirements.md annotation) — the cosign gate was removed from CI and the verification chain deleted. The scenario stays mapped because the .feature keeps the historical text; status stays `pending` (the status enum has no `retired`) and it will not be implemented unless REQ-2206 is un-retired."
+    }
+  ]
+}

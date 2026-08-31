@@ -1,0 +1,279 @@
+{
+ "spec": "002-prediction-gate",
+ "tasks": [
+  {
+   "id": "T-002-1",
+   "title": "Fail-closed prediction gate: commit plan_hash prediction before poll; GatedProposal default-deny; analysis-only records without gating",
+   "files_owned": [
+    "core/predict/gate.go",
+    "core/predict/prediction.go"
+   ],
+   "deps": [],
+   "req_ids": [
+    "REQ-101",
+    "REQ-102",
+    "REQ-105"
+   ],
+   "acceptance": {
+    "feature": "prediction-gate.feature",
+    "scenarios": [
+     "A prediction is committed before the approval poll starts",
+     "A proposal with no committed prediction is denied",
+     "An approval poll cannot be built without a gated prediction",
+     "Analysis-only mode records the prediction without gating the approval"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 420,
+    "max_wall_clock_minutes": 90
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-002-2",
+   "title": "Deterministic verifier: sole writer of the match/partial/deviation verdict; deviation never auto-resolves",
+   "files_owned": [
+    "core/verify/verdict.go"
+   ],
+   "deps": [
+    "T-002-1"
+   ],
+   "req_ids": [
+    "REQ-103",
+    "REQ-103a",
+    "REQ-104"
+   ],
+   "acceptance": {
+    "feature": "prediction-gate.feature",
+    "scenarios": [
+     "The mechanical verdict is written only by the deterministic verifier",
+     "The acting model has no write path to the verdict columns",
+     "The verifier returns a typed verdict detail whose enum matches the bare verdict",
+     "A deviation verdict blocks auto-resolution"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 320,
+    "max_wall_clock_minutes": 75
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-002-3",
+   "title": "ActionManifest content-hash binding threaded through predict/approve/execute/verify",
+   "files_owned": [
+    "core/manifest/manifest.go"
+   ],
+   "deps": [],
+   "req_ids": [
+    "REQ-102"
+   ],
+   "acceptance": {
+    "feature": "prediction-gate.feature",
+    "scenarios": [
+     "The action_id is threaded unchanged through predict approve execute and verify",
+     "A mid-session action change mints a new action_id and forces a re-gate"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 200,
+    "max_wall_clock_minutes": 45
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-002-4",
+   "title": "Single ParseProposal -> typed Proposal (one grammar; unparseable/second-grammar fails closed, closing H-02)",
+   "files_owned": [
+    "core/proposal/proposal.go",
+    "core/proposal/parse.go"
+   ],
+   "deps": [],
+   "req_ids": [
+    "REQ-102",
+    "REQ-111"
+   ],
+   "acceptance": {
+    "feature": "prediction-gate.feature",
+    "scenarios": [
+     "The sole ParseProposal entry point rejects every second grammar"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 300,
+    "max_wall_clock_minutes": 75
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-002-R1",
+   "title": "Prediction, approval choice, executed tool-calls and verdict are bound to ONE action identity",
+   "files_owned": [],
+   "retrospective": true,
+   "deps": [],
+   "req_ids": [
+    "REQ-102b"
+   ],
+   "acceptance": {
+    "go_test": "core/actuate + temporal/runner: TestGateActivityPersistsManifest, TestPolicyAuthorizeComposesFreshBandNotFrozenManifest, TestAdmissionUsesFreshBandNotFrozenManifestBand, TestNilManifestIsRecordedRefusalNotError, TestSealedArgvDelegatesToRegistry"
+   },
+   "budget": {
+    "max_loc_delta": 1,
+    "max_wall_clock_minutes": 1
+   },
+   "status": "completed"
+  },
+  {
+   "files_owned": [],
+   "retrospective": true,
+   "deps": [],
+   "budget": {
+    "max_loc_delta": 1,
+    "max_wall_clock_minutes": 1
+   },
+   "status": "completed",
+   "id": "T-002-R2",
+   "title": "The verdict author subtracts pre-anomalous hosts; baseline-less callers are a closed, justified enumeration",
+   "req_ids": [
+    "REQ-106"
+   ],
+   "acceptance": {
+    "go_test": "core/verify: TestEveryBaselinelessVerdictCallSiteIsADeclaredException; core/db: TestOpenIncidentHostsAnchorsAtAsOf, TestOpenIncidentsBaselineFailsClosed"
+   }
+  },
+  {
+   "id": "T-002-R3",
+   "title": "A deviation trigger records the RULE that fired, and that evidence reaches the durable ledger row",
+   "files_owned": [],
+   "retrospective": true,
+   "deps": [],
+   "req_ids": [
+    "REQ-103b"
+   ],
+   "acceptance": {
+    "go_test": "core/verify: TestSurpriseEvidenceNamesTheRuleAndReachesTheLedgerLine, TestSeveralRulesOnOneSurpriseHostStayOneHostAndManyAlerts, TestSurpriseAlertsHonourEveryExclusionTheVerdictHonours"
+   },
+   "budget": {
+    "max_loc_delta": 1,
+    "max_wall_clock_minutes": 1
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-002-C4a",
+   "title": "Verdict scoping: estate-derived cross-site exclusion (both-known-and-differ, unknown never excluded) + rule-family matching on the single family authority",
+   "files_owned": [
+    "core/estate/site.go",
+    "core/verify/scoped_verdict_test.go"
+   ],
+   "deps": [],
+   "req_ids": [
+    "REQ-107",
+    "REQ-108"
+   ],
+   "acceptance": {
+    "feature": "prediction-gate.feature",
+    "scenarios": [
+     "A cross-site alert with both sites estate-known and different is excluded from deviation evidence",
+     "An unknown-site host is never cross-site-excluded",
+     "A family-sibling rule on a predicted host scores as the predicted failure mode"
+    ],
+    "go_test": "core/verify: TestScopedCrossSiteBothKnownDifferentIsExcluded, TestScopedUnknownSiteHostStillDeviates, TestScopedFamilySiblingRuleOnPredictedHostIsNotAMismatch, TestScopedFamilyMatchingNeverRescuesASurpriseHost; core/estate: TestSiteOfDeclaredMembershipWins, TestSiteOfNamePrefixTierCoversUndeclaredHosts, TestSiteOfUnknownHostStaysUnknown; core/actuate: TestCrossSiteFlapDoesNotDeviateOnTheExecutePath"
+   },
+   "budget": {
+    "max_loc_delta": 420,
+    "max_wall_clock_minutes": 120
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-002-C4b",
+   "title": "Falsifiability-scorer adjudication split: commit-time baseline for forecast verdicts, executed predictions verdict-free here, the shuffled control un-scoped",
+   "files_owned": [
+    "core/falsify/scorer.go",
+    "core/falsify/mem.go",
+    "core/db/falsify.go"
+   ],
+   "deps": [
+    "T-002-C4a"
+   ],
+   "req_ids": [
+    "REQ-109"
+   ],
+   "acceptance": {
+    "feature": "prediction-gate.feature",
+    "scenarios": [
+     "An executed prediction is falsifiability-scored but receives no forecast verdict",
+     "A pre-existing alert at commit time does not deviate a forecast",
+     "The shuffled control is not laundered by verdict scoping"
+    ],
+    "go_test": "core/falsify: TestScoreDuePreexistingBaselineAlertIsNotADeviation, TestScoreDueExecutedPredictionGetsNoForecastVerdict, TestScoreDueWithholdsForecastVerdictOutsideAnEstablishedBaseline, TestScoreDueCrossSiteScopingUsesTheEstateAuthority, TestScoreDueFamilySiblingRuleScoresMatch, TestScoreDueScopingNeverLaundersTheShuffledControl; core/db: TestOpenIncidentPairsAnchorsAtAsOfPerPair, TestFalsifyBaselineFailsClosed"
+   },
+   "budget": {
+    "max_loc_delta": 380,
+    "max_wall_clock_minutes": 120
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-002-220",
+   "title": "Learned falsifiability window (TG-220 / port-fidelity #20): max(900s, 2x p95 observed cascade latency) per edge, capped, learned from the durable ingest ledger — with the INV-22 control as the tripwire that widening is not laundering noise",
+   "files_owned": [
+    "core/falsify/window.go",
+    "core/falsify/learned_window_test.go",
+    "core/db/cascade_latency.go"
+   ],
+   "deps": [
+    "T-002-C4b"
+   ],
+   "req_ids": [
+    "REQ-110"
+   ],
+   "acceptance": {
+    "feature": "prediction-gate.feature",
+    "scenarios": [
+     "A cascade slower than the retired fixed window adjudicates as a hit",
+     "An edge with fast observed history keeps a tight window",
+     "Widening the observation window does not raise the shuffled control match rate"
+    ],
+    "go_test": "core/falsify: TestScoreDueFifteenMinuteCascadeIsAHitUnderTheLearnedWindow, TestScoreDueFixedWindowRecordsAMissMutationControl (MUTATION CONTROL - reverting to the fixed window turns the 15-minute oracle RED), TestLearnedWindowDoesNotRaiseTheShuffledControlMatchRate, TestLearnedWindowStillTripsINV22WhenTheControlMatchesMutationControl (MUTATION CONTROL - the control-ratio assertion can still fail), TestScoreDueUnreadableLatencyFallsBackToTheFloorNeverShorter, TestScoreDueLearnedWindowIsCappedSoNoPredictionIsStranded, TestScoreDueQueriesLatencyOnlyForTheDueBatchPrimaries, TestPercentileIsNearestRankWithNoInterpolation, TestEdgeWindowPortsMax900Times2P95, TestEdgeWindowUsesOnlyTheMostRecentSampleCapObservations, TestPredictionWindowTakesTheSlowestClaimedEdge, TestWindowIsAlwaysWithinItsBounds"
+   },
+   "budget": {
+    "max_loc_delta": 420,
+    "max_wall_clock_minutes": 120
+   },
+   "status": "completed"
+  },
+  {
+   "id": "T-002-378",
+   "title": "Seal-time state precondition (TG-378): requires_target_state declared per op-class, established from the staleness-bounded guest_liveness projection BEFORE commit/seal, observation recorded on the manifest, fail-closed on violated/unknown/unwired (unknown is not not-running)",
+   "files_owned": [
+    "core/predict/precondition_gate_test.go",
+    "core/actuate/opschema/requires_target_state_test.go",
+    "cmd/worker/guest_liveness_wire_test.go"
+   ],
+   "deps": [],
+   "req_ids": [
+    "REQ-112"
+   ],
+   "status": "completed",
+   "acceptance": {
+    "go_test": [
+     "TestAStartOnARunningGuestRefusesAtSeal",
+     "TestAnUnestablishablePreconditionRefuses",
+     "TestAnUnwiredStateReaderRefuses",
+     "TestAnObservedStoppedGuestSealsAndRecordsTheObservation",
+     "TestClassesWithoutAPreconditionAreUntouched",
+     "TestRequiresTargetStateIsAClosedEnum",
+     "TestOmitemptyKeepsUndeclaredSpecsHashStable",
+     "TestGuestLivenessCallSitesAreWired",
+     "TestTheGateStateSeamIsWired"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 600,
+    "max_wall_clock_minutes": 240
+   }
+  }
+ ]
+}

@@ -1,0 +1,144 @@
+{
+ "feature": "runner-workflow.feature",
+ "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes (must name a test); pending = specified behavior whose implementation does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior, INV-22). All scenarios drive the real RunnerWorkflow in the Temporal in-process test env.",
+ "scenarios": [
+  {
+   "name": "An ingested incident flows to a sealed gated proposal with no mutation",
+   "req": "REQ-1101",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "The action_id is threaded from derivation through the sealed manifest",
+   "req": "REQ-1103",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "An incident the agent cannot propose for ends without an action",
+   "req": "REQ-1104",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "An approved poll threads the human authorization into the execute path",
+   "req": "REQ-1105",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "A denied poll stands the session down without mutation",
+   "req": "REQ-1105",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "An unanswered poll times out to deny — never a silent approval",
+   "req": "REQ-1105",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "A vote bound to a different action is recorded and ignored — it releases nothing",
+   "req": "REQ-1105",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "The interceptor's effect leaf is read-only by default and inert while mutation is off",
+   "req": "REQ-1107",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "A gated execution binds evidence, wires an observer, and constructs the argv",
+   "req": "REQ-1109",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "A mispredicted post-state verifies as a deviation, not a clean match",
+   "req": "REQ-1108",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "Precedent ranked by both channels fuses above single-channel precedent",
+   "req": "REQ-1110",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "A semantic match below the similarity floor never enters the seed",
+   "req": "REQ-1110",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "Retrieval without an embedding model is exactly the lexical behavior",
+   "req": "REQ-1111",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "An embedding outage degrades that query to the lexical ranking",
+   "req": "REQ-1111",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "The seed wraps each block in a typed envelope and a forged guidance delimiter is neutralized",
+   "req": "REQ-1112",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "A finished session drives a terminal ticket close-out on the governance ledger",
+   "req": "REQ-1113",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "A confirmed-clear auto session is closed out to Done",
+   "req": "REQ-1113",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "A terminal reconcile never auto-closes an executed action whose post-state deviated",
+   "req": "REQ-1113",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "An unanswered poll hands the orphaned incident off to the escalation re-check lane",
+   "req": "REQ-1115",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "The scheduled FireDue cron fires every due escalation re-check",
+   "req": "REQ-1114",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "A FireDue error is captured and never crashes the cron run",
+   "req": "REQ-1114",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "A persistently failing pipeline activity is retried a bounded number of times then surfaces",
+   "req": "REQ-1116",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  },
+  {
+   "name": "A session that exhausts its wall-clock budget stops to the terminal human-handoff",
+   "req": "REQ-1117",
+   "status": "present",
+   "test": "TestRunnerWorkflowAcceptance"
+  }
+ ]
+}

@@ -1,0 +1,1248 @@
+# Territory Grounder CI — the P0-8 security gates run on every merge request.
+# [O] INV-02/INV-03/INV-13/INV-17, P0-8, P3-2.
+stages: [verify, docker, deploy, sync]
+
+variables:
+  GOTOOLCHAIN: auto
+  # The images this pipeline builds and pushes to the GitLab Container Registry (the "docker registry of the
+  # GitLab server"). A deploy pulls these by tag — the production host never builds from source (GitOps).
+  TG_GROUNDER_IMAGE: "$CI_REGISTRY_IMAGE/grounder"
+  TG_WORKER_IMAGE: "$CI_REGISTRY_IMAGE/worker"
+  TG_CONSOLE_IMAGE: "$CI_REGISTRY_IMAGE/console"
+  TG_SIDECAR_IMAGE: "$CI_REGISTRY_IMAGE/claude-proxy"
+
+default:
+  image: golang:1.25.12
+  # SYSTEM-class failures auto-retry (owner-ruled 2026-08-25: "no more failed pipeline/ci job emails,
+  # ever"). Scope is deliberately NOT script_failure: a real test/gate red must stay red — only the
+  # runner/infra classes retry (both 2026-08-25 reds this mechanizes against were Gitaly-403 checkout
+  # blips that a manual retry greened). A job that greens on auto-retry sends no failure email.
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - api_failure
+      - scheduler_failure
+      - stuck_or_timeout_failure
+      - unknown_failure
+
+.rules-mr: &rules-mr
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
+
+build-test:
+  stage: verify
+  <<: *rules-mr
+  variables:
+    # This job has NO Postgres service, so core/db's 83 DSN-gated oracles cannot run in it. That is
+    # legitimate — this job's claim is the race detector over every package, not the database layer, and
+    # the harness job below is where core/db is proven. It is declared here because core/db now FAILS
+    # rather than skipping silently (TG-258): `go test` discards a passing package's output without -v,
+    # so a run that skipped 83 of 125 tests and exited 0 reached the reader as a bare "ok", identical to
+    # a run that proved all 125. The exit status was the only channel left.
+    #
+    # The acknowledgement is deliberately NOT paired with a banner-printing step in this job, unlike
+    # `make test`, which does print one. A step that printed it would have to be a second
+    # `go test ./core/db/ -run ...` line, and ci_coverage_test.go fails the build on ANY -run filter
+    # against this package — correctly, since that filter is how 21 oracles once ran in no pipeline at
+    # all. Buying a log line by loosening that gate would be a bad trade. What stands in its place is
+    # this comment plus the two oracles that make the omission safe: TestEveryDSNGatedOracleRunsInCI
+    # keeps the harness invocation unfiltered, and TestHarnessJobRequiresTheDSN keeps
+    # TG_DB_TESTS_REQUIRE_DSN on it. Neither this job's log nor its green is evidence about core/db, and
+    # nothing in the repository claims otherwise.
+    TG_DB_TESTS_MAY_SKIP: "1"
+  script:
+    - go build ./...
+    - go vet ./...
+    - go test ./... -race -count=1
+
+forbidden-patterns:
+  stage: verify
+  <<: *rules-mr
+  script:
+    - bash scripts/lint-forbidden.sh
+
+# The post-deploy gate's OWN oracle (same convention as protected-paths running lint-protected-paths_test.sh
+# before the gate). verify-deploy.sh only runs on main, in the deploy stage, so without this its logic would
+# never be exercised on a merge request — and a broken gate is indistinguishable from a passing one until the
+# day it has to catch an outage. The test drives it against controlled status codes and asserts it FAILS on
+# the 502 shape that this pipeline reported as SUCCESS on 2026-07-28.
+# SIDECAR_FORCE_DEPLOY=1 runs this whole chain on demand (Run Pipeline -> add the variable), for two
+# reasons that both bit during its construction:
+#   * a fix to THIS FILE does not touch deploy/claude-proxy/**, so the path-scoped jobs sit the pipeline
+#     out — three consecutive fixes to deploy-sidecar merged green without the fixed job ever running,
+#     and the only way to exercise it was to invent a commit on the component's path;
+#   * a redeploy (rollback, a host that lost its container, re-pulling after a registry change) needs no
+#     source change at all, and inventing one to trigger a deploy is how a repo grows dummy commits.
+#
+# The claude-proxy is a Rust crate that CI has never touched: before this job there was no cargo
+# invocation and no `deploy/claude-proxy/` reference anywhere in this file, so its 35 tests — including the
+# 14 oauth_rotate ones that predate the latency work — had never executed in CI even once. They lock things
+# that are invisible to the compiler: the CLI argv contract (`--tools` is VARIADIC and must never be last,
+# or it swallows the next argument), and the warm pool's use-once invariant (a reused worker leaks the
+# previous caller's turn into the next one — measured on the contributor's fork).
+#
+# `changes:` scoped, because rebuilding a Rust crate on every console commit is a tax with no finding
+# attached. The gate is not the whole pipeline's concern — it is this component's.
+sidecar-test:
+  stage: verify
+  image: rust:1-alpine
+  tags: [docker]
+  rules:
+    - if: '$SIDECAR_FORCE_DEPLOY == "1"'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
+      changes: [deploy/claude-proxy/**/*]
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: [deploy/claude-proxy/**/*]
+  before_script:
+    - apk add --no-cache musl-dev
+  script:
+    - cd deploy/claude-proxy
+    - cargo test --release --locked
+
+# GitLab's own CI lint says `valid: true` for a well-formed PIPELINE; it never parses the shell inside the
+# script blocks. deploy-sidecar shipped past that lint with a `case` split across line continuations and
+# died on the runner at line 1 (pipeline 45727) — after pulling an image and cloning the repo, and after
+# emailing the owner. This gate hands every block to `bash -n`.
+ci-shell:
+  stage: verify
+  <<: *rules-mr
+  image: python:3.12-slim
+  script:
+    - pip install --quiet pyyaml
+    - bash scripts/lint-ci-shell.sh
+
+# The orientation-budget gate (TG-428): the resume path (CLAUDE.md + AGENTS.md + docs/BOARD.md) must fit
+# the DoD v1.1 10k-token cold-start budget (enforced as 40,000 bytes at a stated 4 B/token), and the
+# steering surface + CONTRIBUTING.md must stay free of the two retired claims that keep resurfacing.
+# Drill first, gate second — same order as governance-schedules, for the same reason: a gate nobody
+# drills is a gate nobody knows can fail. Alpine's busybox grep lacks the GNU flags the gate leans on,
+# hence the explicit grep package beside bash/coreutils.
+resume-budget:
+  stage: verify
+  <<: *rules-mr
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache bash coreutils grep >/dev/null
+  script:
+    - bash scripts/lint-resume-budget_test.sh
+    - bash scripts/lint-resume-budget.sh
+
+deploy-gate-test:
+  stage: verify
+  <<: *rules-mr
+  image: python:3.12-slim
+  script:
+    - apt-get update -qq && apt-get install -y -qq curl >/dev/null
+    - bash scripts/verify-deploy_test.sh
+
+# The law-surface gate (TG-185): a change to the constitution / mechanical safety core / ADRs / spec / CI /
+# CODEOWNERS must carry an explicit `Law-Change-Approved-By: @<codeowner>` commit trailer — the IN-REPO
+# mechanical control CODEOWNERS is meant to be (its own enforcement is an out-of-repo, not-yet-enabled GitLab
+# setting). GIT_DEPTH:0 so the MR merge-base is reachable for the diff.
+# darkcheck (MECH-617): the wiring-seam guard. UN-GATED ON PURPOSE — no `changes:` key and no
+# allow_failure. A dark-component detector that only runs when the code it watches is edited goes dark
+# precisely when a component has quietly died, and tools/shadowbench already taught this repo the lesson
+# the expensive way: it carried test_judge_symmetry.py and test_rubric.py that NO CI JOB HAS EVER RUN.
+darkcheck:
+  stage: verify
+  <<: *rules-mr
+  image: golang:1.25.12
+  script:
+    - go test ./core/wiring/... ./deploy/... ./cmd/worker/... -run 'Wiring|Seam|Bind|Because|DarkSeam|CleanWiring|Notifier' -count=1
+
+protected-paths:
+  stage: verify
+  <<: *rules-mr
+  variables:
+    GIT_DEPTH: "0"
+  script:
+    - bash scripts/lint-protected-paths_test.sh
+    - bash scripts/lint-protected-paths.sh
+
+# MIGRATION NUMBERS COLLIDE ACROSS UNMERGED BRANCHES (TG-374). The in-tree test refuses two migrations
+# sharing a number ON ONE TREE — which catches it the merge AFTER the mistake, when renumbering an approved
+# MR is expensive: schema_migrations keys on the FILENAME, so a renumber re-applies the migration everywhere
+# the old name already ran.
+#
+# The mistake is not carelessness. On 2026-08-06 two open MRs each added an 0061; both authors had checked
+# `main`, where 0060 was the highest, and both were right about main. Thirteen unmerged branches touched
+# core/db/migrations at the time. And 0058 is ALREADY duplicated in production — that pair merged twice,
+# unnoticed.
+#
+# Purely local: it reads the remote refs the runner already fetched under GIT_DEPTH 0, with no API call and
+# no token, so it cannot fail because GitLab is slow. The self-test runs first and drives the gate over a
+# scratch repository with a known collision — including a STACKED branch carrying its parent's migration,
+# which must NOT be reported, because a gate that fires on every stacked MR is a gate that gets switched off.
+migration-collision:
+  stage: verify
+  <<: *rules-mr
+  variables:
+    GIT_DEPTH: "0"
+  script:
+    - bash scripts/lint-migration-collision_test.sh
+    - bash scripts/lint-migration-collision.sh
+
+# THE EVAL GATE FINALLY BLOCKS SOMETHING (TG-237 / MECH-611). The judged eval cannot run here — no on-box
+# model gateway — so this enforces what CI can actually know: an agent-behavior change must carry the on-box
+# gate's own committed record (eval/history/<date>-change-<sha>/verdict.json, "pass": true) or a named
+# Eval-Gate-Waived-By trailer. allow_failure is absent, i.e. false: this REFUSES a merge, which is the limb
+# the predecessor's `allow_failure: false` provided and TG had never had.
+eval-evidence:
+  stage: verify
+  <<: *rules-mr
+  variables:
+    GIT_DEPTH: "0"
+  script:
+    - bash scripts/lint-eval-evidence_test.sh
+    - bash scripts/lint-eval-evidence.sh
+    # The eval harness's LibreNMS read-token resolver (TG-362). It feeds controlObservability, which
+    # decides which negative controls are adjudicable at all — and it was broken in two different ways
+    # for weeks because nothing ever exercised its FAILURE paths. Shadows ssh/bao/curl, so it needs no
+    # estate and no network. Drives the same file eval-gate.sh and tier-ab.sh both source.
+    - bash eval/lib-librenms-token_test.sh
+
+# The spec lattice is a release gate: EARS shape, REQ uniqueness, weasel-word ban, tasks DAG
+# acyclicity, requirement<->task<->scenario traceability, and spec<->code lockstep drift.
+# [F] spec/007 · [O] INV-22.
+# The TG-4 leg-2 mechanization: nothing ships retired-but-present. deadcode (x/tools, version-pinned in
+# the script) runs over every binary; the committed baseline is a ONE-WAY ratchet — new dead code fails,
+# fixed dead code must shrink the baseline (same discipline as tally and the main() LOC ratchet). The
+# baseline itself is the decommission worklist: 466 entries at introduction, reviewed like any diff.
+deadcode-gate:
+  stage: verify
+  <<: *rules-mr
+  script:
+    - bash scripts/deadcode-gate.sh check
+
+spec-lattice:
+  stage: verify
+  <<: *rules-mr
+  script:
+    - go run ./tools/specvalidate
+    - go run ./tools/specvalidate lockstep --check
+    # The generated lattice-state block in spec/00-INDEX.md must match the tree — the hand-written
+    # block it replaced was wrong on every count within ten days (TG-416 successor).
+    - go run ./tools/specvalidate tally --check
+
+# The PROOF PLANE (spec/025 REQ-2507): the harness produces the v1.0 claim and, until this job existed, ran
+# in NO CI job at all — 408 lines of published-axis SQL with no test, bound to nothing. The golden fixture
+# needs a REAL Postgres with every migration applied: a pgx fake has already hidden a field-drop here, and
+# every measurement defect found so far was a JOIN-semantics bug a fake cannot reproduce. The DSN is supplied
+# so the suite RUNS in CI — a local skip is a convenience, never the CI behaviour.
+harness:
+  stage: verify
+  <<: *rules-mr
+  services:
+    # pgvector, NOT plain postgres:16 — migration 0013 creates the `vector` extension for the semantic
+    # retrieval plane, so a stock image fails at that migration. This mirrors the production stack image, which
+    # is the point: a fixture on a different database than production tests a different database.
+    - name: pgvector/pgvector:pg16@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
+      alias: postgres
+  variables:
+    POSTGRES_DB: goldtest
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: goldtest
+    POSTGRES_HOST_AUTH_METHOD: trust
+    TG_TEST_DSN: "postgres://postgres:goldtest@postgres:5432/goldtest?sslmode=disable"
+    # The transition-log round-trip is gated on its OWN var. It was written when CI had no Postgres and so ran
+    # NOWHERE — including the belt's rule-scoping, whose absence let an unrelated rule's recovery confirm a heal
+    # that never happened. A DSN-gated test with no job that supplies a DSN is an undeclared test gap (INV-22).
+    # ...pointed at its OWN database: this test runs Migrate() ITSELF, and the goldtest DB is already migrated
+    # by the psql loop below, so sharing one would fail on "type band already exists".
+    TG_TEST_POSTGRES_DSN: "postgres://postgres:goldtest@postgres:5432/translog?sslmode=disable"
+    # THIS JOB IS THE ONLY RUN WHOSE GREEN IS CITED AS PROOF OF core/db, SO IT MUST NOT BE ABLE TO BE GREEN
+    # WITHOUT PRODUCING IT (TG-258). Both DSNs above are supplied by this job's own `variables:` block, and a
+    # variable can arrive empty even when the service comes up — a typo, a rename, a `variables:` merge that
+    # drops a key. When that happens every DSN-gated test calls t.Skip, and t.Skip is INVISIBLE without -v:
+    # `go test ./core/db/ -count=1` below would print a bare "ok" over 83 of 125 tests that never executed,
+    # including TestVerdictSingleWriterSkipsExecuted, the only executed proof of the [P1][integrity] fix
+    # TG-184. Measured 2026-08-03: a DSN-less run of this package exits 0 today.
+    #
+    # This flag makes core/db's TestMain treat "any test could not run" as a HARD FAILURE rather than a
+    # loud-but-green banner. It belongs here and NOT in the `build-test` job, which legitimately runs
+    # `go test ./... -race` with no Postgres service: that job's claim is the race detector over every
+    # package, not the database layer, and it still prints the banner saying so. core/db's
+    # TestHarnessJobRequiresTheDSN asserts this line stays here — the same "read the shipped pipeline"
+    # discipline as TestEveryDSNGatedOracleRunsInCI, because no behavioural test can detect its own
+    # non-execution.
+    TG_DB_TESTS_REQUIRE_DSN: "1"
+  script:
+    # The runtime role the append-only REVOKEs target; created first so every migration applies cleanly.
+    - apt-get update -qq && apt-get install -y -qq postgresql-client >/dev/null
+    - psql "$TG_TEST_DSN" -q -c 'DO $$ BEGIN CREATE ROLE tg_runtime; EXCEPTION WHEN duplicate_object THEN NULL; END $$;'
+    - for f in $(ls core/db/migrations/*.up.sql | sort); do psql "$TG_TEST_DSN" -v ON_ERROR_STOP=1 -q -f "$f"; done
+    # A separate, UNMIGRATED database for the transition-log round-trip, which migrates itself.
+    - psql "$TG_TEST_DSN" -q -c 'CREATE DATABASE translog;'
+    # EVERY core/db oracle — no -run filter. The filter that used to sit here ('Axis|TransitionLog|Attribution')
+    # matched 6 of 27 DSN-gated test functions, so 21 of them executed in NO pipeline while this job stood as
+    # the reason to believe the database layer was guarded. It hid TestTraceSpineRoundTrip RED on main for
+    # EIGHT DAYS (the `screen` stage was added 2026-07-21 and the expected step count never updated), and it
+    # excluded the alert-history/open-incident oracles behind the corroboration switch (REQ-1126), the
+    # actuation baseline gate (REQ-1228), and the SQL shadow-suppression check that a decision to DROP live
+    # alerts would rest on. A filter here is not a speed optimisation; it is an undeclared test gap (INV-22).
+    # TestEveryDSNGatedOracleRunsInCI in core/db asserts this line stays unfiltered.
+    - go test ./core/db/ -count=1
+    - go test ./spec/025-benchmark-harness/... -count=1
+    # A measurement surface that is not lockstep-bound can be redefined between two published numbers.
+    - go run ./tools/specvalidate lockstep --check
+    # RATIFICATION RATCHET (spec/007 REQ-705). Lockstep binds CODE to specs and the prose validator checks
+    # wording; neither notices a requirement no task references, or a task naming an acceptance scenario that
+    # does not exist. Both are silent, and both leave governance that READS as exercised.
+    #
+    # --max-findings pins the CURRENT debt as a CEILING rather than demanding zero on day one. A gate that
+    # fails on all pre-existing debt gets disabled within a week, at which point it protects nothing; a ceiling
+    # that can only fall reds the build the moment anything NEW goes unratified. It is the one shape of
+    # tolerated failure that is not a fail-open, because it cannot admit a new finding. Lower it whenever the
+    # count drops — the tool prints the number to lower it to.
+    # The ceiling is GONE: the traceability check (requirement<->task<->scenario) demands ZERO findings and
+    # holds. NOTE the terminology trap this comment once fell into: passing `ratify --check` is NOT the spec
+    # status `Ratified` (spec/00-INDEX.md status column — no spec has reached it); this check is pure
+    # traceability. A ratchet was the right shape while debt existed; keeping one after it is cleared would
+    # leave room for exactly the regression it was built to prevent.
+    - go run ./tools/specvalidate ratify --check
+    - go run ./tools/specvalidate opcover --check
+gitleaks:
+  stage: verify
+  <<: *rules-mr
+  image:
+    name: zricethezav/gitleaks:latest
+    # The image's ENTRYPOINT is the gitleaks binary; clear it so the runner can run its shell
+    # prologue (otherwise the script is passed as `gitleaks sh -c ...` -> "unknown command sh").
+    entrypoint: [""]
+  script:
+    - gitleaks detect --source . --config .gitleaks.toml --redact --verbose --no-banner --exit-code 1
+
+# Supply-chain SCA (TG-158): fail on any Go vulnerability REACHABLE from our code. govulncheck is
+# call-graph precise — it flags only advisories actually called, not merely present, so the gate does not
+# false-alarm on unused transitive deps. Stdlib CVEs are cleared by go.mod's `toolchain` directive (currently go1.25.13) — the golang image tag
+# can LAG a stdlib patch release (1.25.13 had no Docker Hub image the day its advisories published), so the
+# directive, which GOTOOLCHAIN=auto honors by fetching the released toolchain, is the bump lever; a new
+# advisory forces a toolchain or dependency bump (the intended hygiene loop). [F] OWASP LLM03 / NIST SSDF.
+govulncheck:
+  stage: verify
+  <<: *rules-mr
+  script:
+    - go install golang.org/x/vuln/cmd/govulncheck@latest
+    - govulncheck ./...
+
+# Supply-chain (TG-159): third-party base/runtime images must be @sha256-pinned so a floating tag can never
+# swap the trusted computing base underneath the signed governance system. A trivial shell check — no Docker.
+#
+# THE DRILL RUNS FIRST, and that is the whole lesson of TG-283. This job was green for weeks while the gate
+# it runs matched images by keyword allowlist (busybox was not on the list) and returned 0 over a directory
+# containing nothing at all. TG-159 was closed on that green. Same convention as protected-paths: the gate's
+# own oracle runs before the gate, so "image-pins passed" is a claim about a gate that was proven able to
+# fail on the same pipeline.
+image-pins:
+  stage: verify
+  <<: *rules-mr
+  script:
+    - bash scripts/lint-image-pins_test.sh
+    - bash scripts/lint-image-pins.sh
+
+# Supply-chain (TG-158): CVE-scan the litellm image we actually deploy. Digest-pinning FROZE it, and govulncheck
+# is Go-only, so litellm (Python + OS packages) would otherwise carry undetected CVEs — it holds every provider
+# API key. Scan the EXACT pinned digest from compose (stays in sync). Gate on FIXABLE criticals only
+# (--ignore-unfixed): a fixable CRITICAL means "re-pin litellm to a patched digest" — the intended hygiene loop;
+# an unfixable one is not actionable and must not wedge the pipeline. trivy pulls via the registry (no dind).
+trivy-image-scan:
+  stage: verify
+  <<: *rules-mr
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  script:
+    - REF=$(grep -oE 'ghcr\.io/berriai/litellm[^ ]*@sha256:[a-f0-9]+' deploy/docker-compose.yml | head -1)
+    - test -n "$REF"  # the image-pins gate guarantees litellm is pinned; fail loudly if the grep drifts
+    # --timeout 15m: the litellm image is large and, when trivy's vuln DB is COLD on a fresh runner, the
+    # DB pull + scan exceeds trivy's DEFAULT 5m and dies "context deadline exceeded" analyzing a layer —
+    # a transient FLAKE, not a finding (the same scan finishes in ~25s with a warm DB), and it exits 1
+    # (script_failure), so the pipeline's SYSTEM-class retry never catches it. Two MRs red-flaked this way
+    # 2026-08-27. A generous ceiling removes the flake without weakening the CRITICAL/unfixed gate.
+    - trivy image --scanners vuln --ignore-unfixed --severity CRITICAL --exit-code 1 --no-progress --timeout 15m "$REF"
+
+# Supply-chain (TG-158): emit a CycloneDX + SPDX SBOM of the source + Go dependency tree as a retained artifact
+# — the provenance record for what ships (the input a later cosign attestation signs). Non-gating: an SBOM
+# describes, it does not judge; the govulncheck/trivy gates do the judging.
+sbom:
+  stage: verify
+  <<: *rules-mr
+  # The anchore/syft image is shell-less (distroless), so GitLab's script prologue fails with
+  # `exec: "sh": not found` even with entrypoint cleared. Run syft from a shell-having base and install a
+  # PINNED syft binary via the official installer. An SBOM is a DESCRIPTIVE provenance artifact — it judges
+  # nothing (the govulncheck/trivy gates do), so it must never gate a merge or red main: allow_failure. The
+  # installer pulls the binary from github, which the runner reaches unreliably (observed HTTP 000 timeouts),
+  # so retry with backoff; a persistent egress outage then soft-fails instead of blocking delivery.
+  image: alpine:3.20
+  allow_failure: true
+  script:
+    - apk add --no-cache curl ca-certificates
+    - |
+      for i in 1 2 3 4 5; do
+        curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin v1.49.0 && break
+        echo "syft install attempt $i failed (github egress); retrying in $((i*10))s"; sleep $((i*10))
+      done
+    - command -v syft >/dev/null 2>&1 || { echo "syft unavailable after retries (github egress) — skipping SBOM"; exit 1; }
+    - syft dir:. --source-name territory-grounder -o cyclonedx-json=sbom.cyclonedx.json -o spdx-json=sbom.spdx.json
+  artifacts:
+    paths: [sbom.cyclonedx.json, sbom.spdx.json]
+    expire_in: 90 days
+
+# A route with no auth method panics at boot (INV-01); the preflight must pass read-only.
+preflight-smoke:
+  stage: verify
+  <<: *rules-mr
+  script:
+    - go run ./cmd/grounder --check
+
+# The generated wire contracts must not drift from the served surface (INV-15, spec/006 REQ-501b).
+contracts-drift:
+  stage: verify
+  <<: *rules-mr
+  script:
+    - go run ./tools/gencontracts/cmd/gencontracts -check
+
+# spec/009 REQ-908 / INV-13: on any Helm chart change, run `helm lint` + a `helm template` render and
+# scan the rendered manifests for a literal credential — fail the pipeline on a lint error or any hit.
+helm-lint:
+  stage: verify
+  image:
+    name: alpine/helm:3.16.2
+    entrypoint: [""]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: [deploy/helm/**/*]
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
+      changes: [deploy/helm/**/*]
+  script:
+    - apk add --no-cache bash grep
+    - bash deploy/helm/ci/helm-lint.sh
+
+# spec/010: the React frontend/ was REMOVED 2026-07-30 (ADR-0015) — it was unreachable by construction
+# (the console image overwrote its entry point; nginx served its bundle 0 times) while its green CI job
+# certified it. The served console is deploy/console/v2/, gated by console-verify + console-e2e +
+# deploy/served_console_test.go. The tree as it existed is tagged archive/frontend-react.
+
+# #55: the SERVED operator console is deploy/console/v2/index.html (the console Dockerfile overwrites the
+# built React index with it). index.html is a BUILD ARTIFACT of deploy/console/v2/assemble.py + modules/*;
+# this job fails if the committed index.html drifts from what assemble.py produces, so the pipeline can
+# never silently stop being its source of truth (and index.html can never be hand-edited ahead of source).
+console-drift:
+  stage: verify
+  image: python:3.12-slim
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: [deploy/console/v2/**/*]
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
+      changes: [deploy/console/v2/**/*]
+  script:
+    - python3 deploy/console/v2/assemble.py --check
+
+# The console's Playwright oracles EXISTED but nothing ran them: deploy/console/v2/e2e/*.mjs held five
+# behavioural guards (nav actually switches the view, boot resilience, deeplinks, estate-depth, the band
+# cell) and no CI job invoked any of them, so a regression in the served console could only be caught by a
+# human clicking. They are cheap and they gate now.
+#
+# serve.mjs binds an explicit port and REFUSES to continue if it is taken — during this job's authoring a
+# local run silently hit an unrelated ssh tunnel squatting on the port, served a different build, and
+# produced a completely credible RED that had nothing to do with the code under test.
+console-e2e:
+  stage: verify
+  image: mcr.microsoft.com/playwright:v1.61.1-noble
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: [deploy/console/v2/**/*]
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
+      changes: [deploy/console/v2/**/*]
+  script:
+    # npm ci against the committed package-lock; the browsers themselves ship in the image
+    # (PLAYWRIGHT_BROWSERS_PATH=/ms-playwright), so nothing is downloaded at test time.
+    - cd deploy/console/v2/e2e
+    - npm ci
+    - bash run.sh
+
+# spec/012 REQ-1120: the monitoring config (Prometheus alert rules + Grafana dashboards) is provisioned from
+# MOUNTED files. A broken rule or dashboard fails SILENTLY at load time — and because the AWX deploy does not
+# currently sync the monitoring/ subdir, it would not even fail the deploy. Validate both at merge time so a
+# malformed alert (an incident silently never fires) or dashboard can never land on main. Changes-gated.
+monitoring-rules:
+  stage: verify
+  image:
+    name: prom/prometheus:v2.54.1
+    entrypoint: [""]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: [deploy/monitoring/alert.rules.yml]
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
+      changes: [deploy/monitoring/alert.rules.yml]
+  script:
+    - promtool check rules deploy/monitoring/alert.rules.yml
+
+# promtool proves an alert PARSES; it cannot prove one is MEANINGFUL. A rule reading a calibration score that
+# is WITHHELD at N=0 stays silent when the system is unmeasured, and that silence reads as "confidence is
+# fine" (spec/020 REQ-2022). This asserts the N>0 guard over the CLOSED SET of such gauges.
+#
+# Its OWN job, deliberately: the promtool image carries no python3 (the first attempt exited 127), and folding
+# it into monitoring-dashboards would gate it on `grafana/**` — so it would NOT run when only the alert rules
+# change, which is exactly when it is needed. Same changes-gate as the rules job it guards.
+monitoring-alert-guards:
+  stage: verify
+  image: python:3.12-slim
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: [deploy/monitoring/alert.rules.yml]
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
+      changes: [deploy/monitoring/alert.rules.yml]
+  script:
+    - python3 deploy/monitoring/ci/validate-alert-guards.py
+
+monitoring-dashboards:
+  stage: verify
+  image: python:3.12-slim
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: [deploy/monitoring/grafana/**/*]
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
+      changes: [deploy/monitoring/grafana/**/*]
+  script:
+    - python3 deploy/monitoring/ci/validate-dashboards.py
+
+# spec/025 / P6-2: the confirmatory analysis for the exceed-proof is PRE-REGISTERED and frozen. This job is
+# what makes the freeze real: test_analyze.py asserts analyze.py's SHA-256 against the hash recorded in
+# PRE-REGISTRATION.md, so the analysis cannot be edited after pairs start accruing without the pre-registration
+# visibly changing in the same MR. It also checks every statistic against a hand-computed value — a statistics
+# bug is the one defect class that yields a confident, plausible, WRONG headline with nothing downstream to
+# catch it.
+#
+# NOT changes-gated, deliberately, and this is the reason: tools/shadowbench already carried
+# test_judge_symmetry.py and test_rubric.py, and NO CI JOB HAS EVER RUN THEM. They passed nowhere. A
+# changes-gated rule would reproduce that failure the moment the analysis and its tests stop being edited
+# together. The suite is seconds long; run it always.
+shadowbench-analysis:
+  stage: verify
+  image: python:3.12-slim
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
+  script:
+    - cd tools/shadowbench
+    # EXECUTE EVERY test_*.py BY GLOB, not by a hand-listed set and not by `unittest discover`.
+    # discover only collects unittest.TestCase subclasses, and test_rubric.py / test_judge_symmetry.py are
+    # plain-function scripts — it walks straight past them and reports OK. That is exactly how they came to
+    # run nowhere for their whole existence. A glob cannot skip a file for being the wrong shape, and cannot
+    # go stale when a new one is added.
+    - |
+      set -eu
+      fail=0
+      for f in test_*.py; do
+        echo "--- $f"
+        python3 "$f" || fail=1
+      done
+      exit $fail
+
+# spec/012 / paradigm-rule 6: the LiteLLM gateway config is the model ladder the whole reasoning plane runs
+# on. LiteLLM boots even with a partly-broken config (it skips a bad model entry), so a typo'd model or a
+# fallback pointing at an undefined model silently breaks failover while the container stays UP. Validate the
+# ladder + that every fallback reference resolves, at merge time. Changes-gated.
+litellm-config:
+  stage: verify
+  image: python:3.12-slim
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: [deploy/litellm-config.yaml]
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
+      changes: [deploy/litellm-config.yaml]
+  script:
+    - pip install --quiet pyyaml
+    - python3 deploy/ci/validate-litellm-config.py
+
+# --- Scheduled self-monitoring TREND-WATCH (TG-43; drift-split TG-64) -------------------------------------
+# "Eval gates deploys" as a TOOLED gate, not a hand-run discipline. TG's CI has no Postgres/Temporal/model
+# gateway, so the LLM-judge eval CANNOT run on the normal MR pipeline (it would always fail) — the model
+# lives on the box (dc1tg01 loopback LiteLLM). So this job runs ONLY on a SCHEDULE: it SSH-tunnels the
+# box and runs `make eval-drift` (the TREND-WATCH — NOT the pre-merge change gate). Trend mode measures a
+# CLEAN main run vs the COMMITTED baseline for long-horizon drift, opens/updates a YouTrack issue on a
+# genuine regression, and SELF-REFRESHES eval/baseline-scorecard.json on a clean, non-regressing run so the
+# anchor tracks main and never goes stale (the staleness that TG-64 fixed for the pre-merge gate). The pre-
+# merge gate (`make eval-gate`) uses a fresh origin/main base arm instead and is NEVER run here.
+#
+# SET UP (Settings -> CI/CD -> Schedules): add a NIGHTLY schedule (e.g. cron "0 3 * * *", target branch main).
+# REQUIRED CI/CD variables (Settings -> CI/CD -> Variables) — the job SKIPS CLEANLY if TG_EVAL_SSH_KEY is
+# absent, so simply adding this job never reds a pipeline:
+#   TG_EVAL_SSH_KEY         — File-type var: the private key that can SSH root@dc1tg01 (read-only eval access; the eval never actuates)
+#   YT_URL, YT_TOKEN        — (optional) YouTrack base URL + permanent token, to auto-file a regression issue in project TG
+#   TG_BASELINE_PUSH_TOKEN  — (optional) a write_repository token; if set, the self-refreshed baseline is committed+pushed to main
+#   TG_BOX                  — (optional) override the ssh target (default root@dc1tg01)
+#   TG_EVAL_RUNS            — (optional) pooled runs per trend measurement (default 2 for the nightly)
+# REMOVED (owner directive 2026-08-08): the `baseline-freshness` dead-man is NO LONGER a CI job. During
+# active development an 8-day staleness check on the eval baseline reddened every main pipeline (and emailed
+# per-merge) for a once-a-day, time-based fact — noise, not signal, and it must NEVER be a GitLab CI
+# dependency again. The eval-baseline staleness concern (TG-424) is knowingly de-scoped from blocking CI for
+# this phase; if a quality-trend heartbeat is wanted later it belongs on the nightly schedule as a
+# NON-blocking notice, not a pipeline gate. The check + its drill (eval/ci/check-baseline-freshness*.sh) were
+# deleted with the job so no orphaned self-test trips the eval-CI-wiring guard (TG-406).
+
+# ACTUATION-GUARD COVERAGE (TG-281). Asserts that every host ACCEPTING TG's actuation SSH key also PINS it
+# to the forced command. A host that accepts the key without command="/usr/local/sbin/tg-actuator-guard"
+# hands a leaked key arbitrary root, and no TG-side gate helps — they bind the commands TG constructs, not
+# the ones a stolen key sends.
+#
+# Nightly rather than per-MR because it measures the ESTATE, not the tree, and the estate changes without
+# a commit: a host rebuilt from an older image, or a key added by hand to debug something, reopens the hole
+# with nothing in CI to notice. The drill runs first, so a green here is a claim from a check proven able
+# to fail on the same pipeline.
+actuation-guard-coverage:
+  stage: verify
+  needs: []
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+  image: registry-gitlab.example.net/infrastructure/dc1/production/ci-deploy-tools:latest
+  script:
+    - bash scripts/check-actuation-guard-coverage_test.sh
+    - bash scripts/check-actuation-guard-coverage.sh
+
+# DELIVERY WITNESSES (TG-428). Two ends of the delivery loop that no tree-scoped gate can see, because
+# both drift WITHOUT a commit:
+#   1. deployed-sha drift — does production run main's code? Merged+green is not deployed: on 2026-08-07
+#      cosign-verify broke CD, the deploy job SKIPPED silently, and the estate sat on 63e2ba60 while main
+#      kept moving (TG-417). The witness reads the RUNNING containers' image tags over AWX and compares
+#      them to this checkout's tip (a scheduled pipeline's checkout IS main's tip), with a 120m grace
+#      window so a deploy in flight is not an alarm.
+#   2. the merge-gate setting — is only_allow_merge_if_pipeline_succeeds still ON? It lives in the GitLab
+#      project config, not in this tree; flipping it off re-arms the red-main fall-through and produces
+#      no commit for any MR gate to examine.
+# Scheduled lane, same shape as actuation-guard-coverage above; drills run first so a green is a claim
+# from checks proven able to fail on the same pipeline. GIT_DEPTH is left at the project default ON
+# PURPOSE — the deployed-sha witness reads the tip's commit time from git.
+#
+# TG_READONLY_API_TOKEN IS PROVISIONED (verified 2026-08-22: the variable exists on the project and the
+#   merge-gate witness reads the setting live — "merge gate: ON ... via TG_READONLY_API_TOKEN"). This lane
+#   is normally GREEN; it was known-red only while that token was missing, and that note is now retired.
+#
+#   IT STILL FAILS CLOSED, AND THAT IS THE POINT. A witness that cannot SEE must not certify, so either
+#   witness going blind fails the job rather than skipping. That is not drift when it happens: on
+#   2026-08-21 this job failed because the deployed-sha witness got no RUNNING= marker back from the AWX
+#   ad-hoc and refused to certify — the designed behaviour, not a broken lane. Read a red here as "a
+#   witness lost its eyes", and fix the eyes; never make the blind state pass.
+delivery-witnesses:
+  stage: verify
+  needs: []
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+  image: registry-gitlab.example.net/infrastructure/dc1/production/ci-deploy-tools:latest
+  script:
+    - bash scripts/deployed-sha-witness_test.sh
+    - bash scripts/check-merge-gate-setting_test.sh
+    - MAIN_SHA="$CI_COMMIT_SHORT_SHA" bash scripts/deployed-sha-witness.sh
+    - bash scripts/check-merge-gate-setting.sh
+
+# The dead-man for the DEAD-MAN (TG-222 / PORT-FIDELITY-AUDIT #15). The governance monitors watch the judge;
+# nothing watched whether the monitors were wired, and they sat code-complete-and-dead behind a full set of
+# green signals. This gate proves, from the tree, that every governance schedule names a workflow that
+# EXISTS, that the boot path calls the arming, that each workflow is registered, and that the judged-accrual
+# halt is consulted at the graduation choke point. It runs on EVERY pipeline, not just main/schedules: the
+# failure it guards is introduced by a merge request, so catching it after the merge is catching it late.
+governance-schedules:
+  stage: verify
+  # Opted into MR pipelines 2026-08-01: without rules, GitLab's default `only` is [branches, tags], so
+  # this dead-man ran on branch pushes but NEVER gated a merge request — the check that asserts the
+  # governance schedules stay wired could not block the merge that unwired them. Found by
+  # deploy.TestEveryCIJobOptsIntoMergeRequestPipelines, which exists because `darkcheck` had the same bug.
+  <<: *rules-mr
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache bash coreutils util-linux >/dev/null
+  script:
+    - bash eval/ci/check-governance-schedules_test.sh
+    - bash eval/ci/check-governance-schedules.sh
+    # eval-gate.sh's own diagnostic, which nothing tested. flock exits 1 on lock timeout and the inner
+    # run's arm-integrity ABORT exits 1 too, so a gate that RAN AND REFUSED was announced as "THE GATE
+    # DID NOT RUN" with a retryable EX_TEMPFAIL — observed 2026-08-06 on a saturated model gateway.
+    # Needs flock, hence util-linux beside bash/coreutils.
+    - bash eval/ci/check-gate-lock-report_test.sh
+    # TG-359: a core/judge/rubric.json edit could not satisfy its own eval gate — the change gate's two
+    # arms judge under different rubric versions and evalgate correctly refuses to pool them. The `rubric`
+    # mode re-judges a FIXED session set instead. This asserts that mode still reaches the inverted
+    # comparison; it is shell and flags, so nothing else would notice them coming apart.
+    - bash eval/ci/check-rubric-gate-wired_test.sh
+
+# ★ TG-402: the nightly schedule EXISTS now (created 2026-08-07; the project had ZERO schedules since
+# these jobs were written, so every `== "schedule"` arm in this file was dead code — the coverage checks
+# above "ran nightly" in comments only). The scheduled pipeline is scoped to the estate checks alone:
+# every main-branch rule in this file excludes `schedule` as a source, because a scheduled run would
+# otherwise rebuild every image and REDEPLOY PRODUCTION nightly.
+#
+# This job stays opt-in (TG_SCHED_EVAL=1 on the schedule) rather than armed by default, for two stated
+# reasons: TG_EVAL_SSH_KEY is not provisioned in CI (the job fails loud without it, by its own design),
+# and a nightly 2h model-consuming eval is a spend decision the owner makes, not a wiring fix. Arming it
+# = set the schedule variable + provision the key; the FAIL-LOUD block below then guards it.
+eval-gate-scheduled:
+  # OPTED OUT of the default auto-retry: a retry would re-run the 2h eval against the box's gateway lock
+  # while the first attempt's remote processes may still hold it — a hang-until-timeout cost doubler, and
+  # the nightly's dead-man alarms on absence anyway (review finding 2026-08-25).
+  retry: 0
+  stage: verify
+  image: golang:1.25.12
+  timeout: 2h
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $TG_SCHED_EVAL == "1"'
+  variables:
+    TG_BOX: "root@dc1tg01"
+    TG_EVAL_RUNS: "2"
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq openssh-client jq curl make >/dev/null 2>&1 || true
+  script:
+    - |
+      set -u
+      # FAIL-LOUD (2026-07-30): this job used to exit 0 on a missing key or an unreachable box. That
+      # fail-open is how the trend-watch silently stopped existing — the committed baseline froze for 12
+      # days across 1,377 commits while the measured proposal rate collapsed 0.45 -> 0.00 and nothing went
+      # red. The nightly is the ONLY absolute quality measurement; its inability to run IS an incident.
+      # Explicit opt-out for forks bootstrapping without a box: set TG_EVAL_OPTIONAL=1 (documented, loud).
+      if [ -z "${TG_EVAL_SSH_KEY:-}" ]; then
+        if [ "${TG_EVAL_OPTIONAL:-}" = "1" ]; then
+          echo "TG_EVAL_SSH_KEY not set and TG_EVAL_OPTIONAL=1 — scheduled eval gate skipped (fork bootstrap)."; exit 0
+        fi
+        echo "CONFIGURATION REGRESSION: TG_EVAL_SSH_KEY is not set — the nightly trend-watch CANNOT RUN."
+        echo "The last committed baseline is now aging unwatched. Set the key, or set TG_EVAL_OPTIONAL=1"
+        echo "to declare this instance deliberately unmeasured."; exit 1
+      fi
+      KEY="$(mktemp)"; chmod 600 "$KEY"
+      if [ -f "$TG_EVAL_SSH_KEY" ]; then cp "$TG_EVAL_SSH_KEY" "$KEY"; else printf '%s\n' "$TG_EVAL_SSH_KEY" > "$KEY"; fi
+      export TG_SSH_KEY="$KEY"
+      mkdir -p ~/.ssh && ssh-keyscan -H "${TG_BOX#*@}" >> ~/.ssh/known_hosts 2>/dev/null || true
+      # Connectivity: retry the probe (3x over ~5 min) — a flap is tolerated, a down box is an INCIDENT
+      # (an issue is filed and the job goes RED; it is infra's red, but it must be SOMEBODY's red — the
+      # old silent skip made it nobody's).
+      probe_ok=0
+      for attempt in 1 2 3; do
+        if ssh -i "$KEY" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$TG_BOX" true 2>/dev/null; then
+          probe_ok=1; break
+        fi
+        [ "$attempt" -lt 3 ] && { echo "probe $attempt/3 failed — retrying in 150s"; sleep 150; }
+      done
+      if [ "$probe_ok" -ne 1 ]; then
+        echo "INFRA INCIDENT: box $TG_BOX unreachable from CI after 3 probes — the nightly trend-watch cannot run."
+        echo "infra-unreachable: eval box $TG_BOX down at $(date -u +%FT%TZ) — nightly trend-watch blocked" > eval-gate-report.txt
+        bash eval/ci/open-regression-issue.sh eval-gate-report.txt || true
+        exit 1
+      fi
+      # Run the TREND-WATCH; capture the report. Non-zero here (after a good probe) = a real regression vs the
+      # committed baseline. A clean, non-regressing run self-refreshes eval/baseline-scorecard.json in place.
+      set +e
+      make eval-drift 2>&1 | tee eval-gate-report.txt
+      RC=${PIPESTATUS[0]}
+      set -e
+      if [ "$RC" -ne 0 ]; then
+        echo "REGRESSION: scheduled trend-watch FAILED vs the committed baseline — filing a tracking issue (baseline NOT refreshed)."
+        bash eval/ci/open-regression-issue.sh eval-gate-report.txt || true
+        exit 1
+      fi
+      echo "scheduled trend-watch PASS — the on-box grounding eval holds the committed baseline."
+      # Self-refresh push (fail-safe): if the trend-watch rewrote the committed baseline and a push token is
+      # configured, commit+push it to main so the anchor auto-updates. Missing token / no change / push
+      # failure all skip cleanly — never red a PASSing nightly.
+      if [ -n "${TG_BASELINE_PUSH_TOKEN:-}" ] && { ! git diff --quiet -- eval/baseline-scorecard.json || [ -n "$(git status --porcelain eval/history/)" ]; }; then
+        git config user.name "Kyriakos Papadopoulos"
+        git config user.email "ncpjfuzl@mxmx.email"
+        # The baseline AND the night's eval/history entry ride the same commit — the committed quality
+        # record must include the nightly's verdicts, or the trend path re-creates the untracked-record
+        # defect Phase B removed (review finding, 2026-07-30).
+        git add eval/baseline-scorecard.json eval/history/
+        git commit -m "chore(eval): auto-refresh trend baseline + nightly quality record [skip ci]" || true
+        PUSH_URL="https://oauth2:${TG_BASELINE_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+        git push "$PUSH_URL" "HEAD:${CI_DEFAULT_BRANCH}" 2>/dev/null \
+          && echo "trend baseline auto-refreshed and pushed to ${CI_DEFAULT_BRANCH}." \
+          || echo "warn: could not push the refreshed baseline (token/permissions) — see the artifact instead."
+      fi
+  artifacts:
+    when: always
+    # eval/history/ rides along so a FAILING night (which exits before the push block) still preserves its
+    # verdict entry — a red night's record is evidence, not garbage.
+    paths: [eval-gate-report.txt, eval/out/, eval/baseline-scorecard.json, eval/history/]
+    expire_in: 30 days
+
+# --- Build & push the images to the GitLab Container Registry --------------------------------------------
+# GitOps: CI builds the image once and pushes a content-addressed (:$CI_COMMIT_SHORT_SHA) + moving (:latest)
+# tag; the production host only PULLs it (see deploy below). This replaces the old rsync-source +
+# build-on-host job — no build toolchain and no source tree ever land on the box. Runs on the shared
+# `docker`-tagged runners (host docker.sock, no dind), mirroring the established app-repo pattern.
+.image-build:
+  stage: docker
+  tags: [docker]
+  image: docker:28
+  interruptible: false
+  timeout: 40m
+  cache: []
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
+  before_script:
+    - apk add --no-cache bash
+    - docker info >/dev/null 2>&1 || { echo "FATAL — host docker.sock not reachable. The runner's [runners.docker].volumes must include '/var/run/docker.sock:/var/run/docker.sock'."; exit 1; }
+    # Built-in job credentials first; a project deploy token (REGISTRY_USER/REGISTRY_PASSWORD, write_registry)
+    # overrides it when the instance JWT layer blocks CI_JOB_TOKEN pushes.
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
+    - if [ -n "$REGISTRY_PASSWORD" ]; then echo "$REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$REGISTRY_USER" --password-stdin; fi
+
+# HERMETIC BUILD, PROVEN BEFORE IT IS TRUSTED (TG-174 step 1).
+#
+# THE EXPOSURE. Measured 2026-08-06 on dc1gitlabrunner01, /etc/gitlab-runner/config.toml:
+#
+#   executor   = "docker"
+#   privileged = true
+#   volumes    = ["/cache", "/var/run/docker.sock:/var/run/docker.sock"]
+#
+# Both settings are GLOBAL, so every job container on these shared runners is privileged and holds the host
+# Docker socket — not only .image-build. Any job could `docker run -v /:/host`. The socket is root-equivalent.
+#
+# The runner config is what actually closes that, and it is not in this repository. But dropping the socket
+# there breaks .image-build (and every other project's) on the next pipeline, so TG's build has to stop
+# NEEDING it first. That is this job.
+#
+# WHY A SEPARATE, PUSH-LESS JOB RATHER THAN CONVERTING .image-build DIRECTLY. .image-build is gated
+# `if: $CI_COMMIT_BRANCH == "main"`, so an MR pipeline cannot exercise it: a kaniko rewrite's first-ever run
+# would be ON MAIN, where a failure reds main and blocks every deploy. Registry auth differs (kaniko reads a
+# docker config json, not `docker login`) and `--pull` semantics differ — first-run problems, both of them.
+# So the toolchain gets proven on merge requests, with --no-push, where it can fail safely and cheaply.
+#
+# It runs only when the build inputs change, because a full Go image build on every MR is a tax nobody
+# asked for. When this has been green across a few real changes, .image-build switches to it and the runner
+# config change becomes possible.
+hermetic-build-probe:
+  stage: docker
+  tags: [docker]
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  interruptible: true
+  timeout: 45m
+  cache: []
+  # allow_failure on the MAIN arm below: this probe must never red main. It is evidence-gathering for a
+  # switch that has not happened yet, and a control that can break the deploy pipeline gets deleted rather
+  # than fixed. On merge requests it is NOT allowed to fail — there it is cheap and actionable.
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - deploy/Dockerfile
+        - deploy/console/Dockerfile
+        - deploy/claude-proxy/Dockerfile
+        - .gitlab-ci.yml
+        - go.mod
+        - go.sum
+      allow_failure: false
+    # MAIN, every pipeline, allowed to fail.
+    #
+    # THE MR-ONLY RULE PROVED NOTHING BECAUSE IT NEVER FIRED. Measured 2026-08-06: `hermetic-build-probe`
+    # has run ZERO times since it landed — searched every page of the project's job history, not a
+    # head-limited window. Its `changes:` filter needs an MR touching one of four files, and roughly fifty
+    # merge requests went through that day without touching any of them.
+    #
+    # The plan this job belongs to says .image-build switches over "when this has been green across a few
+    # real changes". A job that cannot run accumulates no such evidence, so the switch was waiting on a
+    # condition that could not arrive. Same shape as every other control in this codebase that was present
+    # and not reaching.
+    #
+    # A schedule would be the cheaper cadence, but the project has ZERO pipeline schedules configured
+    # (verified via the API) while four jobs already gate on $CI_PIPELINE_SOURCE == "schedule" — filed
+    # separately. Main is the cadence that actually exists.
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
+      allow_failure: true
+  script:
+    # --no-push is the whole point: this proves the image BUILDS without a Docker daemon, and pushes
+    # nothing. No registry credentials are needed and none are provided, so a leak here cannot publish.
+    - /kaniko/executor
+      --context "$CI_PROJECT_DIR"
+      --dockerfile "$CI_PROJECT_DIR/deploy/Dockerfile"
+      --build-arg BIN=worker
+      --no-push
+      --verbosity info
+    # ALL FOUR image jobs must be covered, or the switch can only ever be partial. deploy/Dockerfile backs
+    # image-grounder and image-worker (same file, different BIN); image-console and image-sidecar build from
+    # their own Dockerfiles and had NO hermetic evidence at all — so a socket-drop justified by "the probe
+    # is green" would have broken those two on their first run, on main, which is the precise failure this
+    # job exists to prevent. Measured 2026-08-07: 31 probe runs, 28 success and ZERO failures, but every
+    # one of them exercised only deploy/Dockerfile.
+    - /kaniko/executor
+      --context "$CI_PROJECT_DIR"
+      --dockerfile "$CI_PROJECT_DIR/deploy/console/Dockerfile"
+      --no-push
+      --verbosity info
+    # The sidecar builds from its own subdirectory context, mirroring image-sidecar's `docker build … deploy/claude-proxy`.
+    - /kaniko/executor
+      --context "$CI_PROJECT_DIR/deploy/claude-proxy"
+      --dockerfile "$CI_PROJECT_DIR/deploy/claude-proxy/Dockerfile"
+      --no-push
+      --verbosity info
+    - echo "hermetic build OK — all four image jobs' Dockerfiles build with no Docker daemon and no docker.sock."
+
+# THE ONE MECHANISM 74 GREEN PROBE RUNS HAVE NEVER EXERCISED: PUSH (TG-174 step 1).
+#
+# hermetic-build-probe proves the four Dockerfiles BUILD without a daemon. It passes --no-push
+# deliberately — "no registry credentials are needed and none are provided, so a leak here cannot
+# publish" — and that property is worth keeping, so this is a SEPARATE job rather than credentials
+# added to it.
+#
+# WHY PUSH IS THE RISK, AND WHY IT IS NARROWER THAN "KANIKO AUTH". `.image-build` does not do one
+# login. It does two, in a fallback order, and its own comment says why:
+#
+#     echo "$CI_REGISTRY_PASSWORD" | docker login … -u "$CI_REGISTRY_USER"
+#     if [ -n "$REGISTRY_PASSWORD" ]; then echo "$REGISTRY_PASSWORD" | docker login … -u "$REGISTRY_USER"; fi
+#     # "a project deploy token … overrides it when the instance JWT layer blocks CI_JOB_TOKEN pushes"
+#
+# So on THIS instance the built-in job token is known to sometimes fail to push, and production
+# depends on the override. Kaniko has no `docker login`; it reads /kaniko/.docker/config.json. A
+# conversion that writes only CI_REGISTRY_USER/PASSWORD would work on most pipelines and fail on
+# exactly the ones the override exists for — discovered on main, during the switch, with the deploy
+# pipeline down. This job finds that out first, for free.
+#
+# MERGE-REQUEST ONLY, ON PURPOSE. The switch it de-risks would have its first real run on main; this
+# probe must not share that property. It never runs on main, so it cannot redden the deploy pipeline,
+# and `allow_failure: false` on the MR arm makes a failure actionable where it is cheap.
+#
+# IT PUSHES A SCRATCH TAG, NOT A PRODUCTION ONE. `tg174-authprobe-<sha>` under the worker image path:
+# nothing deploys from it, no `latest` is moved, and deploy/docker-compose.yml pins ${TG_TAG} or a
+# digest, so the tag is inert by construction. It builds the SMALLEST of the four images for speed —
+# the build half is already proven 74 times over, so this job's only job is the credential handshake.
+kaniko-push-probe:
+  stage: docker
+  tags: [docker]
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  interruptible: true
+  timeout: 25m
+  cache: []
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - .gitlab-ci.yml
+        - deploy/claude-proxy/Dockerfile
+      allow_failure: false
+  script:
+    # The two-tier choice replicated as a config.json, in the SAME precedence .image-build uses: the
+    # deploy token wins when it is present, because it exists to override a job token that this
+    # instance's JWT layer sometimes refuses.
+    - |
+      set -eu
+      U="$CI_REGISTRY_USER"; P="$CI_REGISTRY_PASSWORD"; WHICH="CI_JOB_TOKEN"
+      if [ -n "${REGISTRY_PASSWORD:-}" ]; then U="$REGISTRY_USER"; P="$REGISTRY_PASSWORD"; WHICH="deploy-token"; fi
+      echo "kaniko push probe: authenticating to $CI_REGISTRY as $WHICH"
+      AUTH=$(printf '%s:%s' "$U" "$P" | base64 | tr -d '\n')
+      mkdir -p /kaniko/.docker
+      printf '{"auths":{"%s":{"auth":"%s"}}}' "$CI_REGISTRY" "$AUTH" > /kaniko/.docker/config.json
+    - /kaniko/executor
+      --context "$CI_PROJECT_DIR/deploy/claude-proxy"
+      --dockerfile "$CI_PROJECT_DIR/deploy/claude-proxy/Dockerfile"
+      --destination "$TG_SIDECAR_IMAGE:tg174-authprobe-${CI_COMMIT_SHORT_SHA}"
+      --verbosity info
+    - echo "kaniko PUSH proved — the credential handshake .image-build relies on works without a Docker daemon (TG-174)."
+
+image-grounder:
+  extends: .image-build
+  needs: ["build-test"]
+  script:
+    - SHA="${CI_COMMIT_SHORT_SHA:-manual}"
+    - docker build --pull --build-arg BIN=grounder -f deploy/Dockerfile -t "$TG_GROUNDER_IMAGE:$SHA" -t "$TG_GROUNDER_IMAGE:latest" .
+    - docker push "$TG_GROUNDER_IMAGE:$SHA"
+    # TG-431: something on the shared host daemon deleted both Go images' fresh :latest tags mid-job
+    # (main #47554 — sha push OK, then `tag does not exist`). Re-materialize :latest from the
+    # just-pushed sha at the last moment: an untag self-heals; a truly-deleted image still fails here.
+    - docker tag "$TG_GROUNDER_IMAGE:$SHA" "$TG_GROUNDER_IMAGE:latest"
+    - docker push "$TG_GROUNDER_IMAGE:latest"
+
+image-worker:
+  extends: .image-build
+  needs: ["build-test"]
+  script:
+    - SHA="${CI_COMMIT_SHORT_SHA:-manual}"
+    - docker build --pull --build-arg BIN=worker -f deploy/Dockerfile -t "$TG_WORKER_IMAGE:$SHA" -t "$TG_WORKER_IMAGE:latest" .
+    - docker push "$TG_WORKER_IMAGE:$SHA"
+    - docker tag "$TG_WORKER_IMAGE:$SHA" "$TG_WORKER_IMAGE:latest"  # TG-431, as above
+    - docker push "$TG_WORKER_IMAGE:latest"
+
+image-console:
+  extends: .image-build
+  needs: []
+  script:
+    - SHA="${CI_COMMIT_SHORT_SHA:-manual}"
+    - docker build --pull -f deploy/console/Dockerfile -t "$TG_CONSOLE_IMAGE:$SHA" -t "$TG_CONSOLE_IMAGE:latest" .
+    - docker push "$TG_CONSOLE_IMAGE:$SHA"
+    - docker tag "$TG_CONSOLE_IMAGE:$SHA" "$TG_CONSOLE_IMAGE:latest"  # TG-431, as above
+    - docker push "$TG_CONSOLE_IMAGE:latest"
+
+# The sidecar image. Gated on sidecar-test so a crate whose argv contract or pool invariant broke cannot
+# produce an image — the Dockerfile also runs `cargo test` in its builder stage, so this is belt AND braces:
+# the CI job gives a readable failure, the Dockerfile gate makes the property true for anyone building the
+# image by hand on the box (which is how it was built until now).
+image-sidecar:
+  extends: .image-build
+  needs: ["sidecar-test"]
+  rules:
+    - if: '$SIDECAR_FORCE_DEPLOY == "1"'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
+      changes: [deploy/claude-proxy/**/*]
+  script:
+    - SHA="${CI_COMMIT_SHORT_SHA:-manual}"
+    - docker build --pull -f deploy/claude-proxy/Dockerfile -t "$TG_SIDECAR_IMAGE:$SHA" -t "$TG_SIDECAR_IMAGE:latest" deploy/claude-proxy
+    - docker push "$TG_SIDECAR_IMAGE:$SHA"
+    # TG-431, as above: this job runs rarely (path-gated) but shares the same daemon and the same two build
+    # slots as the Go image jobs when it does — the fresh-eyes review caught it missing from the first fix.
+    - docker tag "$TG_SIDECAR_IMAGE:$SHA" "$TG_SIDECAR_IMAGE:latest"
+    - docker push "$TG_SIDECAR_IMAGE:latest"
+
+# --- Deploy to dc1tg01 via AWX (GitOps, not SSH) -----------------------------------------------------
+# Triggers the AWX job template that runs the deploy playbook on the LXC: registry login → docker compose
+# pull (the tag built above) → up -d → health gate. Manual (click-to-deploy) on main so a deploy is an
+# explicit act; flip `when` to on_success to auto-deploy every green main. Actuation on the box is governed by
+# the mode chokepoint (owner-set live mode; absent/corrupt ⇒ Shadow, no actuate) — the deploy never changes it.
+# REQUIRES these CI/CD variables (Settings → CI/CD → Variables), never committed:
+#   AWX_TOKEN            — bearer token for the AWX API (masked, protected)
+#   AWX_TG_TEMPLATE_ID   — the "Deploy Territory Grounder" AWX job-template id
+#   AWX_HOST             — (optional) AWX base URL; defaults to https://awx.example.net
+deploy:
+  # 45m self-documenting bound (review 2026-08-25): the job MUST outlive its own 30-min AWX poll + the
+  # post-deploy verify tail, and must not depend on the org-level default timeout — an outer kill below
+  # ~35m would release the resource_group mid-play, the exact relocated form of the bug the poll widening
+  # fixes. A wedged play fails HERE once, red, no auto-retry (the retry: 0 below) — never a third play.
+  timeout: 45m
+  # OPTED OUT of the default system-failure auto-retry (review finding 2026-08-25): this job LAUNCHES an
+  # external actuation and then polls — a runner-side death does not stop the already-launched run, so an
+  # auto-retry would race a SECOND live actuation against the same host (the TG-485 concurrent-deploy
+  # incident shape; the resource_group protects the next pipeline, not a retry of this one).
+  retry: 0
+  stage: deploy
+  tags: [docker]
+  # TG-485: one deploy at a time, queued in commit order. The 2026-08-13 incident — 4 rapid merges →
+  # concurrent AWX deploys each pulling 3 images → the 20G root fs hit 100%, postgres/journald D-state,
+  # 3 failed deploys — was the un-mechanized "serialize on the DEPLOY, not the merge" lesson. The merge
+  # train may run as fast as it likes; this line makes the deploys themselves take turns, which removes
+  # the image-pull storm at its root. (The on-box disk preflight itself belongs to the AWX playbook in
+  # the infrastructure repo — recorded on TG-485; this job's failure path prints the recovery recipe.)
+  resource_group: tg-production-deploy
+  # The org's shared deploy-helper image (curl+jq+bash pre-baked) for AWX-trigger jobs. TG (project 48) is
+  # on the infra project's CI-job-token allowlist, so this project's job token can pull it.
+  image: registry-gitlab.example.net/infrastructure/dc1/production/ci-deploy-tools:latest
+  # Needs only the three image builds. The cosign sign+verify supply-chain gate was REMOVED (owner
+  # decision, TG-417): the registry did not durably retain the cosign signatures (they were signed then
+  # dropped within hours), so cosign-verify red every main pipeline and blocked every deploy. The deploy
+  # now works as it did before cosign was added — build, push, pull, up. Re-introducing signing requires a
+  # registry that keeps `sha256-*.sig` artifacts; see TG-417.
+  needs: ["image-grounder", "image-worker", "image-console"]
+  rules:
+    # Automatic on green main (continuous deployment).
+    #
+    # ★ allow_failure WAS true here, and on 2026-07-28 that turned a failed deploy into a SILENT one. The
+    # AWX job failed, tg-secretenv could not resolve a secret, and litellm/worker/grounder/console were left
+    # in `Created` — the control plane was down for ~14 minutes while THIS PIPELINE REPORTED SUCCESS. The
+    # old rationale ("an operational hiccup must never red an otherwise-green main; the AWX job status is
+    # authoritative") is wrong in its second clause: the AWX status was authoritative and nobody was
+    # listening to it. A deploy that did not deploy is a failure of main, because the code on main is not
+    # the code that is running — which is exactly what a red pipeline is for.
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
+      when: on_success
+  variables:
+    AWX_HOST: "https://awx.example.net"
+    # The public console origin, verified after the rollout. Same convention as AWX_HOST above; override
+    # per-environment with a CI/CD variable.
+    TG_CONSOLE_URL: "https://territory-grounder.example.net"
+  script:
+    - |
+      set -eu
+      : "${AWX_TOKEN:?set the AWX_TOKEN CI variable}"
+      : "${AWX_TG_TEMPLATE_ID:?set the AWX_TG_TEMPLATE_ID CI variable}"
+      : "${TG_DEPLOY_TOKEN:?set the TG_DEPLOY_TOKEN CI variable (read_repository+read_registry deploy token)}"
+      : "${TG_DEPLOY_TOKEN_USER:?set the TG_DEPLOY_TOKEN_USER CI variable}"
+      SHA="${CI_COMMIT_SHORT_SHA:-latest}"
+      # The playbook uses this token ON THE HOST to log in to the registry (pull the images) and clone the
+      # deploy/ dir. It must be a project deploy token with read_registry+read_repository — the instance JWT
+      # layer rejects $CI_JOB_TOKEN for registry auth (same reason image push needs REGISTRY_PASSWORD).
+      EXTRA=$(jq -nc --arg tag "$SHA" --arg tok "$TG_DEPLOY_TOKEN" --arg usr "$TG_DEPLOY_TOKEN_USER" \
+        '{extra_vars: {image_tag: $tag, gitlab_token: $tok, gitlab_token_user: $usr}}')
+      RESP=$(curl -skf -X POST -H "Authorization: Bearer $AWX_TOKEN" -H "Content-Type: application/json" \
+        -d "$EXTRA" "${AWX_HOST%/}/api/v2/job_templates/${AWX_TG_TEMPLATE_ID}/launch/")
+      JOB_ID=$(echo "$RESP" | jq -r '.job // .id // empty')
+      [ -n "$JOB_ID" ] || { echo "AWX launch failed: $RESP"; exit 1; }
+      echo "AWX job $JOB_ID launched (image_tag=$SHA); polling..."
+      # 180x10s = 30min (was 60x10s): 2026-08-25, twice in one day a play outlived the 10-min window
+      # under registry slowness — the job died, RELEASED the resource_group mid-play, and the next
+      # pipeline's deploy launched a SECOND live play against the same box (AWX 37171 vs 37173, the
+      # TG-485 concurrent-deploy shape; the double pull-storm took / to 91%). The poll must outlive any
+      # real play so the group is held for the play's true duration.
+      for i in $(seq 1 180); do
+        S=$(curl -sk -H "Authorization: Bearer $AWX_TOKEN" "${AWX_HOST%/}/api/v2/jobs/${JOB_ID}/" | jq -r '.status')
+        echo "  job $JOB_ID: $S"
+        case "$S" in
+          successful) echo "AWX job $JOB_ID successful"; break ;;
+          failed|error|canceled)
+            echo "AWX job $JOB_ID $S — see $AWX_HOST/#/jobs/playbook/$JOB_ID"
+            # TG-485: the 2026-08-13 failure shape was DISK, and it looked exactly like this — a failed
+            # AWX deploy with no local evidence. First check on the box: `df -h /` (20G root); recovery
+            # was `docker image prune -af` (28GB reclaimed, 100%->30%). Check disk BEFORE re-running.
+            exit 1 ;;
+        esac
+        sleep 10
+      done
+      [ "$S" = successful ] || { echo "timed out waiting for AWX job $JOB_ID"; exit 1; }
+    # POST-DEPLOY PROOF — "AWX said successful" is not "the control plane is serving". The script asserts
+    # the estate ANSWERS from outside the box (console 200 + grounder fail-closed 401); scripts/
+    # verify-deploy_test.sh drives it against controlled status codes and proves it FAILS on the 502 shape
+    # that this pipeline reported as success on 2026-07-28.
+    - bash scripts/verify-deploy.sh "$TG_CONSOLE_URL"
+
+# ── Public-mirror sync ────────────────────────────────────────────────────────
+# Produces the SANITIZED public GitHub mirror. Deliberately `when: manual` — it
+# NEVER runs automatically; a maintainer triggers it from the pipeline UI once a
+# public release is intended. The internal GitLab repo keeps real hosts/domain;
+# github-sync/sync-to-github.sh strips history, renames the Go module path,
+# genericizes infra identifiers, runs multi-pass gitleaks, and REFUSES to push if
+# any real identifier survives (abort-on-survivor). Needs CI vars GITHUB_REPO +
+# GITHUB_TOKEN (masked). Run with a dry run first: set DRY_RUN=1.
+# DEPLOY THE SIDECAR — the component CI could not previously reach.
+#
+# It runs on dc1claude01, NOT dc1tg01, so it cannot ride the `deploy` job above: that job launches
+# AWX job template 83 against the "Territory Grounder" inventory, and that inventory holds exactly one host
+# (dc1tg01). Adding the sidecar host to it would point template 83's playbook — which installs the whole
+# TG stack — at the sidecar box on the next ordinary deploy. So this uses an AWX AD-HOC command against the
+# Proxmox Dynamic Inventory (id 2) limited to the one host, with the estate's ED25519 machine credential
+# (id 24). Mechanism proven before this job was written: ad-hoc command 33653, status successful.
+#
+# Until now this image was built BY HAND on the box and started with `docker compose up -d`, so main and
+# production agreed only because someone checked. Nothing enforced it and nothing would have noticed drift.
+#
+# Fail-closed like its siblings: `needs` the signed+verified image, so an unverifiable build never lands.
+deploy-sidecar:
+  # OPTED OUT of the default system-failure auto-retry (review finding 2026-08-25): this job LAUNCHES an
+  # external actuation and then polls — a runner-side death does not stop the already-launched run, so an
+  # auto-retry would race a SECOND live actuation against the same host (the TG-485 concurrent-deploy
+  # incident shape; the resource_group protects the next pipeline, not a retry of this one).
+  retry: 0
+  stage: deploy
+  tags: [docker]
+  image: registry-gitlab.example.net/infrastructure/dc1/production/ci-deploy-tools:latest
+  needs: ["image-sidecar"]
+  rules:
+    - if: '$SIDECAR_FORCE_DEPLOY == "1"'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
+      changes: [deploy/claude-proxy/**/*]
+      when: on_success
+  variables:
+    AWX_HOST: "https://awx.example.net"
+    AWX_INVENTORY_ID: "2"
+    AWX_SSH_CREDENTIAL_ID: "24"
+    SIDECAR_HOST: "dc1claude01"
+    SIDECAR_DIR: "/home/tg/gitlab/products/territory-grounder/grounder/deploy/claude-proxy"
+  script:
+    - |
+      set -eu
+      : "${AWX_TOKEN:?set the AWX_TOKEN CI variable}"
+      : "${TG_DEPLOY_TOKEN:?set the TG_DEPLOY_TOKEN CI variable}"
+      : "${TG_DEPLOY_TOKEN_USER:?set the TG_DEPLOY_TOKEN_USER CI variable}"
+      SHA="${CI_COMMIT_SHORT_SHA:-latest}"
+      AWX="${AWX_HOST%/}"
+      # The remote command, assembled with printf rather than backslash continuations. The first version of
+      # this job used a `case` statement inside a line-continued block and bash rejected the whole script
+      # before it ran ("syntax error near unexpected token `('"). No case, no continuations here.
+      #   --no-build       compose.yml carries `build: .` for local development; without this a deploy would
+      #                    rebuild from source ON THE BOX and serve an image cosign never signed.
+      #   --force-recreate `up -d` keeps the running container when the image REFERENCE is unchanged, and we
+      #                    deliberately reuse the local alias.
+      #
+      # ★ THE RETAG TARGET IS READ FROM compose.yml, NEVER WRITTEN HERE.
+      #
+      # It was the literal `tg-claude-proxy:1.0.0`. When the sidecar was released as 1.2.0 the compose
+      # `image:` moved and this did not, so the deploy pulled the signed image, tagged it 1.0.0, and then
+      # compose looked for 1.2.0 — which exists in no registry. It tried to PULL the local alias, was denied,
+      # and died with `no such image: tg-claude-proxy:1.2.0` AFTER it had already stopped the TLS terminator.
+      # The model channel went down on a version bump.
+      #
+      # Deriving it from the same file compose reads makes the two incapable of disagreeing. Extracted on the
+      # RUNNER (which has the checkout) so the remote command stays a plain string — AWX renders module_args
+      # through Jinja and rejects `{{ }}`, so no templating may appear on that side.
+      #   --profile tls    A SERVICE BEHIND A PROFILE THE DEPLOY DOES NOT NAME IS NEVER REDEPLOYED (TG-326).
+      #                    Compose silently skips profiled services, so the TG-287 TLS terminator — which
+      #                    carries the model channel — would keep whatever image and config it was last
+      #                    started with by hand, forever, while this job reported success. Measured in the
+      #                    same shape on tg01: worker-actuate sat on an image 5 hours and several commits
+      #                    behind worker for exactly this reason.
+      #                    Conditioned on the key existing so a host without the TLS material still deploys
+      #                    the sidecar cleanly, rather than reddening every pipeline on a missing file.
+      SIDECAR_ALIAS=$(sed -n 's/^[[:space:]]*image:[[:space:]]*\(tg-claude-proxy:[^[:space:]]*\).*/\1/p' \
+        deploy/claude-proxy/compose.yml | head -1)
+      [ -n "$SIDECAR_ALIAS" ] || { echo "could not read the sidecar image alias from deploy/claude-proxy/compose.yml"; exit 1; }
+      echo "sidecar local alias (from compose.yml): $SIDECAR_ALIAS"
+      CMD=$(printf '%s' \
+        "set -e; cd ${SIDECAR_DIR}; " \
+        "echo '${TG_DEPLOY_TOKEN}' | docker login -u '${TG_DEPLOY_TOKEN_USER}' --password-stdin ${CI_REGISTRY}; " \
+        "docker pull ${TG_SIDECAR_IMAGE}:${SHA}; " \
+        "docker tag ${TG_SIDECAR_IMAGE}:${SHA} ${SIDECAR_ALIAS}; " \
+        "if [ -s tls/proxy.key ]; then docker compose --profile tls up -d --no-build --force-recreate; " \
+        "else docker compose up -d --no-build --force-recreate; fi; " \
+        "docker logout ${CI_REGISTRY}; " \
+        "docker inspect tg-claude-proxy | python3 -c \"import sys,json;print('RUNNING='+json.load(sys.stdin)[0]['Image'])\"")
+      # ★ NO GO-TEMPLATE BRACES ANYWHERE IN module_args. AWX runs sanitize_jinja() over it and REJECTS the
+      # job outright — `ValueError: Inline Jinja variables are not allowed.`, status "error", nothing ever
+      # reaches the host (ad-hoc 33662). `docker inspect --format` and `docker ps --format` both use Go
+      # templates, so both are unusable here. The previous version of this comment described this trap
+      # correctly and the line below it used --format anyway; the running image is now read by piping
+      # `docker inspect` JSON through python3 instead, which needs no braces.
+      BODY=$(jq -nc --arg m "$CMD" --arg h "$SIDECAR_HOST" \
+        '{module_name:"shell", module_args:$m, limit:$h, credential:24, become_enabled:false}')
+      RESP=$(curl -skf -X POST -H "Authorization: Bearer $AWX_TOKEN" -H "Content-Type: application/json" \
+        -d "$BODY" "$AWX/api/v2/inventories/${AWX_INVENTORY_ID}/ad_hoc_commands/")
+      JOB_ID=$(echo "$RESP" | jq -r '.id // empty')
+      if [ -z "$JOB_ID" ]; then echo "AWX ad-hoc launch failed: $RESP"; exit 1; fi
+      echo "AWX ad-hoc $JOB_ID launched (image_tag=$SHA on $SIDECAR_HOST); polling..."
+      S=pending
+      i=0
+      while [ "$i" -lt 60 ]; do
+        S=$(curl -sk -H "Authorization: Bearer $AWX_TOKEN" "$AWX/api/v2/ad_hoc_commands/${JOB_ID}/" | jq -r '.status')
+        echo "  ad-hoc $JOB_ID: $S"
+        if [ "$S" = "successful" ]; then break; fi
+        if [ "$S" = "failed" ] || [ "$S" = "error" ] || [ "$S" = "canceled" ]; then
+          echo "DEPLOY FAILED"
+          curl -sk -H "Authorization: Bearer $AWX_TOKEN" "$AWX/api/v2/ad_hoc_commands/${JOB_ID}/stdout/?format=txt" | tail -40
+          exit 1
+        fi
+        i=$((i+1))
+        sleep 5
+      done
+      if [ "$S" != "successful" ]; then echo "deploy did not finish in time (last status: $S)"; exit 1; fi
+      # POST-DEPLOY PROOF. A green deploy that did not replace the binary is this component's existing
+      # failure mode: the old build served for days with every health check green.
+      OUT=$(curl -sk -H "Authorization: Bearer $AWX_TOKEN" "$AWX/api/v2/ad_hoc_commands/${JOB_ID}/stdout/?format=txt")
+      echo "$OUT" | tail -20
+      echo "$OUT" | grep -q "RUNNING=" || { echo "deploy reported success but never printed the running image"; exit 1; }
+      echo "deployed ${TG_SIDECAR_IMAGE}:${SHA} to ${SIDECAR_HOST}"
+
+sync_to_github:
+  stage: sync
+  image: debian:stable-slim
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
+      when: on_success
+      allow_failure: true
+  resource_group: github_mirror_push   # serialize: concurrent force-pushes race on refs/heads/main
+  # Fetch NO artifacts: this job clones the repo fresh into '.' (GIT_STRATEGY: empty), so any downloaded
+  # artifact (e.g. sbom's) would leave '.' non-empty and break `git clone . ` with "destination path '.'
+  # already exists and is not an empty directory". dependencies:[] keeps the sync in the last stage
+  # (on_success) but pulls no artifacts — needs:[] would wrongly start it before the build.
+  dependencies: []
+  variables:
+    GIT_STRATEGY: empty
+    GITLEAKS_VERSION: "8.24.0"
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq git curl jq golang ca-certificates >/dev/null 2>&1
+    - git clone -q "$CI_REPOSITORY_URL" .
+    - git -c advice.detachedHead=false checkout -q "$CI_COMMIT_SHA"
+    - pip3 install --break-system-packages git-filter-repo >/dev/null 2>&1 || (apt-get install -y -qq git-filter-repo >/dev/null 2>&1)
+    - curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar xz -C /usr/local/bin gitleaks && gitleaks version
+  script:
+    - |
+      if [ "${DRY_RUN:-0}" = "1" ]; then
+        bash github-sync/sync-to-github.sh --dry-run --verbose
+      else
+        : "${GITHUB_REPO:?set GITHUB_REPO CI variable}" "${GITHUB_TOKEN:?set GITHUB_TOKEN CI variable}"
+        bash github-sync/sync-to-github.sh
+      fi

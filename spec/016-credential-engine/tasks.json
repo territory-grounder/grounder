@@ -1,0 +1,418 @@
+{
+  "spec": "016-credential-engine",
+  "tasks": [
+    {
+      "id": "T-016-1",
+      "title": "Native per-resource resolver core: Target -> CredentialBundle entry point, config-not-code (TG-89)",
+      "files_owned": [
+        "core/credential/engine.go",
+        "core/credential/resolver.go",
+        "core/credential/bundle.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-1600",
+        "REQ-1601"
+      ],
+      "acceptance": {
+        "feature": "credential-engine.feature",
+        "scenarios": [
+          "A target resolves to exactly one credential bundle from config data",
+          "A credential bundle is constructible only with all required fields"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 450,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-016-2",
+      "title": "Fail-closed resolver: unresolved -> refuse, no default-identity fallback (TG-89)",
+      "files_owned": [
+        "core/credential/failclosed.go"
+      ],
+      "deps": [
+        "T-016-1"
+      ],
+      "req_ids": [
+        "REQ-1602"
+      ],
+      "acceptance": {
+        "feature": "credential-engine.feature",
+        "scenarios": [
+          "An unresolved target is refused with no default identity",
+          "The fail-closed property holds under an empty or partially-synced store"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 75
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-016-3",
+      "title": "Sealed-at-rest SecretRef binding: env/file/store schemes, no plaintext credential (TG-89)",
+      "files_owned": [
+        "core/credential/secretref.go"
+      ],
+      "deps": [
+        "T-016-1"
+      ],
+      "req_ids": [
+        "REQ-1603"
+      ],
+      "acceptance": {
+        "feature": "credential-engine.feature",
+        "scenarios": [
+          "Every credential value is a SecretRef resolved at runtime and no plaintext is stored"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 75
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-016-4",
+      "title": "Shared estate object-model match + most-specific-wins precedence (TG-89)",
+      "files_owned": [
+        "core/credential/match.go",
+        "core/credential/precedence.go"
+      ],
+      "deps": [
+        "T-016-1"
+      ],
+      "req_ids": [
+        "REQ-1605",
+        "REQ-1606"
+      ],
+      "acceptance": {
+        "feature": "credential-engine.feature",
+        "scenarios": [
+          "The resolver matches on the same estate object-model as the policy engine",
+          "A multi-rule target resolves by most-specific-wins and an equal-specificity conflict refuses"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 100
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-016-5",
+      "title": "Compose after policy authZ, before execute: authN as a distinct control layer (TG-98)",
+      "files_owned": [
+        "core/credential/compose.go"
+      ],
+      "deps": [
+        "T-016-2",
+        "T-016-4"
+      ],
+      "req_ids": [
+        "REQ-1604"
+      ],
+      "acceptance": {
+        "feature": "credential-engine.feature",
+        "scenarios": [
+          "Identity is resolved after a non-deny policy verdict and before execute"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 75
+      },
+      "status": "completed",
+      "status_evidence": "Completed 2026-08-23: gate 4d2 authn-compose in the interceptor (core/actuate/interceptor.go, between the 4d policy verdict and 4e) consults credential.Composer.Compose (core/credential/compose.go, over the AuditedResolver — every compose-time resolution audited). Order proven by executed killing mutation (gate moved above 4d → the deny-never-composes oracle red); refusal drilled in the gate-drill matrix; nil composer byte-identical with an honest unarmed trail row. Ships DARK behind TG_AUTHN_COMPOSE (wire file, env-parity-registered, compose-forwarded on all three worker services) because arming with an incomplete rule table deliberately refuses uncovered targets — the operator arming decision. The per-target KEY handoff to the leaf remains the JIT/SSH-CA lane (spec/022 T-022-3, live-attended), stated in compose.go."
+    },
+    {
+      "id": "T-016-6",
+      "title": "Two-plane router: machine->host vs human->console approver, never crossed (TG-108)",
+      "files_owned": [
+        "core/credential/plane.go"
+      ],
+      "deps": [
+        "T-016-1"
+      ],
+      "req_ids": [
+        "REQ-1611"
+      ],
+      "acceptance": {
+        "feature": "credential-engine.feature",
+        "scenarios": [
+          "A machine-plane source cannot populate approver identity",
+          "An approver-plane source cannot populate a host credential bundle"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-016-7",
+      "title": "Unified CredentialSource interface + scheduled/on-demand Sync, incremental+idempotent, cross-source precedence, last-synced+drift (TG-108)",
+      "files_owned": [
+        "core/credential/source.go",
+        "core/credential/sync.go"
+      ],
+      "deps": [
+        "T-016-4",
+        "T-016-6"
+      ],
+      "req_ids": [
+        "REQ-1607",
+        "REQ-1608",
+        "REQ-1609",
+        "REQ-1610",
+        "REQ-1615"
+      ],
+      "acceptance": {
+        "feature": "credential-engine.feature",
+        "scenarios": [
+          "A source syncs read-only into the native store on schedule and on demand",
+          "A repeated sync of unchanged data converges with no duplicate or orphan",
+          "A target in multiple sources resolves by source precedence and records shadowed sources",
+          "A target with no synced source resolves from the native-store fallback",
+          "Each source records last-synced and drift"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 600,
+        "max_wall_clock_minutes": 150
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-016-8",
+      "title": "AWX/Ansible/Semaphore connector: read-only inventory + credential pull, native Go, distroless (TG-88)",
+      "files_owned": [
+        "modules/credsource/awx/awx.go",
+        "modules/credsource/ansible/ansible.go",
+        "modules/credsource/semaphore/semaphore.go"
+      ],
+      "deps": [
+        "T-016-7"
+      ],
+      "req_ids": [
+        "REQ-1612"
+      ],
+      "acceptance": {
+        "feature": "credential-engine.feature",
+        "scenarios": [
+          "The AWX Ansible Semaphore source pulls inventory and credentials read-only with no subprocess"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 650,
+        "max_wall_clock_minutes": 150
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-016-9",
+      "title": "OpenBao/HashiCorp Vault connector: vault:/bao: store resolver, KV v2, fail-closed on unreachable/denied/expired (TG-90)",
+      "files_owned": [
+        "modules/credsource/vault/vault.go",
+        "modules/credsource/openbao/openbao.go"
+      ],
+      "deps": [
+        "T-016-3",
+        "T-016-7"
+      ],
+      "req_ids": [
+        "REQ-1613"
+      ],
+      "acceptance": {
+        "feature": "credential-engine.feature",
+        "scenarios": [
+          "The vault bao SecretRef scheme reads KV v2 read-only and fails closed on unreachable or denied or expired"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 500,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-016-10",
+      "title": "LDAP/OIDC connector: human-plane users+groups feeding spec/015 approve_by (TG-108)",
+      "files_owned": [
+        "modules/credsource/ldap/ldap.go"
+      ],
+      "deps": [
+        "T-016-6",
+        "T-016-7"
+      ],
+      "req_ids": [
+        "REQ-1614"
+      ],
+      "acceptance": {
+        "feature": "credential-engine.feature",
+        "scenarios": [
+          "The LDAP OIDC source pulls approver identities read-only and never writes a host bundle"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 450,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-016-11",
+      "title": "Secondary governed Ansible sensor + actuator behind the mode chokepoint and never-auto floor (TG-88)",
+      "files_owned": [
+        "modules/actuation/awxjob/req1616_sensor_actuator_test.go"
+      ],
+      "deps": [
+        "T-016-8"
+      ],
+      "req_ids": [
+        "REQ-1616"
+      ],
+      "acceptance": {
+        "feature": "credential-engine.feature",
+        "scenarios": [
+          "Read-only fact-gathering is a Phase-1-safe sensor and playbook actuation routes through the mode chokepoint"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 100
+      },
+      "status": "completed",
+      "status_evidence": "Completed 2026-08-23 by VERIFICATION + the missing oracle, not by a new module. REQ-1616 asks for two things and both exist: the governed playbook/job-template ACTUATOR is the awx-job effect lane (AWX is Ansible with an API; a fixed template id + typed extra_vars is a strictly narrower channel than raw SSH), inert at Shadow twice over; the read-only SENSOR capability is knowledge/awxplaybooks (read-only token, GET-only) plus hostdiag's fixed-argv host reads. What had no oracle was the SPLIT — now pinned in modules/actuation/awxjob/req1616_sensor_actuator_test.go with a vacuity floor (the armed actuator must NOT read read-only, or the Shadow assertion proves nothing). The task's predicted modules/actuation/ansible/ansible.go is deliberately NOT built: an un-controlled Ansible actuator is UNBUILDABLE under distroless + INV-02 (no binary, no shell, no subprocess), and an AWX ad-hoc \"gather facts\" sensor was refused on review — an ad-hoc command RUNS a module on the target, so it is a remote execution channel bought for facts hostdiag already gathers without one. The reasoning is in the test file header so the next reader does not re-derive it."
+    },
+    {
+      "id": "T-016-12",
+      "title": "credential_resolution + credential_sync_run persistence migration, audit-every-resolution, registered-only sources (TG-107)",
+      "files_owned": [
+        "db/migrations/0017_credential_engine.sql",
+        "core/credential/audit.go"
+      ],
+      "deps": [
+        "T-016-2",
+        "T-016-7"
+      ],
+      "req_ids": [
+        "REQ-1617"
+      ],
+      "acceptance": {
+        "feature": "credential-engine.feature",
+        "scenarios": [
+          "Every resolution and sync is appended to the governance ledger with no secret value",
+          "The credential tables are append-only with no runtime UPDATE or DELETE",
+          "A source is admitted only when its connector adapter is registered at startup"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 500,
+        "max_wall_clock_minutes": 130
+      },
+      "status": "pending",
+      "status_evidence": "PARTIAL as of 2026-08-23: the append-only credential_resolution audit table (0018, REVOKE test-asserted), credential_sync_run/coverage operational state (0017), the audited resolver (core/credential/audit.go, non-secret rows test-asserted) and the console coverage view (core/httpapi/credentials.go, tested) all EXIST. Still open: the scenario as written demands every resolution/sync append to the GOVERNANCE ledger — the implementation records them in the dedicated append-only DB audit table instead (arguably the right call under INV-19 one-spine + volume, but that is a spec-vs-implementation divergence to reconcile, not silently re-map); and the source-admission scenario needs a bootstrap-level refusal oracle. Neither blocked, both small."
+    },
+    {
+      "id": "T-016-13",
+      "title": "First-class Phase-1 console credential UX: sync-source config/test/schedule/Sync-now, per-target credential map, coverage view paired with policy packet-tracer, shared object-groups editor, sealed write-only ledger-audited edits (TG-109)",
+      "files_owned": [
+        "deploy/console/v2/modules/credentials/js.txt",
+        "core/httpapi/credentials_native.go",
+        "core/httpapi/credentials_write.go",
+        "spec/016-credential-engine/acceptance/console_write_steps_test.go"
+      ],
+      "deps": [
+        "T-016-7",
+        "T-016-12"
+      ],
+      "req_ids": [
+        "REQ-1615",
+        "REQ-1618"
+      ],
+      "acceptance": {
+        "feature": "credential-engine.feature",
+        "scenarios": [
+          "A secret value is write-only in the console and never echoed",
+          "The console configures tests schedules and syncs each source on demand",
+          "The console renders per-source last-synced and drift",
+          "The console renders the per-target credential map with source and precedence"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 800,
+        "max_wall_clock_minutes": 180
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-016-14",
+      "title": "OIDC client-credentials token minter: oidc: SecretRef scheme, machine-plane Bearer token, verified TLS, cached by expires_in, fail-closed (TG-107)",
+      "files_owned": [
+        "modules/credsource/oidctoken/oidctoken.go"
+      ],
+      "deps": [
+        "T-016-3",
+        "T-016-7"
+      ],
+      "req_ids": [
+        "REQ-1619"
+      ],
+      "acceptance": {
+        "feature": "credential-engine.feature",
+        "scenarios": [
+          "The oidc SecretRef scheme mints a machine-plane client-credentials token and fails closed on unreachable or denied or untrusted-TLS"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 450,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-016-R1",
+      "title": "An equal-specificity tie is ambiguous only when the ANSWERS differ, never merely the rule count",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-1606a"
+      ],
+      "acceptance": {
+        "go_test": "core/credential: TestEqualSpecificitySameIdentityResolves, TestEqualSpecificityDifferentIdentityStillRefuses, TestMoreSpecificRuleStillBeatsATie, TestMutationControl_SameIdentityDiscriminatesOnEveryField"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-016-20",
+      "title": "Retry a substrate STANDBY (429/503) a bounded number of times; keep 404/403 fail-closed",
+      "files_owned": [
+        "modules/credsource/vault/standby_test.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-1620"
+      ],
+      "acceptance": {
+        "go_test": "modules/credsource/vault: TestStandby429IsRetriedThenSucceeds, TestServiceUnavailable503IsRetried, TestTerminalStatusesAreNeverRetried, TestExhaustedRetryBudgetStillFailsClosed",
+        "mutation_control": "EXECUTED RED 2026-07-27: (1) disabling the retry loop (the shipped defect) fails TestStandby429IsRetriedThenSucceeds with the live error text `status 429`; (2) FAIL-OPEN — widening isUnavailable to `se.status != 0` so 404/403 retry — fails TestTerminalStatusesAreNeverRetried (404 and 400 each attempted 4 times, want 1); (3) unbounding the budget fails TestExhaustedRetryBudgetStillFailsClosed (7 attempts, want exactly 4)."
+      },
+      "budget": {
+        "max_loc_delta": 220,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    }
+  ]
+}

@@ -1,0 +1,304 @@
+/* ============================================================================
+   OBJECT GROUPS module (og-) — the shared object-group editor (spec/016, TG-481).
+   The store + API shipped with no console UI — this is that missing half. Object groups are named sets
+   of host-glob patterns the policy AND credential engines both UNION into a target's group membership:
+   one shared definition, two consumers, referenced by name from a KindGroup selector.
+   GET /v1/estate/groups sits at the elevated AuthTraceRead tier (membership reveals actuation-policy
+   structure, though it carries no secret value) — mirrored here exactly like credentials/native: a
+   module-local lazy load (ogList) that captures the status code, so a 403 renders the honest
+   "elevated read required" state with a step-up affordance rather than a generic error swallowing WHY.
+   POST/DELETE /v1/estate/groups/entries sit at AuthAdminSession (the admin step-up tier). The grounder
+   NEVER writes estate_object_group itself: both proxy to the worker's ledger-first
+   objectgroup.ObjectGroupWriteWorkflow, which validates (non-empty name, >=1 non-empty host-glob pattern,
+   the recognized precedence, a mandatory rationale) BEFORE anything is ledgered or persisted. Every
+   outcome/refusal shown here is the backend's own words — verbatim where the text is load-bearing.
+   Precedence is rendered as fixed text, not a free-entry field: validPrecedence() accepts only "union"
+   today (a hand-authored group ADDS to inventory-derived membership, never masks it — the TG-481 ratified
+   semantics), so an editable field would just be a guaranteed-400 trap for anything else typed into it.
+   Per-row rationale is NOT displayed: the read model (httpapi.ObjectGroup) does not carry it — each
+   write's rationale is folded into the governance ledger's Reason text, not persisted on the row, so the
+   intro below says where to find it instead of rendering a column that cannot exist.
+   ============================================================================ */
+
+/* relative time from an RFC3339 string; honest "never"/passthrough on empty/unparseable — same as credRel. */
+function ogRel(iso) {
+  if (!iso) return "never";
+  const t = Date.parse(iso);
+  if (isNaN(t)) return String(iso);
+  let s = Math.floor((Date.now() - t) / 1000);
+  if (s < 0) return "just now";
+  if (s < 60) return s + "s ago";
+  const m = Math.floor(s / 60); if (m < 60) return m + "m ago";
+  const hh = Math.floor(m / 60); if (hh < 24) return hh + "h ago";
+  const d = Math.floor(hh / 24); if (d < 30) return d + "d ago";
+  const mo = Math.floor(d / 30); if (mo < 12) return mo + "mo ago";
+  return Math.floor(mo / 12) + "y ago";
+}
+
+function ogErr(msg) { return h("div", { class: "empty", style: "padding:22px" }, h("div", { class: "desc" }, msg)); }
+function ogNone(big, desc) { return h("div", { class: "empty", style: "padding:34px 20px" }, h("div", { class: "big" }, big), h("div", { class: "desc" }, desc)); }
+function ogSec(lbl, title, extra) {
+  return h("div", { class: "sec" },
+    h("span", { class: "lbl", style: "color:var(--match)" }, lbl),
+    h("h3", {}, title),
+    h("span", { class: "rule" }),
+    extra || null);
+}
+/* a table wrapped in its own horizontal-scroll container — the page body never scrolls sideways. */
+function ogCard(table) { return h("div", { class: "wrapcard" }, h("div", { class: "og-scroll" }, table)); }
+
+/* host-glob patterns as small machine-plane (map-indigo) chips, one per pattern — never joined into a
+   single opaque string, so each glob stays individually readable. */
+function ogPatterns(pats) {
+  if (!pats || !pats.length) return h("span", { style: "color:var(--ink4)" }, "—");
+  const box = h("span", { class: "og-pats" });
+  pats.forEach(p => box.append(h("span", { class: "og-pat" }, p)));
+  return box;
+}
+
+/* shared refusal→sentence mapper — mirrors credWriteFail/polEditPostFail: wherever the backend's text is
+   load-bearing (a validator refusal, a typed 404) it is shown VERBATIM, never paraphrased. */
+async function ogWriteFail(r) {
+  let server = ""; try { server = (await r.text()).trim().slice(0, 400); } catch (e) {}
+  if (r.status === 401) return { elevate: true, msg: "admin elevation required — step up, then press the button again (nothing auto-submits)" };
+  if (r.status === 403) return { msg: "refused: " + (server || "this session may not write here (not admin-authorized, or a cross-origin write)") };
+  if (r.status === 404) return { gone: true, msg: server || "not found" };
+  if (r.status === 429) return { msg: "rate limited — wait a moment and retry" };
+  if (r.status === 400) return { msg: server || "refused" }; // VERBATIM backend validator text
+  if (r.status === 503 || r.status === 405) return { msg: "this write path is not deployed on this control plane (fail-closed) — nothing was changed" };
+  return { msg: "write failed (" + r.status + ")" + (server ? " — " + server : "") };
+}
+
+/* After a successful admin step-up driven from this surface: re-read what the elevation unlocks. ALWAYS
+   passed to cfgElevateOverlay — its default callback routes to #secrets, which would bounce the operator
+   off this view. */
+function ogAfterElevate() {
+  if (ogList.phase === "err") { ogLoad(true); return; }
+  ogRerenderView();
+}
+
+/* ---- state (module-local, NOT on liveState — see fixtures.txt for why) ------------------------------ */
+let ogList = { phase: "unloaded", rows: null, total: 0, status: 0, timeout: false };
+let ogForm = { name: "", patterns: "", rationale: "", busy: false };
+let ogMsg = { text: "", tone: "dim" };          // the one write-outcome line (add + delete share it)
+let ogDel = { id: 0, rationale: "", note: "" }; // one open delete prompt at a time
+
+function ogLoad(force) {
+  if (ogList.phase === "loading") return;
+  if (!force && ogList.phase !== "unloaded") return;
+  ogList = { phase: "loading", rows: null, total: 0, status: 0, timeout: false };
+  (async () => {
+    try {
+      const p = await liveGet("/v1/estate/groups");
+      ogList = { phase: "ok", rows: p.groups || [], total: p.total != null ? p.total : (p.groups || []).length, status: 200, timeout: false };
+    } catch (e) {
+      ogList = { phase: "err", rows: null, total: 0, status: (e && e.status) || 0, timeout: !!(e && e.timeout) };
+    }
+    ogRerenderView();
+  })();
+}
+
+async function ogAdd() {
+  if (ogForm.busy) return; // one in-flight add ⇒ one POST
+  const name = ogForm.name.trim();
+  const patterns = ogForm.patterns.split(",").map(s => s.trim()).filter(Boolean);
+  const rationale = ogForm.rationale.trim();
+  if (!name || !patterns.length || !rationale) {
+    ogMsg = { text: "name, at least one pattern, and a rationale are all required — every object group states why it exists", tone: "bad" };
+    ogRerenderView();
+    return;
+  }
+  ogForm.busy = true;
+  ogMsg = { text: "recording…", tone: "dim" };
+  ogRerenderView();
+  let resp = null;
+  try {
+    resp = await fetch("/api/v1/estate/groups/entries", { method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name, patterns: patterns, precedence: "union", rationale: rationale }) });
+  } catch (e) {}
+  ogForm.busy = false;
+  if (resp && resp.ok) {
+    const out = await resp.json().catch(() => ({}));
+    ogForm = { name: "", patterns: "", rationale: "", busy: false };
+    ogMsg = { text: "added — row " + (out.id != null ? out.id : "?") + " · ledger seq " + (out.ledger_seq != null ? out.ledger_seq : "?"), tone: "ok" };
+    ogLoad(true); // re-read the truth (the worker committed it; the list must show it)
+    return;
+  }
+  const f = resp ? await ogWriteFail(resp) : { msg: "network error — the control plane did not answer; the group was NOT added. Retry." };
+  ogMsg = { text: f.msg, tone: f.elevate ? "dim" : "bad" };
+  ogRerenderView();
+  if (f.elevate && typeof cfgElevateOverlay === "function")
+    // the typed name/patterns/rationale survive (the form re-renders FROM STATE) and nothing auto-submits —
+    // Add is a deliberate second click after the step-up.
+    cfgElevateOverlay("Adding an object group needs an elevated session.", () => ogRerenderView());
+}
+
+async function ogDelete(id) {
+  const rationale = ogDel.rationale.trim();
+  if (!rationale) {
+    ogDel.note = "a rationale is required — taking a group back is a decision, not a cleanup";
+    ogRerenderView();
+    return;
+  }
+  let resp = null;
+  try {
+    resp = await fetch("/api/v1/estate/groups/entries/" + encodeURIComponent(id), { method: "DELETE", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rationale: rationale }) });
+  } catch (e) {}
+  if (resp && resp.ok) {
+    const out = await resp.json().catch(() => ({}));
+    ogDel = { id: 0, rationale: "", note: "" };
+    ogMsg = { text: "removed — row " + id + " · ledger seq " + (out.ledger_seq != null ? out.ledger_seq : "?"), tone: "ok" };
+    ogLoad(true);
+    return;
+  }
+  if (resp && resp.status === 404) {
+    // ErrNoSuchObjectGroup: the row was gone before this delete — already removed. Converged, said
+    // plainly, and the list re-reads so the surface shows the truth rather than a stale row.
+    ogDel = { id: 0, rationale: "", note: "" };
+    ogMsg = { text: "already removed — row " + id + " no longer exists; re-reading the groups", tone: "dim" };
+    ogLoad(true);
+    return;
+  }
+  const f = resp ? await ogWriteFail(resp) : { msg: "network error — the control plane did not answer; the group may still exist. Retry." };
+  ogDel.note = f.msg;
+  ogRerenderView();
+  if (f.elevate && typeof cfgElevateOverlay === "function")
+    cfgElevateOverlay("Removing an object group needs an elevated session.", () => ogRerenderView());
+}
+
+function ogDeleteCell(r) {
+  const cell = h("td", { class: "og-actcell" });
+  if (ogDel.id === r.id) {
+    const rat = h("input", { id: "ogDelRat", class: "og-search m", placeholder: "why is this group withdrawn?",
+      "aria-label": "Delete rationale for group " + r.id, value: ogDel.rationale,
+      oninput: e => { ogDel.rationale = e.target.value; },
+      onkeydown: e => { if (e.key === "Enter") { e.preventDefault(); ogDelete(r.id); } } });
+    const go = h("button", { class: "btn og-actbtn", type: "button" }, "CONFIRM DELETE");
+    go.addEventListener("click", () => ogDelete(r.id));
+    const no = h("button", { class: "btn og-actbtn", type: "button" }, "CANCEL");
+    no.addEventListener("click", () => { ogDel = { id: 0, rationale: "", note: "" }; ogRerenderView(); });
+    cell.append(h("div", { class: "og-deldiv" }, rat, go, no,
+      ogDel.note ? h("div", { class: "desc", style: "flex-basis:100%;font-size:10.5px;color:var(--deviation)" }, ogDel.note) : null));
+    return cell;
+  }
+  const del = h("button", { class: "btn og-actbtn", type: "button", "aria-label": "Delete group " + (r.name || r.id) }, "DELETE");
+  del.addEventListener("click", () => { ogDel = { id: r.id, rationale: "", note: "" }; ogRerenderView("ogDelRat"); });
+  cell.append(del);
+  return cell;
+}
+
+function ogAddForm() {
+  const name = h("input", { id: "ogName", class: "og-search m", placeholder: "group name",
+    "aria-label": "New object group name", value: ogForm.name, autocapitalize: "none", spellcheck: "false",
+    style: "flex:1;min-width:150px", oninput: e => { ogForm.name = e.target.value; } });
+  const pats = h("input", { id: "ogPatterns", class: "og-search m", placeholder: "host-glob patterns, comma-separated",
+    "aria-label": "New object group patterns, comma-separated", value: ogForm.patterns, autocapitalize: "none", spellcheck: "false",
+    style: "flex:2;min-width:220px", oninput: e => { ogForm.patterns = e.target.value; } });
+  const rat = h("input", { id: "ogRationale", class: "og-search m", placeholder: "why does this group exist?",
+    "aria-label": "New object group rationale", value: ogForm.rationale,
+    style: "flex:1;min-width:160px", oninput: e => { ogForm.rationale = e.target.value; } });
+  const btn = h("button", { class: "btn primary og-actbtn", type: "button", id: "ogAdd" }, "ADD GROUP");
+  if (ogForm.busy) { btn.disabled = true; btn.setAttribute("aria-disabled", "true"); }
+  btn.addEventListener("click", () => ogAdd());
+  const tone = ogMsg.tone === "ok" ? "var(--match)" : ogMsg.tone === "bad" ? "var(--deviation)" : "var(--ink3)";
+  return h("div", { class: "og-form" },
+    h("div", { class: "og-form-row" }, name, pats, rat, btn),
+    h("div", { id: "ogMsg", class: "desc", role: "status", "aria-live": "polite",
+      style: "min-height:14px;font-size:11px;white-space:pre-wrap;color:" + tone }, ogMsg.text),
+    h("div", { class: "desc", style: "font-size:10.5px;color:var(--ink4)" },
+      "Precedence is always “union” — the only ratified merge semantics (a hand-authored group ADDS to "
+      + "inventory-derived membership, it never masks it). Validated (name + at least one pattern + rationale) at "
+      + "the surface and again in the worker, ledgered before it lands, and readable by KindGroup selectors "
+      + "immediately — no restart needed."));
+}
+
+/* re-render the whole surface in place, exactly like credRerenderView — this module owns the WHOLE view
+   (not a sub-section of a larger one), so there is no search caret to restore, only an optional control
+   to refocus after a state-driven rebuild (e.g. the delete-rationale prompt when it appears). */
+function ogRerenderView(focusId) {
+  if ((location.hash || "").replace("#", "") !== "objectgroups") return;
+  const host = document.querySelector(".main .view");
+  if (!host) return;
+  host.innerHTML = "";
+  host.append(views.objectgroups());
+  if (focusId) {
+    const el = host.querySelector("#" + focusId);
+    if (el) el.focus();
+  }
+}
+
+function ogSection() {
+  const strip = h("div", { class: "og-strip" });
+  strip.append(ogSec("LIVE · object groups", "Shared object groups (policy + credential engines)"));
+  if (ogList.phase === "unloaded") ogLoad();
+  if (ogList.phase === "unloaded" || ogList.phase === "loading") { strip.append(ogErr("Reading the object groups…")); return strip; }
+  if (ogList.phase === "err") {
+    if (ogList.status === 403) {
+      const eb = h("button", { class: "btn primary", type: "button", id: "ogElevate" }, "Elevate (admin)");
+      eb.addEventListener("click", () => {
+        if (typeof cfgElevateOverlay === "function") cfgElevateOverlay("Reading object groups needs an elevated session.", ogAfterElevate);
+      });
+      strip.append(h("div", { class: "empty", style: "padding:26px 20px" },
+        h("div", { class: "big" }, "Elevated read required"),
+        h("div", { class: "desc", style: "max-width:66ch;margin:6px auto 12px" },
+          "elevated read required — object-group membership reveals actuation-policy structure, so listing "
+          + "groups takes trace-read standing (an admin-eligible session, or a live admin step-up). No secret "
+          + "value is carried either way — only names and host-glob patterns."),
+        eb));
+      return strip;
+    }
+    const retry = h("button", { class: "btn", type: "button", id: "ogRetry" }, "RETRY");
+    retry.addEventListener("click", () => ogLoad(true));
+    strip.append(h("div", { class: "empty", style: "padding:22px 20px" },
+      h("div", { class: "desc", style: "margin-bottom:10px" },
+        ogList.timeout ? "The object-groups read timed out — we do not know its state (this is not the endpoint saying no)."
+          : ogList.status === 401 ? "The session is no longer authenticated — sign in again to read object groups."
+          : "/v1/estate/groups is unavailable on this control plane (fail-closed" + (ogList.status ? " · " + ogList.status : "") + ")."),
+      retry));
+    return strip;
+  }
+  const rows = ogList.rows || [];
+  if (!rows.length) {
+    strip.append(ogNone("No object groups yet", "No hand-authored groups exist — add one below; policy and credential "
+      + "selectors can reference it by name as soon as it lands, no restart needed."));
+  } else {
+    const t = h("table", { class: "tbl" });
+    t.append(h("thead", {}, h("tr", {}, ...["ID", "Name", "Patterns", "Precedence", "Created by", "Created", "Actions"].map(x => h("th", {}, x)))));
+    const tb = h("tbody");
+    rows.forEach(r => {
+      tb.append(h("tr", {},
+        h("td", { class: "m", style: "color:var(--ink3)" }, String(r.id != null ? r.id : "—")),
+        h("td", { style: "color:var(--territory);font-weight:500" }, r.name || "—"),
+        h("td", {}, ogPatterns(r.patterns)),
+        h("td", { class: "m" }, r.precedence || "—"),
+        h("td", { class: "m", style: "color:var(--ink3)" }, r.created_by || "—"),
+        h("td", { class: "m", style: "color:var(--ink3)" }, r.created_at ? ogRel(r.created_at) : "—"),
+        ogDeleteCell(r)));
+    });
+    t.append(tb);
+    strip.append(ogCard(t));
+  }
+  strip.append(ogAddForm());
+  return strip;
+}
+
+/* ---- the surface ----------------------------------------------------------------------------- */
+function ogView() {
+  const wrap = h("div");
+  if (typeof liveState === "undefined" || !liveState.on) {
+    wrap.append(h("div", { class: "empty", style: "padding:52px 20px" },
+      h("div", { class: "big" }, "Object groups — live only"),
+      h("div", { class: "desc" }, "This surface reads and writes the live, persisted object-group store. It has no preview data; sign in to adopt it.")));
+    return wrap;
+  }
+  wrap.append(h("p", { class: "desc og-intro" },
+    "Named sets of host-glob patterns the policy and credential engines both ",
+    h("b", {}, "union"),
+    " into a target's group membership — one shared definition referenced by name from a KindGroup "
+    + "selector, two consumers. ", h("b", {}, "Each write's rationale is folded into the governance ledger's "
+    + "reason"), " (see Ledger) rather than stored on the row itself."));
+  wrap.append(ogSection());
+  return wrap;
+}

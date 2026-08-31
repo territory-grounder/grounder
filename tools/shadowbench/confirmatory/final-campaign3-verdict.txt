@@ -1,0 +1,24 @@
+EXCEED-PROOF CONFIRMATORY ANALYSIS (pre-registered, frozen)
+  analysis sha256: d382f04831de9bc7407de76eae168f3deb6cac3babbcd089d1c6c306f5faa3b7
+  pairs: 30 analyzed of 32 submitted, across 13 host(s)
+  PRIMARY endpoint population: 30 item(s) across 13 host(s) — a SUBSET of the judged set, and the one the claim rests on
+    - excluded 2 pair(s): more than 3 per host (earliest kept)
+  PRIMARY (judge-free) — correct op-class vs the INJECTED fault (injector ground truth; no judge)
+    TG-only-correct=7  pred-only-correct=0  concordant=23
+    McNemar exact on 7 discordant pair(s): p=0.0156  REJECT null
+  SECONDARY (judged rubric, Holm-corrected across the family)
+    - correct_diagnosis        n= 30  mean Δ(TG−pred)=-1.600 (CI -2.393..-0.806)  δ=-0.618  p=0.9997 → Holm 1.0000 ns
+    - evidence_grounded        n= 30  mean Δ(TG−pred)=-1.933 (CI -2.750..-1.107)  δ=-0.700  p=0.9999 → Holm 1.0000 ns
+    - sensible_proposal        n= 30  mean Δ(TG−pred)=-1.300 (CI -2.000..-0.586)  δ=-0.533  p=0.9987 → Holm 1.0000 ns
+    - appropriate_band         n= 30  mean Δ(TG−pred)=-0.800 (CI -1.448..-0.188)  δ=-0.411  p=0.9768 → Holm 1.0000 ns
+    - falsifiable_prediction   n=0 — no pair scored this dimension on both sides
+  NOTE: CIs are cluster-bootstrapped BY HOST, not by pair — pairs from one host are not independent.
+  PRIMARY correct-rate difference (TG−pred): +0.233 (CI +0.088..+0.423, host-clustered) — non-inferiority margin -0.10
+  COMPOSITE VERDICT (frozen decision rule, PRE-REGISTRATION §7): TG MATCHES (non-inferior)
+    counter-leg correct_diagnosis    n= 30  two-sided p=0.0006 → Holm 0.0006  favors=pred  ← significantly favours the predecessor
+    counter-leg evidence_grounded    n= 30  two-sided p=0.0002 → Holm 0.0003  favors=pred  ← significantly favours the predecessor
+    - like-for-like counter-leg significantly favours the predecessor on: correct_diagnosis, evidence_grounded -- not EXCEEDS
+    - host-clustered bootstrap CI lower bound on the primary correct-rate difference (+0.0882) excludes a predecessor advantage greater than 10% -- non-inferior
+  UNILATERAL TG-ONLY PROPERTIES — labelled, printed, and STRUCTURALLY OUTSIDE the verdict:
+    - falsifiable_prediction: TG mean 3.5 over n=2 (the predecessor structurally commits no predictions — a property, never a win)
+    - axes with no comparator (docs/BENCHMARK-AXES.md): A3 heal success rate; A4 autonomy rate; A5 fault-class breadth; A7 false-actuation rate; A8 safety-violation count — published as TG properties only, never as a comparison in either direction

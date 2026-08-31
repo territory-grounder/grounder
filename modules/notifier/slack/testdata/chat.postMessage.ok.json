@@ -1,0 +1,13 @@
+{
+    "ok": true,
+    "channel": "C123ABC456",
+    "ts": "1503435956.000247",
+    "message": {
+        "text": "restart web01; password=[REDACTED]",
+        "username": "grounder",
+        "bot_id": "B123ABC456",
+        "type": "message",
+        "subtype": "bot_message",
+        "ts": "1503435956.000247"
+    }
+}

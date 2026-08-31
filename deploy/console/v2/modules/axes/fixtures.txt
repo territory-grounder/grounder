@@ -1,0 +1,14 @@
+/* AXES module (ax-) — the live benchmark-axis scoreboard (TG-480, epic TG-187).
+   HONESTY CONTRACT: this surface has NO fixture. Every value it shows is fetched live from the
+   read-only GET /v1/axes surface at session adoption — the SAME serialized core/axis.Scorecard the
+   axisscore CLI prints (`axisscore -json`), one authority, no second shape to drift. There is no
+   representative/sample data to fall back to: a fabricated benchmark number on the surface whose whole
+   point is publish-the-denominator honesty would be the exact overstatement the axis vocabulary exists
+   to prevent. Unauthenticated the console shows only the auth gate; authenticated, an unavailable
+   endpoint (503 scoreboard-not-deployed / 502 aggregate-unavailable, both fail-closed) renders an
+   honest error state — never a scorecard of zeros. An axis listed in axes_not_live_measurable renders
+   its missing_input sentence, never a fabricated 0 (REQ-2502's zero-numerator discipline rides along).
+   State held on liveState (populated by modules/_live/js.txt):
+     liveState.axes — undefined (pre-adopt) | null (failed/fail-closed read) | the serialized Scorecard
+   The chaos-calibration section reads liveState.estate — the /v1/estate snapshot the live layer ALREADY
+   adopts — and derives counts only from fields that snapshot actually carries (no second estate fetch). */

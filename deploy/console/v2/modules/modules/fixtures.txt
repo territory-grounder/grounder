@@ -1,0 +1,32 @@
+/* ===================== modules — fixtures ===================== */
+/* [key, LABEL, description] */
+const MODS_FAMS = [
+  ["ingest",        "INGEST",        "alert + telemetry intake"],
+  ["cmdb",          "CMDB",          "estate graph sources"],
+  ["tracker",       "TRACKER",       "case / ticket sync"],
+  ["notifier",      "NOTIFIER",      "human channels"],
+  ["actuation",     "ACTUATION",     "execution surfaces"],
+  ["model",         "MODEL",         "gateway + inference"],
+  ["observability", "OBSERVABILITY", "TG self-telemetry"]
+];
+
+// MODULES — retired fixture data (TG-366). The #modules view is live-only (see modules/_live/js.txt),
+// which renders /v1/capabilities and /v1/modules/schema.
+//
+// WHAT WAS HERE. 31 invented connectors with invented endpoints on a
+// .lan domain this estate does not use, invented credential references, invented versions, health dots, last-run
+// times, poll intervals and rate limits. Only 3 of the 31 names existed. The live registry, read from the
+// running control plane on 2026-08-06, is 45 declared capabilities (22 enabled) and 43 registry entries
+// (30 with a config schema, 13 that legitimately take none, each with a stated reason).
+//
+// WHY EMPTY RATHER THAN CORRECTED. The live layer already refuses to render this on the live path —
+// "a plausible-looking connector list is exactly the thing an operator must not be shown here" — but it
+// falls back to this fixture on two paths: a non-live shell, and a live shell whose /v1/capabilities read
+// has not landed. Those fallbacks are how an invented estate reaches an operator's screen. A fixture that
+// is never allowed to render is not a preview; it is a hazard with a banner on it.
+//
+// This is exactly how SEC_REFS was retired for #secrets (modules/secrets/fixtures.txt), for the same
+// reason and with the same consequence: the design preview shows an empty registry, and the live console
+// shows the real one. Fabricated data has no place on a surface whose job is "what can this system reach
+// and what is switched on" (INV-13).
+const MODS_FLEET = [];

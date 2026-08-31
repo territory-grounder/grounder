@@ -1,0 +1,37 @@
+/* ================= gate-margins module (gm-) — the within-ε boundary-case queue ================= */
+.gm-intro{max-width:74ch;margin:0 2px 14px;font-size:11.5px;line-height:1.6;color:var(--ink3)}
+.gm-eps{font-size:9px;text-transform:none;letter-spacing:.04em;color:var(--ink3);font-variant-numeric:tabular-nums}
+
+/* horizontal scroll lives INSIDE the card so the page body never scrolls sideways */
+.gm-scroll{overflow-x:auto}
+.gm-tbl{width:100%;font-variant-numeric:tabular-nums}
+.gm-tbl .gm-num{text-align:right;white-space:nowrap}
+.gm-tbl th.gm-num{text-align:right}
+.gm-gate{color:var(--ink);white-space:nowrap}
+.gm-ord{color:var(--ink4)}
+.gm-act{color:var(--map);white-space:nowrap}   /* action_ids = map indigo, the console's epistemic colour law */
+
+/* the signed distance-to-threshold, coloured by SIDE — negative sat on the refusing side, positive cleared,
+   zero exactly at the threshold. Colour is never the only cue: the sign and value carry it too. */
+.gm-margin{font-weight:600}
+.gm-margin.gm-neg{color:var(--notice)}
+.gm-margin.gm-pos{color:var(--match)}
+.gm-margin.gm-zero{color:var(--ink)}
+.gm-margin.gm-unknown{color:var(--ink4)}
+
+/* left row edge echoes the margin side while scanning, mirroring .tbl tbody tr[data-band] */
+.gm-tbl tbody tr[data-side="neg"]{box-shadow:inset 3px 0 0 0 var(--notice)}
+.gm-tbl tbody tr[data-side="pos"]{box-shadow:inset 3px 0 0 0 var(--match)}
+.gm-tbl tbody tr[data-side="zero"]{box-shadow:inset 3px 0 0 0 var(--ink3)}
+.gm-tbl tbody tr[data-side="unknown"]{box-shadow:inset 3px 0 0 0 var(--line2)}
+
+/* verdict chip: colour + label + border shape, never colour alone */
+.gm-v{display:inline-block;font:600 9px/1.6 var(--mono);letter-spacing:.05em;border:1px solid;border-radius:var(--radius-s);padding:0 5px}
+.gm-v-pass{color:var(--match);border-color:var(--match)}
+.gm-v-refuse{color:var(--deviation);border-color:var(--deviation)}
+.gm-v-other{color:var(--ink3);border-color:var(--line3)}
+
+.gm-reason{color:var(--ink2);max-width:38ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gm-empty{padding:34px 20px}
+
+@media (max-width:820px){.gm-tbl{min-width:720px}}

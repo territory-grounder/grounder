@@ -1,0 +1,7 @@
+FACETS.workflows = [["all","All"],["live","Live"],["gated","Gated / floored"],["verified","Verified"]];
+// Filter logic lives in wfFacetPass(run, key) inside the module JS:
+//   "live"     -> run.live
+//   "gated"    -> run.status === "floored" || run.status === "waiting"  (human/hazard-gated runs)
+//   "verified" -> !!run.verdict  (runs that reached verify: match/partial/deviation)
+//   "all"      -> everything
+// wfView reads facetState.workflows || "all" at render time.

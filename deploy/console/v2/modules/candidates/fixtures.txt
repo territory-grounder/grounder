@@ -1,0 +1,12 @@
+/* CANDIDATES module — HONESTY CONTRACT: THIS SURFACE HAS NO FIXTURE, DELIBERATELY (spec/028 REQ-2813).
+   Every candidate, dossier and ladder row is fetched live from /v1/opclass/* at view render. The reason is
+   the manifest surface's reason, one turn of the screw tighter: a plausible fake row on the MANIFEST is a
+   fake actuation TARGET; a plausible fake row HERE is a fake CAPABILITY — an operator one ratify click away
+   from granting TG a verb the estate never actually asked for, against evidence that never happened.
+   INV-15 bans fabricated rows everywhere; on the surface whose entire purpose is to convert evidence into
+   permission, a fixture would be an invitation to grant fiction.
+   Unauthenticated: the auth gate only. 503 (nil reader / spine unwired): an honest unavailable state.
+   Empty queue: an honest empty state ("nothing has recurred often enough yet"), never an invented
+   candidate. The rail badge stays an em-dash until a REAL ratify-ready count exists.
+   (File present to satisfy the five-file module convention and to carry this contract, per the
+   policy/proposals/manifest precedent; assemble.py ships no bytes from it.) */

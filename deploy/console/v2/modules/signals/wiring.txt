@@ -1,0 +1,8 @@
+views.signals = sigView;
+VIEW_META.signals = ["Signals", "Golden-signal telemetry — observed territory (steel) against the model's predicted map (indigo)"];
+FACETS.signals = [["all","All"],["anom","Anomalies"],["pred","Predicted overlay"],["evt","TG events"]];
+facetState.signals = facetState.signals || "all";
+/* nav rail — place inside the OBSERVE group (or nearest telemetry group), after Estate/Alerts: */
+/* <a class="navi" data-view="signals"><svg class="ic" viewBox="0 0 16 16" width="16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 8.5h3.2l1.8-5 3 9.5 2-4.5h3"/><circle cx="13" cy="3.5" r="1.2"/></svg><span class="t">Signals</span><span class="n" data-badge="signals">2</span></a> */
+/* badge feed: elements with data-badge="signals" should show sigAnomalyCount() (currently 2). If the shell runs a live badge sim, wire the same key. */
+/* load order: fixtures block (sigNOWMIN/sigRANGES/sigHOSTS_FB/sigEVENTS/sigSECTIONS/sigTILES) must appear before the module JS in the bundle, both after the global h()/pct()/reduceMotion helpers and the shared HOSTS/SESSIONS fixtures. */

@@ -1,0 +1,64 @@
+{
+  "runs": 1,
+  "overall_baseline": 3.83,
+  "overall_candidate": 4.08,
+  "overall_delta": 0.25,
+  "overall_max_drop": 0.15,
+  "overall_pass": true,
+  "dims": [
+    {
+      "dim": "appropriate_band",
+      "baseline": 3,
+      "candidate": 3.38,
+      "delta": 0.38,
+      "max_drop": 0.1,
+      "pass": true
+    },
+    {
+      "dim": "correct_diagnosis",
+      "baseline": 4.63,
+      "candidate": 4.63,
+      "delta": 0,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "evidence_grounded",
+      "baseline": 4.25,
+      "candidate": 5,
+      "delta": 0.75,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "falsifiable_prediction",
+      "baseline": 4,
+      "candidate": 4,
+      "delta": 0,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "sensible_proposal",
+      "baseline": 3.25,
+      "candidate": 3.38,
+      "delta": 0.13,
+      "max_drop": 0.3,
+      "pass": true
+    }
+  ],
+  "rates": [
+    {
+      "name": "proposal_recall",
+      "candidate": 1,
+      "floor": 0.5,
+      "pass": true
+    }
+  ],
+  "control_n": 5,
+  "control_violations": null,
+  "control_pass": true,
+  "pass": true,
+  "reasons": null,
+  "warnings": null
+}

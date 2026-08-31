@@ -1,0 +1,570 @@
+{
+  "spec": "025-benchmark-harness",
+  "tasks": [
+    {
+      "id": "T-025-1",
+      "title": "Bind the measurement surfaces to spec/025 in the lockstep lock (an axis cannot be redefined without the hash moving)",
+      "files_owned": [
+        "core/db/axis_read.go",
+        "cmd/axisscore/main.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-2500",
+        "REQ-2520"
+      ],
+      "acceptance": {
+        "feature": "benchmark-harness.feature",
+        "scenarios": [
+          "Every measurement surface is bound to this spec in the lockstep lock"
+        ],
+        "go_test": "; REQ-2520: core/db TestAxisRead_A4PollReasonComposition_GoldenFixture"
+      },
+      "budget": {
+        "max_loc_delta": 40,
+        "max_wall_clock_minutes": 45
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-025-2",
+      "title": "Golden-fixture tests for the measurement SQL over a real Postgres, with a mutation control",
+      "files_owned": [
+        "core/db/axis_read_test.go"
+      ],
+      "deps": [
+        "T-025-1"
+      ],
+      "req_ids": [
+        "REQ-2501",
+        "REQ-2520"
+      ],
+      "acceptance": {
+        "feature": "benchmark-harness.feature",
+        "scenarios": [
+          "The measurement SQL is covered by a golden fixture whose expected values are hand-computed",
+          "A perturbed axis query turns its golden test red"
+        ],
+        "go_test": "; REQ-2520: TestAxisRead_A4PollReasonComposition_GoldenFixture, TestAxisRead_MutationControl_ArtefactShareCountsOnlyInjectedHosts",
+        "mutation_control": " | REQ-2520 EXECUTED RED 2026-07-28, four controls against a REAL Postgres (pgvector/pgvector:pg16, all 48 migrations), perturbing the SHIPPED query in core/db/axis_read.go rather than a paraphrase: (A) drop the injected-fault containment EXISTS so every escalation counts as an artefact; (B) drop f.host = t.host so a fault on ANY host matches; (C) restrict the composition query to the dominant reason so the others vanish; (D) never populate PollReasons. A and B are the load-bearing pair — both WIDEN the artefact count, the direction that would excuse the axis. | A6b RULE-FAMILY FOLDING EXECUTED RED 2026-08-01, against a REAL Postgres (pgvector/pgvector:pg16, all 53 migrations), perturbing the SHIPPED healCorrelationMatch constant: (AA) restore `x.alert_rule = t.alert_rule` exact equality -> TestAxisHealCorrelationCrossesRuleFamilyAliases RED (a pveliveness \"Device-Down\" recovered under the LibreNMS sibling \"Devices-up/down\" correlates 0 instead of 1, i.e. vanishes from the MTTR denominator); (AB) drop the rule scope entirely -> TestAxisHealCorrelationStillRejectsAnUnrelatedRule RED (a disk-space recovery confirms a device-down incident); (AC) drop `x.host = t.host` -> the pre-existing TestAxisRead_MutationControl_HostPredicateIsLoadBearing still RED. AA and AB are the load-bearing pair: they bound the folding from BOTH sides, too-narrow and too-broad, which a single control could not do."
+      },
+      "budget": {
+        "max_loc_delta": 260,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-025-3",
+      "title": "Report every axis with its denominator, its exclusions and its correlation method",
+      "files_owned": [],
+      "deps": [
+        "T-025-2"
+      ],
+      "req_ids": [
+        "REQ-2502",
+        "REQ-2503"
+      ],
+      "acceptance": {
+        "feature": "benchmark-harness.feature",
+        "scenarios": [
+          "An axis that excludes unmeasurable rows reports the exclusion"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 120,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-025-4",
+      "title": "Publish a zero-numerator axis with its rule-of-three upper bound instead of a bare zero",
+      "files_owned": [],
+      "deps": [
+        "T-025-3"
+      ],
+      "req_ids": [
+        "REQ-2502"
+      ],
+      "acceptance": {
+        "feature": "benchmark-harness.feature",
+        "scenarios": [
+          "A zero-numerator axis is published with its upper bound"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 80,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed",
+      "status_evidence": "Verified 2026-08-23 against the tree: core/axis/zero_numerator.go ZeroNumeratorBound/-UpperBound (rule of three, 3/n), consumed by core/axis/scorecard.go (A3/A7 render) via cmd/axisscore; oracles in core/axis/zero_numerator_test.go (TestAZeroIsNeverPublishedBare green this run); acceptance scenario \"A zero-numerator axis is published with its upper bound\" mapped present. The pending status was stale, not the work."
+    },
+    {
+      "id": "T-025-5",
+      "title": "Comparative aggregates and the head-to-head winner cover only mutually-scored dimensions",
+      "files_owned": [],
+      "deps": [],
+      "req_ids": [
+        "REQ-2504"
+      ],
+      "acceptance": {
+        "feature": "benchmark-harness.feature",
+        "scenarios": [
+          "A comparative aggregate covers only dimensions both systems are scored on"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 120,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-025-6",
+      "title": "A harness CI job that fails on a broken measurement, and the forbidden-pattern lint extended over tools/",
+      "files_owned": [],
+      "deps": [
+        "T-025-2"
+      ],
+      "req_ids": [
+        "REQ-2507"
+      ],
+      "acceptance": {
+        "feature": "benchmark-harness.feature",
+        "scenarios": [
+          "The measurement SQL is covered by a golden fixture whose expected values are hand-computed"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 100,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed",
+      "status_evidence": "Verified 2026-08-23: .gitlab-ci.yml `harness:` job (runs spec/025 acceptance tests + lockstep + ratify checks, fails on any); scripts/lint-forbidden.sh code() scans `tools` alongside core/adapters/cmd/temporal with the REQ-2507 rationale in its header. The pending status was stale, not the work."
+    },
+    {
+      "id": "T-025-7",
+      "title": "Evidence provenance manifest + independent-n reporting for clustered observations",
+      "files_owned": [],
+      "deps": [
+        "T-025-5"
+      ],
+      "req_ids": [
+        "REQ-2505",
+        "REQ-2506"
+      ],
+      "acceptance": {
+        "feature": "benchmark-harness.feature",
+        "scenarios": [
+          "A comparative aggregate covers only dimensions both systems are scored on"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 200,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "pending",
+      "status_evidence": "PARTIAL as of 2026-08-23: eval/history manifests already carry git_sha + served_models + window date (REQ-2505 half); tools/shadowbench/analyze.py computes cluster-aware bootstrap (resamples hosts) but its report dict publishes n_pairs/n_hosts without an explicit independent_n, and rubric-hash/host-set/contamination fields are absent. analyze.py is the FROZEN pre-registered analysis: the remaining half amends it and therefore rides the SAME governed-amendment MR as TG-526 (Law-Change-Approved-By + hash re-pin + §6 disclosure), sequenced at campaign-#3 prep per the owner plan. Not silently done, not workable sooner."
+    },
+    {
+      "id": "T-025-8",
+      "title": "Fault-injector obligations: durable-record-before-effect, reconcile on start/cycle/shutdown, refuse when blind",
+      "files_owned": [
+        "tools/faultinjector/plan.go",
+        "tools/faultinjector/engine.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-2508"
+      ],
+      "acceptance": {
+        "feature": "benchmark-harness.feature",
+        "scenarios": [
+          "Every measurement surface is bound to this spec in the lockstep lock"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 180
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-025-10",
+      "title": "Every schedulable fault class carries a detection mapping (a mapping that fails closed fails silently)",
+      "files_owned": [],
+      "deps": [],
+      "req_ids": [
+        "REQ-2511"
+      ],
+      "acceptance": {
+        "go_test": "core/db: TestEverySchedulableFaultClassHasADetectionMapping, TestDetectMappingIsNotVacuous"
+      },
+      "budget": {
+        "max_loc_delta": 60,
+        "max_wall_clock_minutes": 45
+      },
+      "status": "completed",
+      "retrospective": true
+    },
+    {
+      "id": "T-025-11",
+      "title": "A mutation control perturbs the SHIPPED artefact, not a copy of it",
+      "files_owned": [],
+      "deps": [],
+      "req_ids": [
+        "REQ-2512"
+      ],
+      "acceptance": {
+        "go_test": "core/db: TestAxisRead_MutationControl_HostPredicateIsLoadBearing"
+      },
+      "budget": {
+        "max_loc_delta": 60,
+        "max_wall_clock_minutes": 45
+      },
+      "status": "completed",
+      "retrospective": true
+    },
+    {
+      "id": "T-025-12",
+      "title": "A statistic without a computed interval renders as a point estimate; a note states no cause it has not established",
+      "files_owned": [],
+      "deps": [],
+      "req_ids": [
+        "REQ-2513"
+      ],
+      "acceptance": {
+        "go_test": "core/calibrate: TestKappaReportsNoIntervalRatherThanADegenerateOne, TestProportionsStillCarryTheirWilsonInterval"
+      },
+      "budget": {
+        "max_loc_delta": 60,
+        "max_wall_clock_minutes": 45
+      },
+      "status": "completed",
+      "retrospective": true
+    },
+    {
+      "id": "T-025-13",
+      "title": "A head-to-head pair requires the same host AND the same fault class, chosen deterministically",
+      "files_owned": [],
+      "deps": [],
+      "req_ids": [
+        "REQ-2514"
+      ],
+      "acceptance": {
+        "python_test": "tools/shadowbench/test_align.py (classifier asserted over the CLOSED set of live alert rules)"
+      },
+      "budget": {
+        "max_loc_delta": 140,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed",
+      "retrospective": true
+    },
+    {
+      "id": "T-025-14",
+      "title": "The fault injector records a restore obligation durably and never closes one on an ambiguous failure",
+      "files_owned": [],
+      "deps": [],
+      "req_ids": [
+        "REQ-2508",
+        "REQ-2509"
+      ],
+      "acceptance": {
+        "go_test": "tools/faultinjector: TestVerifyFillRemoved_UnreachableGuestIsUnknownNotRemoved, TestAmbiguousInjectionFailureIsNotPreEffect, TestRefusedPreconditionIsPreEffect"
+      },
+      "budget": {
+        "max_loc_delta": 120,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed",
+      "retrospective": true
+    },
+    {
+      "id": "T-025-15",
+      "status": "completed",
+      "title": "service-down fault class + exhaustiveness over the CLOSED enumeration at every registration point",
+      "files_owned": [
+        "tools/faultinjector/exhaustiveness_test.go",
+        "tools/faultinjector/cmd/faultinjector/pool_test.go"
+      ],
+      "deps": [
+        "T-025-14"
+      ],
+      "req_ids": [
+        "REQ-2516"
+      ],
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 120
+      },
+      "acceptance": {
+        "go_test": "tools/faultinjector: TestEveryClassHasAFaultRefRule, TestEveryRestoringClassHasAnUndo, TestEveryRestoringClassArmsOnAHostThatSurvivesTheFault, TestEveryClassHasAVerifierOrIsRefused, TestAnUnknownClassIsRefusedEverywhere, TestEveryProvokedOpClassIsRegistered, cmd/faultinjector: TestPoolOptionalFieldsAreIndependent, TestThePlaceholderNeverBecomesATarget, TestTooManyFieldsIsFatal, TestADetectionOnlyClassClaimsNoRemediationCoverage",
+        "mutation_control": "EXECUTED RED 2026-07-28, NINE controls, each verified to apply before running. Per-registration-point (proving the oracle is keyed on AllClasses(), not on a name): (1) CLI accept-list drops service-down; (2) faultRefFor drops it; (3) armFor drops it; (5) UndoArgv drops it; (7) verifyRepaired drops it — all RED. Semantic: (4) service-down arms on the NODE instead of the guest -> 'a timer armed on a host the fault removes dies with it (the docuseal01 stranding)'; (9) Provokes names 'restart-svc-typo' -> 'credits coverage the estate cannot act on'. THE TWO FAIL-OPENS, restored to their shipped behaviour: (6) verifyRepaired default back to `return true, nil` -> 'an unknown class verified as REPAIRED — MarkRestored is permanent, so this strands the fault forever'; (8) faultRefFor default back to returning the guest VMID -> 'a guessed handle cannot undo anything'. Both were LIVE defects found by writing the oracle, not by a failing test. POOL PARSER, 3 more controls RED: (A) drop the unit placeholder -> unit=\"-\" survives as a literal target; (B) drop the container placeholder -> same for container; (C) relax the field-count ceiling -> a 6-field line is silently truncated instead of refused. Control A initially did NOT fire, and the fix was the FIXTURE, not the mutation: no row in it used \"-\" for the unit, so the oracle could not discriminate. A control that cannot fail is not a control — the row was added rather than the mutation re-aimed. FOLLOW-UP 2026-07-28: disk-fill's `Provokes() -> [disk-grow]` was a FALSE COVERAGE CLAIM and is now nil (detection-only, like mem-pressure), with disk-grow moved to a DECLARED opcover exemption. Controls: (A) restore the false pairing -> 'claims to provoke [disk-grow] — that credits coverage which can never legitimately be exercised'; (B2) make EVERY class detection-only -> 'NO fault class provokes any op-class ... every coverage assertion in this suite would pass vacuously'. B did not fire when only ONE driving class was nulled, which was the MUTATION being wrong rather than the oracle — the vacuity guard is deliberately scoped to the total-collapse case.",
+        "notes": "Measured cause: injected_fault all-time was device-down 264, disk-fill 144, container-down 49, mem-pressure 15, service-down 5 — and all 5 service-down rows were hand-injected by a script, because no such class existed in AllClasses(). policy_graduation had restart-service and start-service frozen at 1/5 with no path to move. opcover goes 3/6 -> 5/6 covered and its stale-exemption check fired unprompted on both retired exemptions, which is the check working as designed. reload-service stays exempt: stopping a unit is never healed by a reload, so it needs a config-drift fault whose unit stays ACTIVE and merely wrong — invisible to every liveness check the estate has. Pool fields are POSITIONAL, so a guest with a unit but no container was inexpressible, and the natural workaround (unit in the 4th slot) declares it as a CONTAINER — the injector would run `docker stop nginx` on a host running no such container, record the obligation, and undo it with `docker start nginx`. \"-\" is the explicit empty marker. DISK-FILL IS DETECTION-ONLY: the fault is fallocate on /var/tmp/tg-tier1-fill.img, a SYNTHETIC benchmark artifact. disk-grow does not remediate a rogue file (and the pool roots are loopback-backed so they cannot grow anyway), and the only real remediation — removing the injector's own file — is something TG must NEVER learn, because it teaches the agent to delete the benchmark's instrumentation and is a route to deleting arbitrary operator files. Measured: 74 disk-fill faults, 12 proposals, 1 heal. TG declining is the ONLY correct behaviour, so the pairing credited coverage that could never be exercised — the exact failure opcover exists to catch, committed by opcover's own input."
+      }
+    },
+    {
+      "id": "T-025-16",
+      "status": "completed",
+      "title": "The verifier is the authority on discharge — a repair's exit code may neither close nor block it",
+      "files_owned": [
+        "tools/faultinjector/reconcile_verifier_test.go"
+      ],
+      "deps": [
+        "T-025-15"
+      ],
+      "req_ids": [
+        "REQ-2517"
+      ],
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 120
+      },
+      "acceptance": {
+        "go_test": "tools/faultinjector: TestAnAlreadyInDesiredStateRepairDischarges, TestARepairThatNeverReachedTheHostDoesNotDischarge, TestARepairThatRanButDidNotFixItDoesNotDischarge, TestTheVerifierIsAlwaysConsulted",
+        "mutation_control": "EXECUTED RED 2026-07-28, four controls. (A) restore the `code == 255 || code == -1` short-circuit — i.e. reintroduce the LIVE bug verbatim -> 'a repair that exits 255 because the estate is ALREADY in the desired state must discharge, or the row strands and holds its host busy forever'. (B) same short-circuit against the structural oracle -> 'repair exit 255 skipped the verifier'. (C) drop the verification guard -> 'an unverifiable repair closed its obligation — this is the fail-open the exit-code check existed to stop'. (D) quarantine only on a verifier ERROR, not on a still-present fault -> 'a repair that exited 0 while the fault is still present must not discharge'. C and D matter as much as A: the fix REMOVES a guard, so the oracles must prove the property that guard was protecting still holds.",
+        "notes": "Engine.Store became a narrow LedgerStore interface so the reconcile loop — the only code that may close an obligation — is testable without a database. Deliberately narrow: a broad fake that pretends to persist rows would let a dropped column pass unnoticed (this repo has been bitten by that), whereas these six methods carry no row marshalling and a fake can only record which decision was taken. ESTATE: obligation id=481 (dc1excalidraw01/device-down) was discharged by hand after verifying `pct status` reported running — a false-pending row, corrected so the stalled campaign could resume before the fix shipped."
+      }
+    },
+    {
+      "id": "T-025-17",
+      "status": "completed",
+      "title": "Settle window: never re-fault a target the monitoring check has not yet seen recovered",
+      "files_owned": [
+        "tools/faultinjector/settle_test.go"
+      ],
+      "deps": [
+        "T-025-16"
+      ],
+      "req_ids": [
+        "REQ-2518"
+      ],
+      "budget": {
+        "max_loc_delta": 350,
+        "max_wall_clock_minutes": 150
+      },
+      "acceptance": {
+        "go_test": "tools/faultinjector: TestATargetRestoredTooRecentlyIsNotRefaulted, TestATargetSettledLongEnoughIsFaultedAgain, TestTheSettleGuardIsPerClass, TestAnUnknownTargetIsNotBlocked, TestAZeroSettleWindowDisablesTheGuard, TestTheSettleGuardDoesNotOverrideTheStackingGuard, TestAStoreFailureRefusesToInjectRatherThanRiskAnUndetectableFault",
+        "mutation_control": "EXECUTED RED 2026-07-28, six controls. (A) remove the guard — the live defect verbatim -> 're-faulted 2 minutes after its restore ... UNDETECTABLE, yet it still lands in the denominator'. (B) guard never expires -> the pool would drain to nothing. (C) invert the absent-evidence branch so a MISSING restore blocks -> 'a target with no recent restore of this class was refused'. (D2) `<= 0` -> `< 0` so a zero window stops disabling -> caught only after the fixture was changed to use a FUTURE restore time, because with restored_at == now the mutated arithmetic (0 < 0) is observationally identical. (E) drop the class from the settle key -> a service-down restore blocks a device-down. (F4) ignore a recent-restore READ FAILURE -> 'injected while the recent-restore read was FAILING'. THREE of the six needed the ORACLE fixed rather than the mutation, and all three were the same shape: the FAKE stopped execution before the property. F read GREEN twice — first because the test drove PlanNext (which cannot see a DB error) instead of InjectOnce, then because the fake returned no cluster snapshot, then because it could not answer the `pct config` name-assert ('refusing to act blind', the guard that exists because a wrong-guest stop happened once). A fake that halts the code short of the property makes the control unfalsifiable while looking like a pass.",
+        "notes": "Store.RecentRestores(within) returns MAX(restored_at) per (host, fault_type), bounded to the window since anything older cannot change a decision. Default settle window 10m, which must exceed the monitoring poll interval (5m here); 0 disables. The read failure is fail-CLOSED: skipping one injection is cheap, whereas an undetectable fault pollutes the benchmark denominator permanently."
+      }
+    },
+    {
+      "id": "T-025-18",
+      "status": "completed",
+      "title": "RETRACTED: approval grace removed — an on-host systemd timer repairs the fault regardless",
+      "files_owned": [],
+      "deps": [
+        "T-025-17"
+      ],
+      "req_ids": [
+        "REQ-2519"
+      ],
+      "budget": {
+        "max_loc_delta": 350,
+        "max_wall_clock_minutes": 150
+      },
+      "acceptance": {
+        "go_test": "tools/faultinjector: the surviving settle-window and reconcile-verifier oracles (REQ-2518 is unaffected and stands)",
+        "mutation_control": "N/A — the mechanism was REMOVED. The nine controls proven RED for the grace across !653/!654/!657/!658 all passed against a model the code contradicts: they exercised Reconcile against a fake LedgerStore and Runner, while ArmDeferredRestore (the real repair path) was tested only in isolation for argv shape. No oracle ever connected the hold to the armed timer. That is the INV-22 shape — an undeclared test-gap between two halves of one mechanism — and it is why nine RED controls proved nothing about the thing that mattered."
+      }
+    },
+    {
+      "id": "T-025-19",
+      "title": "log-fill: the realistic disk-pressure fault an honest reclaim verb can heal, with an evidence-store boundary",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-2521"
+      ],
+      "acceptance": {
+        "go_test": "tools/faultinjector: TestALogFillTargetMayNeverBeAnEvidenceStore, TestALogFillTargetMustBeAnUnambiguousAbsolutePath, TestTheUndoTruncatesAndNeverRemoves, TestTheUndoRefusesAnUnsafeLedgerPath, TestInjectRefusesAnUnsafePathEvenWhenTheLoaderIsBypassed, TestVerifyLogTruncatedFailsClosedOnAnUnknownExit, TestLogFillIsDeclaredDetectionOnlyUntilAReclaimVerbExists; plus the existing exhaustiveness oracles over AllClasses"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-025-20",
+      "title": "A1 reports detection LATENCY per ingest source, crediting only the source that detected first",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-2522"
+      ],
+      "acceptance": {
+        "go_test": "core/db: TestDetectionLatencyCreditsTheFirstSourceOnly — two sources alert on the same injected fault; the FIRST is credited with the detection and its true injection-to-alert latency, the later one is credited with nothing for that fault and keeps only the faults it genuinely found first. Mutation control: dropping the DISTINCT ON credits librenms with 2 first-detections instead of 1."
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-025-21",
+      "title": "A1 detect-mapping guard reads the injector's enumeration from source; the mapping exists in one place",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-2523"
+      ],
+      "status": "completed",
+      "acceptance": {
+        "go_test": "core/db: TestEverySchedulableFaultClassHasADetectionMapping extracts the class slugs from tools/faultinjector/plan.go by regex (with a floor assertion so a pattern change cannot pass vacuously); TestPooledAndPerClassUseTheSamePredicate asserts every f.fault_type predicate in axis_read.go lives inside the detectRuleMatch declaration. Mutation controls: removing the log-fill clause fails the first; a hand-copied predicate in a third query fails the second; and the OLD hand-mirrored guard reports ok on the same code where the new one fails."
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      }
+    },
+    {
+      "id": "T-025-22",
+      "title": "Publish the benchmark axes on /metrics from the existing aggregate — above all per-source detection LATENCY, the axis recall cannot show",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-2524"
+      ],
+      "acceptance": {
+        "go_test": "cmd/worker: TestAxisSamplerEmitsNothingUntilItHasRead, TestAxisSamplerPublishesRecallAndPerSourceLatency, TestAxisSamplerKeepsThePreviousSampleOnFailure, TestAxisSamplerIsActuallyArmedInMain"
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-025-23",
+      "title": "Split A6: A6a decision STEPS stays the gate-side figure, A6b WALL-CLOCK gains the time-to-DECISION leg and is published on both surfaces",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-2525"
+      ],
+      "acceptance": {
+        "go_test": "temporal/runner: TestTriageRecordCarriesTheDecisionWallClock, TestTriageRecordCarriesTheDecisionWallClockOnAGroundedStop — the REAL RunnerWorkflow driven with a model that sleeps 30ms/call; the judge.TriageRow the workflow hands the store must carry a duration at least the injected floor and no larger than the whole workflow. core/db: TestAxisRead_TimeToDecision_GoldenFixture (REAL Postgres, hand-computed n=5 / median 12000ms / p95 80000ms with untimed rows deliberately left in the window), TestTriageDecisionLatencyMigration. cmd/axisscore: TestA6bTimeToDecisionIsPublished, TestA6bUnmeasuredWindowNamesTheGapInsteadOfPublishingZero. cmd/worker: TestAxisSamplerPublishesTimeToDecision, TestAxisSamplerPublishesNoDecisionSeriesWhenNothingWasTimed.",
+        "mutation_control": "EXECUTED 2026-08-04. (A) drop `res.DecisionMillis = inv.DecisionMillis` from temporal/runner/workflow.go -> RED: \"the durable triage record says the decision took 0ms, but the loop demonstrably ran for at least 90ms\"; (B) move that same copy inside the `if inv.Proposed` arm -> RED on the stand-down mirror, which is the branch-bias this axis would otherwise acquire; (C) delete `WHERE decision_ms > 0` from the SHIPPED time-to-decision query in core/db/axis_read.go, against a REAL Postgres (pgvector/pgvector:pg16, all 58 migrations) -> RED: \"DecisionN = 12, want exactly 5 — untimed sessions entered the A6b denominator (7 of them sit in this window)\", and the median it would then publish is 0, i.e. TG decides instantly; (D) drop the score() mapping in cmd/axisscore -> RED 0/0/0; (E) delete the A6b coverage-gap append -> RED, an unmeasured window stops naming its gap; (F) force the sampler guard to `if true` -> RED, a 0-valued p50 reaches /metrics; (G) rewrite migration 0058 as `RENAME COLUMN step_count TO decision_ms` -> RED on both the ADD and the touches-step_count checks. C and F are the load-bearing pair: both make the axis look BETTER (an instant median, a series that always exists), which is the direction nobody investigates."
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-025-24",
+      "title": "G5 falsifiability axis: publish real-vs-shuffled-control with its CLAIM denominator, never the vacuous pass rate",
+      "req_ids": [
+        "REQ-2526"
+      ],
+      "deps": [],
+      "files_owned": [],
+      "status": "completed",
+      "retrospective": true,
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 120
+      },
+      "acceptance": {
+        "go_test": "core/db: TestNoClaimWindowsAreNotCountedAsPasses (REAL Postgres, hand-seeded: three no-claim windows one of which is NOT marked falsifiable, one real win, one real loss, and one no-claim window in which the SHUFFLE scored control_tp=7 while real_tp=0) asserts NoClaim=4, Claimed=2, ClaimedPassed=1, Rate=0.5, Passed=3 (the MEASURED naive count, not ClaimedPassed+NoClaim), RealTP/ControlTP=20/13 over claimed windows only, and LosingRatio>=1.0. TestAnEmptyFalsifiabilityTableAssertsNothing pins that an empty table yields zeros without dividing by zero into a confident 0%.",
+        "mutation_control": "EXECUTED 2026-08-06 against a REAL migrated Postgres (pgvector/pgvector:pg16). (A) change the pass filter to `count(*) FILTER (WHERE falsifiable)` — i.e. count no-claim windows as passes, the naive publication -> RED. (B) divide by Windows instead of Claimed in Rate() -> RED. (C) drop `FILTER (WHERE real_tp > 0)` from the real_tp/control_tp sums -> RED with 'RealTP/ControlTP = 20/20, want 20/13'; the control arm then looks LEVEL with the real graph on windows the model never entered. C SURVIVED the first pass because every no-claim row in the fixture was 0/0 and an unfiltered sum was numerically identical — the fixture now carries a window with real_tp=0 and control_tp=7, which is what makes the mutation observable. A and C are the load-bearing pair: both make the axis look BETTER (a higher pass rate, a control that appears beaten), which is the direction nobody investigates. Verified live against the production database: the axis prints 27 of 44 = 61.4% where the naive rate would print 86.7%."
+      }
+    },
+    {
+      "id": "T-025-25",
+      "title": "A5: publish the auto_notice SUBSET beside the autonomous breadth, so silent autonomy is not conflated with acts-and-pages",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-2527"
+      ],
+      "acceptance": {
+        "go_test": "core/db: TestNoticeOpClassesIsTheAutoNoticeSubset — REAL Postgres, a ladder seeded with one class at 'auto', two at 'auto_notice' and one at 'approve'; asserts GraduatedOpClasses covers BOTH autonomous rungs, NoticeOpClasses is exactly the auto_notice pair, Notice is a SUBSET of Graduated (so the silent-autonomy subtraction can never go negative), and the non-autonomous rung appears in neither. TestGraduatedOpClassesQueryCoversBothAutonomousRungs keeps the source-level guard on the two-rung filter.",
+        "mutation_control": "Point the NoticeOpClasses query at level='auto' (the wrong rung), widen it to level IN ('auto','auto_notice') so it duplicates Graduated, or delete the read and leave the field nil. All three RED against a real database; executed 2026-08-06."
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-025-26",
+      "title": "A device-down restore is discharged only when the guest's operator-declared data-path probe also passes, and a guest-level-only verification says so",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-2528"
+      ],
+      "acceptance": {
+        "go_test": "tools/faultinjector: TestAWedgedAppFailsTheDeviceDownRestore — the habitica state exactly (pct status running, app-health probe exiting non-zero); asserts verifyRepaired returns NOT repaired, the probe was consulted exactly once, and the log names the wedge so a quarantined host carries a reason. TestAHealthyAppStillPassesTheRestore is the healthy-case floor: a passing probe must yield repaired with NO warning logged, or the first campaign quarantines the whole pool. TestAStoppedGuestNeverReachesTheProbe pins the ordering (guest check first, zero probe calls). TestAnUndeclaredProbeIsSaidOutLoud pins the 'nothing to check' announcement: an undeclared probe must not fail the restore but must be recorded as GUEST level only. TestTheProbeRunsAsFixedArgv pins fixed-argv execution (no shell). TestValidHealthProbeRefusesShellSyntax pins declaration-time refusal of metacharacters plus a vacuity floor of legitimate probes. tools/faultinjector/cmd/faultinjector: TestTheHealthProbeAbsorbsTheRestOfTheLine, TestAnAbsentHealthProbeStaysAbsent, TestAMalformedHealthProbeIsFatal cover the pool-file declaration."
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-025-27",
+      "title": "Publish per-dimension judge coverage so a silent axis (2 of 3,371 scored) reports itself instead of reading like a working one",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-2529"
+      ],
+      "acceptance": {
+        "go_test": "core/db: TestJudgmentCoverageCountsScoredPerDimension — REAL Postgres; seeds 3 sessions judged on appropriate_band+evidence_grounded and ONE also on estate_grounded, and asserts JudgmentCoverage's before/after DELTAs are exactly +3/+3/+1 per dimension while the judged-session denominator moves by 3 DISTINCT sessions, never 7 judgments. cmd/worker: TestAxisSamplerPublishesJudgeCoverageWithSilentAxisAtZero — with only appropriate_band scored, asserts every DECLARED dimension (including the two deterministic axes) publishes tg_judge_axis_scored_total, estate_grounded/diagnosis_grounded at scored=0, the shared tg_judge_sessions_judged_total denominator ships, and no mean is emitted for a zero-scored axis.",
+        "mutation_control": "DB: change the denominator from count(DISTINCT j.external_ref) (sessions) to count(*) (judgments) — the denominator delta becomes 7 not 3, RED. Sampler: iterate s.cov (the DB-returned dimensions) instead of the declared set, or skip scored==0 — the silent axes vanish from /metrics and the 'silent axis reports itself' assertion goes RED."
+      },
+      "status": "completed",
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 120
+      }
+    },
+    {
+      "id": "T-025-28",
+      "title": "G6 loop-bypass guardrail axis: flag executed heals that skipped the prediction->verify loop so 'don't erode the core' is auditable, not aspirational",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-2530"
+      ],
+      "acceptance": {
+        "go_test": "core/db: TestLoopBypass_FlagsEachSkippedLimb — REAL Postgres, hand-seeded on a wiped action_execution/infragraph_prediction: one loop-compliant execution (a committed infragraph_prediction joined by action_id AND a non-null per-execution verdict), one executed-but-un-predicted, one predicted-but-ungraded (verdict NULL, unverifiable) — asserts Executed=3, Bypassing=2, NoPrediction=1, NoVerdict=1. TestLoopBypass_EmptyWindowIsCleanZero pins that a window with no executions is all-zero (nothing to audit is NOT a pass) and never divides or crashes.",
+        "mutation_control": "EXECUTED 2026-08-11 against a REAL migrated Postgres (pgvector/pgvector:pg16). Change the bypass filter count(*) FILTER (WHERE NOT predicted OR NOT graded) to AND -> Bypassing collapses 2->0, RED: the OR is the whole guardrail (EITHER skipped limb is drift; an AND would only flag heals that skipped BOTH). Dropping the `OR NOT graded` limb -> Bypassing 2->1. Grading by a join to the first-wins action_verdict shape row instead of action_execution.verdict would let an ungraded re-execution inherit an earlier clean verdict and escape — the exact stale-row trap migration 0043 was written to defeat."
+      },
+      "status": "completed",
+      "budget": {
+        "max_loc_delta": 120,
+        "max_wall_clock_minutes": 90
+      }
+    }
+  ],
+  "retrospective_gaps": [
+    {
+      "req": "REQ-2510",
+      "why": "DEFERRAL, not behaviour. REQ-2510 forbids publishing VISR until its three legs share one population; there is no code path to exercise because the requirement's content is that a thing is NOT built. The enforceable half — legs measured over different populations must publish separately — is carried by REQ-2502's denominator rule, which IS oracled. Re-point this at a task the moment a VISR surface exists."
+    },
+    {
+      "req": "REQ-2515",
+      "why": "DECLARATION about how results are WRITTEN UP (an axis with no comparator publishes as a property, never a win). The comparator status of each axis is a fact about the incumbent's deployment — it runs shadow with mutation OFF — not a property of TG's code, so no test of this repo can assert it. Enforced by docs/BENCHMARK-AXES.md and review. If a publishing pipeline is ever built, oracle it there."
+    }
+  ]
+}

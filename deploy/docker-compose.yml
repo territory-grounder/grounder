@@ -1,0 +1,2588 @@
+# Territory Grounder — single-node guided compose (Phase 0 read-only foundation).
+#
+# Provenance: [R] "one guided docker-compose" · [corrections] Temporal + LiteLLM bundled, no n8n/
+# Cronicle/Claude-Code. Honest scope: this is a multi-service STACK (not one container), and
+# Temporal is deliberately load-bearing (P0-7). Secrets are supplied by reference via the env file
+# (see .env.example) — never inline (INV-13).
+#
+# Phase 0: mutation is disabled by construction; nothing here can mutate a managed estate.
+name: territory-grounder
+
+# --- DOCKER NETWORK TIERS (host-side egress firewall RETIRED 2026-08-18, owner directive) ---
+#
+# RETIREMENT NOTE (2026-08-18): the TG-160 HOST-SIDE egress firewall — the iptables/nftables TG-EGRESS-LAN
+# + host-isolation chains that default-dropped RFC1918 from the egress tier, plus their install scripts,
+# drills, metrics and Prometheus alerts — has been REMOVED (owner directive: premature hardening on a
+# trusted single-tenant dev estate; it had blocked TG's litellm from reaching the LAN litellm host).
+# TG-160 is Won't-fix. What remains below is the inert DOCKER-level tier segmentation, kept because 14+
+# services reference it and it is harmless without the host chain. The historical rationale is preserved
+# for context; the host-chain and *_test.go paths it names are retired.
+#
+# WHY THIS DOCKER-TIER SEGMENTATION EXISTS. Before it, this file had NO `networks:` stanza at all, so every one of the fourteen
+# services sat on the compose default bridge with full outbound NAT. Measured on dc1tg01 2026-08-04:
+# `iptables -S DOCKER-USER` was the stock `-A DOCKER-USER -j RETURN`, the helm chart shipped no
+# NetworkPolicy, and `grep -rn -w -i egress --include=*.go .` returned ZERO over the whole tree — while
+# docs/THREAT-MODEL.md advertised an "egress" step in the interceptor chain. Postgres, Grafana and the
+# Temporal UI could each open a socket to anywhere on the internet, and nothing would have noticed.
+#
+# THIS IS THE CONTROL. The Go-level meter that lands with it (core/egress) is defence in depth ON TOP: a
+# process that can execute code can bypass its own http.RoundTripper, and cannot bypass the bridge. So the
+# network layer goes first, and it is the layer that still holds when the process is compromised — which
+# is the entire threat (a model-call path carrying attacker-authored content, per the July-2026 HuggingFace
+# self-migrating-C2 pattern).
+#
+# THREE TIERS, and the boundaries between them were MEASURED on docker 20.10.24, not assumed:
+#
+#   tg-backplane  internal: true. Docker installs `! -d <subnet> -i br-X -j DROP` in
+#                 DOCKER-ISOLATION-STAGE-1. Measured: off-host outbound TIMES OUT; east-west between
+#                 containers still works in both directions and compose-name DNS still resolves.
+#                 MEASURED CONSTRAINT: a published `ports:` mapping does NOT work for a container whose
+#                 only network is internal (curl to the published port → connection refused). That is why
+#                 six services below that need no outbound are still not backplane-only.
+#
+#   tg-frontdoor  a normal bridge with `enable_ip_masquerade=false`. No SNAT ⇒ no return path. Measured:
+#                 the published port SERVES (HTTP 200 from the host) while outbound to the internet times
+#                 out and outbound to a LAN neighbour on :443 fails. This is the tier for "must be
+#                 reachable, must not reach out".
+#
+#   tg-egress     a normal bridge with NAT. The ONLY path off the box. Every service here has a named,
+#                 enumerated reason below.
+#
+# RESIDUAL, stated plainly rather than discovered later: both restricted tiers still reach the DOCKER HOST
+# ITSELF (measured — `nc -z <gateway> 22` and `nc -z <host LAN ip> 22` both succeed from a backplane-only
+# container), because docker's isolation rules live in FORWARD and host-destined traffic goes through
+# INPUT. Host-local services are therefore NOT covered by this split; blocking those needs a DOCKER-USER
+# rule, which is host configuration and is not in this file.
+#
+# A container attached to a restricted tier AND tg-egress takes its default route from tg-egress:
+# libnetwork skips internal networks when electing the gateway endpoint (measured — `ip route` inside a
+# dual-homed container showed the default via the egress bridge, not the backplane).
+#
+# TO GIVE A SERVICE OUTBOUND: add `tg-egress` to its `networks:` list AND record it in
+# deploy/egress_parity_test.go. The test fails on any disagreement in EITHER direction, so egress cannot
+# be granted silently and the table cannot drift weaker than reality.
+networks:
+  tg-backplane:
+    internal: true
+  tg-frontdoor:
+    driver_opts:
+      # Publishing works; SNAT does not, so packets leaving the box have no return path.
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+  tg-egress:
+    # Explicit subnet + two pinned worker addresses (TG-381). These pins fed the retired host-side
+    # TG-EGRESS-LAN chain (a by-source exemption for the wildcard-shaped worker estate reach,
+    # TG_HOSTDIAG_DEPLOYMENTS `dc1*`); the chain is gone as of 2026-08-18 but the pins are harmless to
+    # keep, and the .10/.11 addresses sit above docker's dynamic range so a recreate cannot collide with an
+    # already-issued dynamic lease.
+    ipam:
+      config:
+        - subnet: 172.23.0.0/16
+
+services:
+  # --- application state: one Postgres, RLS baseline, two roles (migration/runtime) ---
+  # NOT HARDENED, and the reason is measured (TG-289): the official postgres entrypoint starts as root and
+  # chowns the data dir before switching to the postgres user, so dropping ALL capabilities takes away
+  # CAP_CHOWN/CAP_FOWNER and then CAP_SETUID/CAP_SETGID. Under `cap_drop: [ALL]` this image dies with
+  # `error: failed switching to 'postgres': operation not permitted` — i.e. the database never starts.
+  # Hardening it means running as the postgres uid against an already-initialised volume; that is a
+  # stateful-database migration, not a compose edit, and it is deliberately not bundled into this ticket.
+  # deploy/hardening_parity_test.go records this exemption, so it is checked, not merely written down.
+  postgres:
+    image: pgvector/pgvector:pg16@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
+    environment:
+      POSTGRES_DB: grounder
+      POSTGRES_USER: ${PG_SUPERUSER:-postgres}
+      POSTGRES_PASSWORD: ${PG_SUPERUSER_PASSWORD:?set in .env}
+      # consumed by postgres-init/00-roles.sh to create the two least-privilege roles
+      TG_MIGRATION_PASSWORD: ${TG_MIGRATION_PASSWORD:?set in .env}
+      TG_RUNTIME_PASSWORD: ${TG_RUNTIME_PASSWORD:?set in .env}
+      # consumed by postgres-init/01-plane-roles.sh to create the two CREDENTIAL-PLANE roles (TG-164).
+      # Blank (the default) creates NO role and leaves both workers on tg_runtime — the pre-TG-164 posture.
+      # These are DEFAULTED, not `:?`-required, precisely so an existing stack upgrades with no .env edit.
+      TG_TRIAGE_PASSWORD: ${TG_TRIAGE_PASSWORD:-}
+      TG_ACTUATE_PASSWORD: ${TG_ACTUATE_PASSWORD:-}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_SUPERUSER:-postgres} -d grounder"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # TG-160: the application database reaches nobody off the box — no egress tier, so no default route out
+    # at all. It is also the service holding every incident, every credential reference and the whole
+    # knowledge corpus, i.e. the highest-value single target here.
+    #
+    # TG-422 ARMING (owner-ruled 2026-08-22): OpenBao's `database` secret engine runs on the bao server and
+    # must DIAL IN to mint/revoke the per-lease Postgres logins, so postgres also serves ONE published port
+    # on tg-frontdoor — reachable, but frontdoor has no SNAT, so the inbound grant adds no path out. The
+    # bind address is .env-parameterized and defaults to loopback: a deployment that has not armed dyndb
+    # publishes nothing beyond the host itself.
+    ports:
+      - "${TG_PG_PUBLISH_ADDR:-127.0.0.1}:${TG_PG_PUBLISH_PORT:-15432}:5432"
+    networks: [tg-backplane, tg-frontdoor]
+
+  # --- litellm-secrets: one-shot secret delivery for the third-party model gateway (spec/024 REQ-2403) ---
+  # Resolves LiteLLM's master key from OpenBao and writes it to a memory-backed env file the litellm entrypoint
+  # sources — so LITELLM_MASTER_KEY never lives in plaintext .env. Reuses the already-signed/verified worker
+  # image (tg-secretenv ships in every TG image), so it adds NO new image to sign/verify/deploy. Only THIS
+  # init receives the OpenBao token — litellm never does (it gets just its own resolved key).
+  #
+  # The delivery drop is a HOST tmpfs bind-mount (/dev/shm, RAM-backed): a Docker `type=tmpfs` NAMED volume is
+  # mounted PER-CONTAINER (each mount is a fresh empty tmpfs — NOT shared), so the init's write would be
+  # invisible to litellm; a host tmpfs path is one inode both containers share while staying off disk. Runs as
+  # root so the 0600 output is owner-readable by the root litellm process (which drops ALL caps and thus cannot
+  # DAC-override a foreign-owned file). FAIL-CLOSED: a ref that does not resolve exits non-zero and writes
+  # nothing, so litellm (depends_on: service_completed_successfully) never starts blind.
+  # NOT HARDENED (TG-289): this is the fail-closed secret-delivery step the whole model gateway depends on,
+  # and it is the one service on the stack I could NOT exercise on the dev box (it needs a reachable
+  # OpenBao and a real ref to resolve). Every other exemption in this file is backed by an observed
+  # failure; this one is backed only by the absence of a test, which is a weaker reason and is recorded as
+  # such rather than dressed up. It runs as root writing a 0600 drop to a host tmpfs; the posture is
+  # plausible but unverified, so it is left alone instead of being changed blind.
+  litellm-secrets:
+    image: ${TG_WORKER_IMAGE:-registry-github.com/territory-grounder/grounder/worker}:${TG_TAG:-latest}
+    user: "0:0"
+    # -skip-empty: the provider-key pairs default to an EMPTY ref (`${TG_X_KEY_REF:-}`), so an install delivers
+    # ONLY the providers it has configured in the vault (set TG_KIMI_KEY_REF=bao:… to enable a provider) — the
+    # unset ones are skipped, not failed. The master key always resolves via its bao: default UNLESS an operator
+    # explicitly sets TG_LITELLM_KEY_REF= to empty (a misconfig — then the init writes no master key and litellm
+    # fails to boot, i.e. it still fails closed, just later); don't do that.
+    entrypoint: ["/usr/local/bin/tg-secretenv", "-shell", "-skip-empty", "-out", "/run/litellm-secrets/env"]
+    command:
+      - LITELLM_MASTER_KEY=${TG_LITELLM_KEY_REF:-bao:secret/data/tg/litellm#master_key}
+      - KIMI_API_KEY=${TG_KIMI_KEY_REF:-}
+      - ZAI_API_KEY=${TG_ZAI_KEY_REF:-}
+      - DEEPSEEK_API_KEY=${TG_DEEPSEEK_KEY_REF:-}
+      - MISTRAL_API_KEY=${TG_MISTRAL_KEY_REF:-}
+      # Azure Foundry rail (owner directive 2026-08-22): primary/fast now dial azure/ deployments in
+      # litellm-config.yaml. Same delivery shape as the other provider keys — default EMPTY so, with
+      # -skip-empty, an install that never sets TG_AZURE_KEY_REF is byte-for-byte unaffected.
+      - AZURE_API_KEY=${TG_AZURE_KEY_REF:-}
+      - ANTHROPIC_API_KEY=${TG_ANTHROPIC_KEY_REF:-}
+      - OPENAI_API_KEY=${TG_OPENAI_KEY_REF:-}
+      - XAI_API_KEY=${TG_XAI_KEY_REF:-}
+      # The tg-claude-proxy bearer (TG-278, wired by TG-284). It was a 32-char literal in .env with NO
+      # reference variable anywhere in the tree, so nothing could move it to the vault — and because it lives
+      # in the LITELLM container, the worker/grounder in-process boot gate structurally cannot see it either
+      # (spec/024 REQ-2403 is exactly this case). Delivering it here is what makes TG_OPUS_SIDECAR_KEY_REF a
+      # real knob. Default EMPTY, not env:TG_OPUS_SIDECAR_KEY: with -skip-empty an unset ref is skipped and
+      # the plaintext passthrough on the litellm service below still applies, so an existing install is
+      # byte-for-byte unaffected — whereas an env: default would resolve empty on installs that never set the
+      # variable and fail the init closed, taking litellm down with it.
+      - TG_OPUS_SIDECAR_KEY=${TG_OPUS_SIDECAR_KEY_REF:-}
+    environment:
+      TG_OPENBAO_ADDR: ${TG_OPENBAO_ADDR:-}
+      TG_OPENBAO_TOKEN_REF: ${TG_OPENBAO_TOKEN_REF:-}
+      TG_OPENBAO_CA: ${TG_OPENBAO_CA:-}
+      # mTLS machine-identity bootstrap (spec/024 Amendment 2026-07-25, T-024-10): CERT+KEY ⇒ tg-secretenv
+      # authenticates to OpenBao by presenting a FreeIPA-CA client cert (no bootstrap token); empty ⇒ token
+      # fallback. This init was the LAST OpenBao consumer still token-only — cert-auth here unblocks retiring
+      # the shared bootstrap token. Cert+key are read from the /secrets mount below.
+      TG_OPENBAO_CERT: ${TG_OPENBAO_CERT:-}
+      TG_OPENBAO_KEY: ${TG_OPENBAO_KEY:-}
+      TG_OPENBAO_CERT_ROLE: ${TG_OPENBAO_CERT_ROLE:-}
+    volumes:
+      - ./secrets:/secrets:ro
+      - ${TG_LITELLM_SECRET_DROP:-/dev/shm/tg-litellm-secrets}:/run/litellm-secrets
+    restart: "no"
+    # TG-160 EGRESS: OpenBao. This one-shot resolves the model-gateway master key and every provider key
+    # from the vault (TG_OPENBAO_ADDR), which in this estate is off-host — so it needs the egress tier or
+    # it exits non-zero and litellm never starts (fail-closed by design). No published port ⇒ no frontdoor.
+    networks: [tg-backplane, tg-egress]
+
+  # --- the model-gateway: one OpenAI-compatible endpoint fronting the provider fallback ladder ---
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable@sha256:a1745e629abfb17d434426ff48b115f54f4f4c4a0f5af241de569e93c63c411e
+    # TG-170: limits + HEALTHCHECK. 3G, and the number is the correction to my own mistake.
+    #
+    # I first set 1G, sized from a single measurement of 608 MiB taken while the estate was IDLE. It
+    # OOM-killed litellm on the very first deploy — exit 137, container exited, health unhealthy, and TG
+    # had no model gateway at all until I removed the limit by hand. Restarted without a cap it settles at
+    # ~1022 MiB at rest, i.e. ABOVE the limit I had chosen from the idle sample.
+    #
+    # I had written in the same change that an idle measurement is not a peak, and then sized this one from
+    # an idle measurement anyway. 3G is ~3x the observed resting figure, which bounds a genuine runaway
+    # while leaving room for the variance a single sample cannot show. The host has 8G and the whole stack
+    # rests around 2G, so the headroom costs nothing.
+    #
+    # This one matters more than the others: TG runs SINGLE-BRAIN through this process (TG-293, an owner
+    # decision with "no fallbacks" stated), so an OOM here does not degrade triage, it stops it.
+    #
+    # This image has python3 but no curl/wget, so the probe is a python one-liner rather than the
+    # binary-probes-itself form the distroless Go services use.
+    deploy:
+      resources:
+        limits: {cpus: "1", memory: 3G}
+        reservations: {cpus: "0.1", memory: 256M}
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=4).status==200 else 1)"]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 60s
+    # Container hardening (audit TG-153 gap #9): litellm holds every provider key, so constrain it — drop ALL
+    # capabilities + forbid privilege escalation. It is a Python app that writes to its rootfs, so read-only
+    # rootfs is intentionally NOT set here (would break it); the env→file secret-delivery refactor is tracked
+    # separately under TG-153.
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    # The master key is delivered from OpenBao by the litellm-secrets init into a memory-backed (tmpfs) env
+    # file that THIS entrypoint sources before exec-ing the image's original entrypoint — no plaintext
+    # LITELLM_MASTER_KEY in .env (spec/024 REQ-2403). depends_on gates litellm on the init succeeding
+    # (fail-closed: the key does not resolve ⇒ the init exits non-zero ⇒ litellm never starts). $$@ escapes to
+    # $@ for the container so the config/port args pass through to prod_entrypoint.sh unchanged.
+    depends_on:
+      litellm-secrets:
+        condition: service_completed_successfully
+    # MODEL-CHANNEL TRUST: NOTHING EXTRA NEEDED (TG-414). The sidecar is on-box since TG-413 and litellm
+    # reaches it compose-internally over HTTP (TG_SIDECAR_BASE=http://sidecar:8094/v1), so there is no
+    # private cert to trust. The providers litellm still dials directly (DeepSeek/Mistral/Z.AI) verify
+    # against the image's stock CA store. TG-287's off-box TLS terminator and the SSL_CERT_FILE CA-bundle
+    # step that trusted its cert were retired by TG-414, so the entrypoint now only sources the secrets
+    # drop and execs. ($$@ escapes to $@ so the config/port args pass through to prod_entrypoint.sh.)
+    entrypoint: ["/bin/sh", "-c", "set -a; . /run/litellm-secrets/env; set +a; exec /app/docker/prod_entrypoint.sh \"$$@\"", "litellm"]
+    command: ["--config", "/etc/litellm/config.yaml", "--port", "4000"]
+    environment:
+      # Optional now — the litellm-secrets init sources the real value from OpenBao at start (which overrides
+      # this empty default). Kept as a hook so a non-vault deployment can still set it directly in .env.
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-}
+      # Provider keys are supplied by env reference and consumed by litellm-config.yaml.
+      KIMI_API_KEY: ${KIMI_API_KEY:-}
+      ZAI_API_KEY: ${ZAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      AZURE_API_KEY: ${AZURE_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      # Local Ollama endpoint for the embed-nomic entry (TG-211). Deploy-set; empty = the entry
+      # resolves nowhere and /v1/embeddings fails per-call while the worker degrades to lexical.
+      TG_OLLAMA_BASE: ${TG_OLLAMA_BASE:-}
+      # Bearer for the tg-claude-proxy (opus-cc alias, model-identical head-to-head; deploy/claude-proxy/).
+      TG_OPUS_SIDECAR_KEY: ${TG_OPUS_SIDECAR_KEY:-}
+      # WHERE THE SIDECAR LIVES (TG-413). Deploy-set, exactly like TG_OLLAMA_BASE above and for the same
+      # reason: an endpoint belongs in deploy config, never as an estate literal in a shipped artifact.
+      #
+      # THE DEFAULT IS THE COMPOSE-INTERNAL ADDRESS BECAUSE THAT IS WHAT PRODUCTION ACTUALLY RUNS. The
+      # cutover was performed and verified on dc1tg01 on 2026-08-07: all three aliases (primary,
+      # fast, opus-cc) completed against `claude-opus-5` through this hop, and the sidecar's own log
+      # accounted for every one of them. The box `.env` carries the same value explicitly.
+      #
+      # An earlier draft defaulted to the OLD off-box address so that merging would change nothing. Two
+      # gates rejected it and both were right: `lint-forbidden` 6/7 refuses an estate literal in a
+      # shipped artifact, and its remedy — "move site config to a deploy-time override, never the image"
+      # — is precisely this. The safety the old default bought is now bought by the ordering instead:
+      # production was cut over and verified BEFORE this default changed, so the repo is following the
+      # box rather than steering it.
+      #
+      # REVERT (one deploy-config edit, no code change): set TG_SIDECAR_BASE to the off-box proxy in the
+      # box `.env` and restart litellm. That is why this is a variable at all.
+      TG_SIDECAR_BASE: ${TG_SIDECAR_BASE:-http://sidecar:8094/v1}
+      TG_LITELLM01_BASE: ${TG_LITELLM01_BASE:-}
+      TG_LITELLM01_KEY: ${TG_LITELLM01_KEY:-}
+      # TG-319: make the /etc/litellm-mounted callback module (forward_user.py) importable by name.
+      PYTHONPATH: /etc/litellm
+      # TG-420 slice 1 — litellm -> provider egress PROXY (deploy/egress-proxy/, service tg-egress-proxy;
+      # owner-ruled fence TG-488 B11). UNARMED BY DEFAULT: HTTPS_PROXY is EMPTY, so litellm dials directly as
+      # today. Arming (observe) = set TG_LITELLM_HTTPS_PROXY=http://tg-egress-proxy:8888 in the box .env AND
+      # add `egress-proxy` to COMPOSE_PROFILES, then restart litellm. Slice 2 (enforce + host-side drop of
+      # litellm's direct egress) is OWNER-GATED and separate. See deploy/egress-proxy/tinyproxy.conf.
+      HTTPS_PROXY: ${TG_LITELLM_HTTPS_PROXY:-}
+      https_proxy: ${TG_LITELLM_HTTPS_PROXY:-}
+      # HTTP_PROXY is deliberately NOT set: the sidecar (http://sidecar:8094) and the ollama embed lane
+      # (http://<gpu-host>:11434) are HTTP, so with no HTTP_PROXY they ALWAYS go direct — the proxy only ever
+      # sees the providers' HTTPS. NO_PROXY is belt-and-suspenders: `sidecar` (the Anthropic lane), loopback
+      # (litellm's own health probe) and the RFC1918 blocks (any LAN/on-box endpoint dialled by IP) never
+      # traverse the proxy. The ollama HOST NAME is intentionally NOT a literal here (STONITH: no estate
+      # hostname in a shipped artifact); if a deployment runs the embed or sidecar lane over HTTPS, extend
+      # TG_LITELLM_NO_PROXY in the box .env to add that host.
+      NO_PROXY: ${TG_LITELLM_NO_PROXY:-sidecar,localhost,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+      no_proxy: ${TG_LITELLM_NO_PROXY:-sidecar,localhost,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+    volumes:
+      - ./litellm-config.yaml:/etc/litellm/config.yaml:ro
+      # TG-319: the user->extra_body forwarding hook; litellm_settings.callbacks references forward_user.
+      - ./litellm-forward-user.py:/etc/litellm/forward_user.py:ro
+      - ${TG_LITELLM_SECRET_DROP:-/dev/shm/tg-litellm-secrets}:/run/litellm-secrets:ro
+      # (TG-414 removed the model-channel CA mount here and the extra_hosts note that went with it: the
+      # sidecar is on-box and reached by compose service name over HTTP, so there is no remote TLS cert to
+      # trust and no estate name to resolve for hostname verification.)
+    ports:
+      - "127.0.0.1:4000:4000"
+    # TG-160 EGRESS: the model providers. This is the container that dials the NON-Anthropic providers
+    # directly (DeepSeek/Mistral/Z.AI; OpenAI/xAI/Kimi are keyless dead rungs today, re-armable), so it is
+    # a hop that MUST reach the public internet and one the Go-level meter cannot see (TG's process talks to
+    # litellm; litellm talks to the providers). The ANTHROPIC hop is NOT here since TG-413: it runs
+    # litellm -> on-box sidecar -> api.anthropic.com, and the sidecar holds that egress grant (narrowed for
+    # TG-414). litellm also holds every provider key, which is why this stays its own declared path rather
+    # than leaving the whole stack able to make the same calls.
+    networks: [tg-backplane, tg-frontdoor, tg-egress]
+
+  # --- TG-420 slice 1: the litellm -> model-provider EGRESS PROXY (tinyproxy), OBSERVE / log-only ---
+  #
+  # WHY. litellm dials the providers directly (the block above), a hop the in-process core/egress meter
+  # structurally cannot see (different container) and which carries full prompt content off-box. TG-381
+  # default-drops RFC1918 from the egress tier, but PUBLIC egress from litellm is deliberately wide open (it
+  # must reach the provider APIs), so litellm can currently open a socket to ANY public host. This tinyproxy
+  # service is the stable domain-allowlist control the parent framed (TG-324 item 3): provider APIs are
+  # CDN-fronted, so an IP allowlist rots continuously — a DOMAIN allowlist at an HTTP CONNECT proxy does not.
+  #
+  # THE FENCE IS OWNER-RULED (TG-488 B11): EXACTLY three endpoints — sidecar + ollama (direct, HTTP) and
+  # api.z.ai (HTTPS, through this proxy). deepseek/mistral are deliberately STRANGERS, NOT derived from
+  # litellm-config.yaml. SLICE 1 IS OBSERVE ONLY: the proxy BLOCKS NOTHING; it logs every CONNECT destination
+  # (LogLevel Connect) so the operator can SEE the strangers litellm still dials (the evidence the owner asked
+  # for) BEFORE slice 2 blocks them and drops litellm's direct egress. See provider-allowlist.txt (the fence,
+  # CI-checked against the ruling) and tinyproxy.conf. "Log first, then block strangers" — observe, then enforce.
+  #
+  # UNARMED BY DEFAULT, TWO WAYS, so merging this changes NOTHING about the running brain:
+  #   1. it is behind the `egress-proxy` compose profile, so a bare `up -d` does NOT start it; and
+  #   2. litellm's HTTPS_PROXY defaults EMPTY (see the litellm env above), so even when the proxy IS running
+  #      it receives no traffic until TG_LITELLM_HTTPS_PROXY is set.
+  # Arming (observe) is deliberate: add `egress-proxy` to COMPOSE_PROFILES AND set TG_LITELLM_HTTPS_PROXY,
+  # then run deploy/host/tg-egress-proxy-observe-drill.sh.
+  #
+  # BUILT from a pinned Alpine base (deploy/egress-proxy/Dockerfile), not a third-party proxy image, so the
+  # supply chain of a control on the single-brain path stays Alpine's own signed repos. MEASURED on tinyproxy
+  # 1.11.2 (2026-08-14): under this exact hardened posture the daemon starts clean, tunnels CONNECT to
+  # api.mistral.ai / api.deepseek.com / api.z.ai, and logs each destination to stdout (docker logs).
+  tg-egress-proxy:
+    build:
+      context: ./egress-proxy
+    image: tg-egress-proxy:local
+    profiles: ["egress-proxy"]
+    # Fully hardened, and MEASURED (not claimed): a non-root uid with NO capabilities and a read-only rootfs.
+    # It binds 8888 (>1024, so no CAP_NET_BIND_SERVICE) and only makes outbound CONNECTs, so it needs nothing
+    # else; running as a fixed non-root uid means tinyproxy never setuids, which is what lets ALL caps drop.
+    user: "65534:65534"
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    restart: unless-stopped
+    # No published host port: only in-stack containers (litellm) reach it, over tg-backplane by service name.
+    # TG-160 EGRESS: it dials the model providers (the future SOLE path out for litellm), so it needs the
+    # egress tier; tg-backplane is the east-west path litellm reaches it on. Recorded in egress_parity_test.go.
+    networks: [tg-backplane, tg-egress]
+
+  # The sidecar's subscription token, delivered from OpenBao exactly the way litellm's keys are
+  # (TG-413). FAIL-CLOSED: a ref that does not resolve exits non-zero and writes nothing, so the sidecar
+  # (depends_on: service_completed_successfully) never starts blind and litellm gets a loud failure
+  # rather than a silently unauthenticated model path.
+  #
+  # The default ref is real, not empty: unlike a provider key — where an unset ref means "this install
+  # does not use that provider" — a sidecar with no token cannot do the one thing it exists for. There is
+  # no useful degraded mode to preserve, so it fails closed on a missing secret instead of skipping.
+  # The drop directory's ownership, the same shape as `secrets-perms` above and for the same reason.
+  #
+  # tg-secretenv writes 0600 owned by whoever runs it and has no -owner flag, and the worker image is
+  # DISTROLESS so no shell wrapper can chown afterwards. Docker creates a missing bind source as root:root
+  # 0755, which uid 1000 cannot write into — measured: `tg-secretenv: write output: open
+  # /run/sidecar-secrets/env: permission denied`. Doing this in compose rather than as a documented host
+  # step matters because /dev/shm does not survive a reboot: a manual chown would work until the next
+  # restart and then fail, which is the worst of both.
+  # IT ALSO OWNS THE STATE DIRECTORY, and that half was added when the profile came off. While the service
+  # was opt-in, /srv/tg-claude-proxy/home was a documented host prerequisite someone had already satisfied
+  # by hand. Starting by default means a fresh box (or a rebuilt one) reaches this with the directory
+  # absent, Docker creates it root:root 0755, and the CLI cannot write the $HOME it stores its REFRESHED
+  # subscription credentials in. That is the identical failure the drop hit, one directory over, and it
+  # would appear as a sidecar that starts and then cannot re-authenticate.
+  sidecar-perms:
+    image: busybox:stable@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+    user: "0:0"
+    restart: "no"
+    volumes:
+      - ${TG_SIDECAR_SECRET_DROP:-/dev/shm/tg-sidecar-secrets}:/drop
+      - ${TG_SIDECAR_STATE_DIR:-/srv/tg-claude-proxy/home}:/state
+    # 750 on the drop (secrets, group-readable for the cert gid); 700 on state — it is the sidecar's own
+    # $HOME and nothing else has any business in it.
+    command: ["sh", "-c", "chown ${TG_SIDECAR_UID:-1000}:65532 /drop && chmod 750 /drop && chown ${TG_SIDECAR_UID:-1000}:${TG_SIDECAR_GID:-1000} /state && chmod 700 /state && echo drop 750 ${TG_SIDECAR_UID:-1000}:65532, state 700 ${TG_SIDECAR_UID:-1000}:${TG_SIDECAR_GID:-1000}"]
+    networks: [tg-backplane]
+
+  sidecar-secrets:
+    image: ${TG_WORKER_IMAGE:-registry-github.com/territory-grounder/grounder/worker}:${TG_TAG:-latest}
+    # uid = THE SIDECAR'S, gid = the one that can read the OpenBao client certs. Both halves are load-bearing
+    # and both were measured:
+    #   - tg-secretenv always writes the drop 0600 owned by whoever runs it, with no -owner flag. Running
+    #     as root (litellm-secrets' posture, which works because LITELLM RUNS AS ROOT) produced a
+    #     root-owned drop the sidecar could not read: `cannot open /run/sidecar-secrets/env: Permission
+    #     denied`, in a restart loop, because it runs as 1000 with cap_drop ALL and so has no
+    #     CAP_DAC_OVERRIDE. Same class of failure a cap-dropped container hits reading a 0600 file it does
+    #     not own (the retired TG-287 nginx terminator hit exactly this on its private key), same fix: match
+    #     the uid.
+    #   - /secrets/{tg.crt,tg.key,freeipa-ca.crt} are 0640 root:65532, so the gid must be 65532 or the
+    #     init cannot authenticate to OpenBao at all.
+    user: "${TG_SIDECAR_UID:-1000}:65532"
+    entrypoint: ["/usr/local/bin/tg-secretenv", "-shell", "-out", "/run/sidecar-secrets/env"]
+    command:
+      - CLAUDE_CODE_OAUTH_TOKEN=${TG_CLAUDE_OAUTH_TOKEN_REF:-bao:secret/data/tg/claude-proxy#oauth_token}
+    # EXACTLY the variables litellm-secrets takes, because it is the same binary against the same OpenBao:
+    # certificate auth (CERT/KEY/CA/CERT_ROLE), not AppRole. My first draft guessed AppRole variables and
+    # would have failed closed at start — read from the working service rather than assumed.
+    environment:
+      TG_OPENBAO_ADDR: ${TG_OPENBAO_ADDR:-}
+      TG_OPENBAO_CA: ${TG_OPENBAO_CA:-}
+      TG_OPENBAO_CERT: ${TG_OPENBAO_CERT:-}
+      TG_OPENBAO_KEY: ${TG_OPENBAO_KEY:-}
+      TG_OPENBAO_CERT_ROLE: ${TG_OPENBAO_CERT_ROLE:-}
+      TG_OPENBAO_TOKEN_REF: ${TG_OPENBAO_TOKEN_REF:-}
+    depends_on:
+      sidecar-perms:
+        condition: service_completed_successfully
+    volumes:
+      # The client certificate material the auth above needs.
+      - ./secrets:/secrets:ro
+      - ${TG_SIDECAR_SECRET_DROP:-/dev/shm/tg-sidecar-secrets}:/run/sidecar-secrets
+    # tg-backplane because every service belongs there (east-west without a NAT-capable bridge);
+    # tg-egress because OpenBao is off-host.
+    networks: [tg-backplane, tg-egress]
+
+  # --- the model sidecar, ON THIS BOX (TG-413) ---
+  #
+  # WHY IT MOVED. It ran on dc1claude01 — which is the coding AGENT'S DEV WORKSTATION, not a
+  # deployment target. TG's production config pointed at that host in eleven places, and not only for the
+  # head-to-head arm: the `primary` and `fast` aliases resolved there too, so TG's whole model path
+  # depended on a machine outside its deploy, its monitoring and its supply chain. The same box carries a
+  # pile of scratch fixtures (tg-local-*pg, tg287-*, tg289-*), which is what a workstation looks like and
+  # is exactly why a production dependency should not live on one.
+  #
+  # NO HOST PORT, DELIBERATELY. The old deployment published :8094 on 0.0.0.0 and :8095 for a TLS front,
+  # because the model channel crossed the management LAN. On-box it reaches litellm over tg-backplane by
+  # service name, so the LAN hop went away — and with it the TLS terminator (TG-287) and its private key
+  # that "existed only on dc1claude01", both now RETIRED (TG-414, after the on-box path was proven over
+  # a production window). What REMAINS is this service's own tg-egress grant below: it still dials
+  # api.anthropic.com directly on the operator's subscription — the one model-channel egress grant that
+  # must stay. Decommissioning the cold-spare containers still running on dc1claude01 is TG-414 item 3,
+  # a host op left for last so the revert path stayed real while the on-box path settled.
+  #
+  # THE TOKEN IS NOT IN THIS FILE AND MUST NEVER BE. `${CLAUDE_CODE_OAUTH_TOKEN:-}` is the same passthrough
+  # the seven provider keys above use (INV-13). ANTHROPIC_API_KEY is deliberately ABSENT: if present the
+  # CLI prefers it and bills per token instead of the subscription. Vault-backed delivery through
+  # tg-secretenv, mirroring litellm-secrets, is the follow-up that makes TG_CLAUDE_OAUTH_TOKEN_REF real.
+  sidecar:
+    # NOT ${TG_TAG}, AND THAT IS NOT A STYLE CHOICE. CI's image-sidecar job builds only when
+    # deploy/claude-proxy/** changes (.gitlab-ci.yml rules), so a per-commit sha tag exists for proxy
+    # commits ONLY. Pinning ${TG_TAG} here made the pull fail with `manifest unknown` on the very first
+    # attempt, and would have done so on virtually every deploy that did not touch the proxy. Measured,
+    # not predicted: TG_TAG=99080090 on the box, no such claude-proxy tag in the registry.
+    #
+    # AND NOT `latest` EITHER. That was the first repair, and `lint-image-pins` refused it — correctly.
+    # `latest` is a mutable tag: it is re-pointed by every proxy build, so the deployed brain could change
+    # underneath a stack that never changed. The gate's exemption is structurally `${TG_*_IMAGE}:${TG_TAG}`
+    # — this pipeline's per-commit output — and `latest` is not that, whoever built it. Digest-pinned is
+    # the honest form for an image built on its own rare schedule.
+    #
+    # ROLLING IT FORWARD: a proxy rebuild does NOT reach production until this digest is bumped, which is
+    # the point of a pin and also its cost. `TG_SIDECAR_IMAGE` stays overridable so an urgent roll-forward
+    # is a deploy-time override rather than a code change. Resolve a new digest with:
+    #   docker buildx imagetools inspect <repo>:latest --format '{{.Manifest.Digest}}'
+    image: ${TG_SIDECAR_IMAGE:-registry-github.com/territory-grounder/grounder/claude-proxy@sha256:98b1b270c1a657ff9266b1e8aadf8a25b9ab3a9e5180ee36ad83ff236b61fa97}
+    container_name: tg-claude-proxy
+    # NO PROFILE, AND THAT CHANGED DELIBERATELY. It shipped behind `on-box-sidecar` while the default base
+    # still pointed off-box, so merging could not start a tokenless container next to a working stack.
+    # Production is now cut over (see TG_SIDECAR_BASE above), so the opposite is true: a deploy that did
+    # NOT start this service would leave litellm dialling a service name that resolves to nothing, and a
+    # sidecar outage fails TG triage LOUDLY by design. The profile is now the failure mode, not the guard.
+    restart: unless-stopped
+    init: true
+    # The CLI reaps its own children on shutdown; 45s mirrors the source deployment rather than guessing.
+    stop_grace_period: 45s
+    user: "${TG_SIDECAR_UID:-1000}:${TG_SIDECAR_GID:-1000}"
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      sidecar-secrets:
+        condition: service_completed_successfully
+    # The token is SOURCED from the OpenBao drop, never passed as a compose environment value — a value
+    # here would land in `docker inspect` and in the deploy's own environment (INV-13). $$@ escapes so the
+    # image's own args pass through unchanged.
+    entrypoint: ["/bin/sh", "-c", "set -a; . /run/sidecar-secrets/env; set +a; exec /usr/local/bin/claudecode-runner \"$$@\"", "claudecode-runner"]
+    environment:
+      HOME: /home/sidecar
+      SIDECAR_POOL_SIZE: "2"
+      SIDECAR_POOL_MAX_AGE_MS: "900000"
+      SIDECAR_MAX_INFLIGHT: "8"
+      SIDECAR_QUEUE_WAIT_MS: "120000"
+      SIDECAR_TOOLS_MODE: "none"
+      SIDECAR_LOG_FORMAT: "json"
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+      LISTEN_ADDR: "0.0.0.0:8094"
+      CLAUDE_BIN: /usr/bin/claude
+      # The canonical id, not the "opus" alias — the container CLI resolved that alias to haiku.
+      OPUS_MODEL: "claude-opus-5"
+      SIDECAR_API_KEY: ${TG_OPUS_SIDECAR_KEY:-}
+      OMOIKANE_RUNNER_STATE_DIR: /home/sidecar/.claude-state
+      RUST_LOG: "info,claudecode_runner=debug"
+    volumes:
+      # Host-owned state, so the CLI's refreshed credentials and warm-pool state survive a restart. Must
+      # exist and be owned by TG_SIDECAR_UID before first start.
+      - ${TG_SIDECAR_STATE_DIR:-/srv/tg-claude-proxy/home}:/home/sidecar
+      - ${TG_SIDECAR_SECRET_DROP:-/dev/shm/tg-sidecar-secrets}:/run/sidecar-secrets:ro
+    healthcheck:
+      test: ["CMD", "claudecode-runner", "--version"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+    # tg-egress ONLY: it dials api.anthropic.com on the operator's subscription. It deliberately does NOT
+    # join tg-frontdoor — nothing outside the stack should reach it — and it needs tg-backplane so litellm
+    # can. That pair is the whole reason the host port is gone.
+    networks: [tg-backplane, tg-egress]
+
+  # --- durable orchestration: Temporal (replaces n8n + Cronicle) + its own Postgres ---
+  # NOT HARDENED for exactly the reason given on the `postgres` service above (same image family, same
+  # root-then-switch entrypoint, same measured `failed switching to 'postgres'` death under cap_drop).
+  temporal-postgres:
+    image: postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: ${TEMPORAL_PG_PASSWORD:?set in .env}
+      POSTGRES_DB: temporal
+    volumes:
+      - temporaldata:/var/lib/postgresql/data
+    # TG-160: Temporal's persistence tier. One client (the temporal service), no published port, nothing
+    # off-box. Backplane-only.
+    networks: [tg-backplane]
+
+  temporal:
+    image: temporalio/auto-setup:1.25.2@sha256:b1edc1e20002d958c8182f2ae08dee877a125083683a627a44917683419ba6a8
+    # Container hardening (TG-289). The image already runs uid 1000 (temporal), so it needs no capability
+    # to do its job — verified booting clean with ALL dropped. read_only is NOT set: auto-setup RENDERS its
+    # config into /etc/temporal at every start, which is on the rootfs.
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: ${TEMPORAL_PG_PASSWORD:?set in .env}
+      POSTGRES_SEEDS: temporal-postgres
+    depends_on:
+      - temporal-postgres
+    # ★ EXACTLY ONE NETWORK, AND :7233 IS DELIBERATELY NOT PUBLISHED (TG-327).
+    #
+    # TG-160 gave this service tg-backplane AND tg-frontdoor — frontdoor purely so the published :7233
+    # could serve, since an internal-only container cannot. That combination TOOK PRODUCTION DOWN on
+    # 2026-08-05: worker and temporal both Exited(1), and the whole control plane with them.
+    #
+    # The mechanism, measured rather than guessed. This image is temporalio/auto-setup, whose entrypoint
+    # defaults `BIND_ON_IP` to `hostname -i`. In a MULTI-HOMED container that is ambiguous — here it
+    # resolved to 192.168.181.31, the HOST's LAN address, which the container does not own. So temporal
+    # bound nothing usable: ringpop died with `failed to start ringpop: join duration 51s exceeded max
+    # 30s`, and the worker, dialing the correct shared backplane address, got
+    # `dial tcp 172.24.0.3:7233: connect: connection refused` and exited.
+    #
+    # Note what this is NOT, because the obvious reading is wrong: the backplane is 172.24/16, so DNS was
+    # handing the worker the RIGHT address on the RIGHT shared network. Nothing was misresolved. temporal
+    # simply was not listening on it. Every other service here binds 0.0.0.0 and was unaffected —
+    # grounder, worker and console stayed up and prometheus kept scraping throughout — so this is specific
+    # to auto-setup's bind default, not a general property of the segmentation.
+    #
+    # Single-homing restores an unambiguous `hostname -i`. The cost is the published :7233, which is why
+    # it is now gone rather than left as a port that silently refuses: measured with `ss -tnp`, nothing
+    # on the host had ever connected to it, and the documented operator recipe already goes through
+    # `docker exec … temporal --address <container-ip>:7233`.
+    networks: [tg-backplane]
+
+  temporal-ui:
+    image: temporalio/ui:2.34.0@sha256:cb17ea423d76a8a19a269d0bcd81fc12eee1f6365acd2a56b590dafb35696a95
+    # Container hardening (TG-289). `user:` is load-bearing here, not decoration: this image declares NO
+    # user, so it ran as root, and at start it writes ./config/docker.yaml into its workdir /home/ui-server
+    # — a directory owned by uid 5000. Root could only write there via CAP_DAC_OVERRIDE, so dropping caps
+    # alone killed it (measured: `unable to create open ./config/docker.yaml: permission denied`). Running
+    # as the uid that OWNS the directory removes the need for the capability instead of handing it back.
+    # read_only is NOT set for that same write. This service was also root before TG-289.
+    user: "5000:5000" # owns /home/ui-server in temporalio/ui:2.34.0
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    depends_on:
+      - temporal
+    ports:
+      - "127.0.0.1:8233:8080"
+    # TG-160: a web UI over the Temporal frontend. Reaches one in-stack service; published, so frontdoor.
+    networks: [tg-backplane, tg-frontdoor]
+
+  # --- the control-plane (read-only foundation) ---
+  grounder:
+    # In prod the host `docker compose pull`s this CI-built, registry-hosted image (GitOps); the tag is set
+    # by the deploy (TG_TAG=<commit>). Locally `docker compose up --build` builds it from source instead.
+    image: ${TG_GROUNDER_IMAGE:-registry-github.com/territory-grounder/grounder/grounder}:${TG_TAG:-latest}
+    # TG-170: per-service resource limits + a runtime HEALTHCHECK, closing the last compose<->helm
+    # hardening gap. The helm chart has carried both since spec/009; compose had neither, so an OOM or a
+    # wedged process was unbounded and undetected on the DEPLOYED stack — which is compose, not helm.
+    #
+    # Limits mirror deploy/helm/grounder/values.yaml rather than being invented here, so the two deployment
+    # paths cannot drift into disagreeing about what a service may consume.
+    #
+    # HEALTHCHECK runs the binary against its OWN listener: this image is distroless, with no shell and no
+    # curl (measured — `docker exec ... /bin/sh` fails "no such file or directory"). Adding a shell to gain
+    # a probe would widen every container's attack surface to buy a liveness check.
+    deploy:
+      resources:
+        limits: {cpus: "1", memory: 512M}
+        reservations: {cpus: "0.1", memory: 128M}
+    healthcheck:
+      test: ["CMD", "/app", "-healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    # Container hardening (audit TG-153 gap #9): the distroless grounder runs nonroot 65532 and mounts
+    # /knowledge + /secrets read-only, so it holds no writable state on its rootfs — drop ALL capabilities,
+    # forbid privilege escalation, read-only rootfs + tmpfs /tmp.
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        BIN: grounder
+    environment:
+      TG_RUNTIME_DSN: ${TG_RUNTIME_DSN:?set in .env}     # DML-only role
+      # TG-422 slice 2: the console-config store's STATIC login. The store read runs before the dyn:
+      # scheme is wired, so when TG_RUNTIME_DSN goes dyn: this pin is what keeps saved console settings
+      # applying. Empty (the default) falls back to TG_RUNTIME_DSN in code — unchanged for static setups.
+      TG_DB_DSN: ${TG_DB_DSN:-}
+      # TG-422 slice 2: dynamic Postgres credentials at the GROUNDER root — the grounder is the sole
+      # consumer of the migration DSN and its own runtime pool, so it needs the same dyn: wiring as the
+      # worker. EMPTY TG_DYNDB_ADDR = OFF (dyn: refs fail closed; env DSNs unaffected, byte-identical boot).
+      TG_DYNDB_ADDR: ${TG_DYNDB_ADDR:-}
+      TG_DYNDB_TOKEN_REF: ${TG_DYNDB_TOKEN_REF:-}
+      TG_DYNDB_MOUNT: ${TG_DYNDB_MOUNT:-}
+      TG_DYNDB_CA: ${TG_DYNDB_CA:-}
+      TG_DYNDB_DSN_TEMPLATE: ${TG_DYNDB_DSN_TEMPLATE:-}
+      # TG-251: the reader's half of the capability-projection freshness contract (staleness = 3x this).
+      TG_CAPABILITY_PROJECTION_INTERVAL: ${TG_CAPABILITY_PROJECTION_INTERVAL:-60s}
+      TG_MIGRATION_DSN: ${TG_MIGRATION_DSN:?set in .env} # DDL role, startup only
+      TG_LITELLM_URL: http://litellm:4000
+      TG_LITELLM_KEY_REF: ${TG_LITELLM_KEY_REF:-env:LITELLM_MASTER_KEY}
+      # TG-81 b3: verdict-ledger Ed25519 provenance (both dormant when blank; verdictsig_wire.go)
+      TG_VERDICT_SIGNING_SEED_REF: ${TG_VERDICT_SIGNING_SEED_REF:-}
+      TG_VERDICT_PUBLIC_KEY: ${TG_VERDICT_PUBLIC_KEY:-}
+      # TG-80 P2-6: the KILLED terminal flip (blank = OFF, jailbreak hits keep polling; arming is eval-gated)
+      TG_SCREEN_KILL_TERMINAL: ${TG_SCREEN_KILL_TERMINAL:-}
+      # spec/016 REQ-1604 T-016-5: gate 4d2 authn-compose (blank = DARK, the gate row says so; 1/true =
+      # every policy-authorized target's identity must resolve via the audited resolver before execute)
+      TG_AUTHN_COMPOSE: ${TG_AUTHN_COMPOSE:-}
+      # spec/024 T-024-6: the HOMELAB-tier vw: scheme (Vaultwarden). Blank addr = substrate OFF and every
+      # vw: reference fails closed; the two refs are REFERENCES to the vault account's own credentials.
+      TG_VAULTWARDEN_ADDR: ${TG_VAULTWARDEN_ADDR:-}
+      TG_VAULTWARDEN_EMAIL_REF: ${TG_VAULTWARDEN_EMAIL_REF:-}
+      TG_VAULTWARDEN_PASSWORD_REF: ${TG_VAULTWARDEN_PASSWORD_REF:-}
+      # TG-85 write slice 4: the Cisco WRITE lane. Blank devices = unconfigured (nothing constructed);
+      # _ARM is the separate owner arming flip. Both are read in worker_actuation_wire.go.
+      TG_CISCO_WRITE_DEVICES: ${TG_CISCO_WRITE_DEVICES:-}
+      TG_CISCO_READ_DEVICES: ${TG_CISCO_READ_DEVICES:-}
+      TG_CISCO_WRITE_ARM: ${TG_CISCO_WRITE_ARM:-}
+      # TG-180: the observability fault-injection PROBE harness. Every key blank = the loop never starts
+      # (the boot line says "not configured"); ENABLED is a separate arm on top of a configured pool.
+      TG_OBSERVE_PROBE_ENABLED: ${TG_OBSERVE_PROBE_ENABLED:-}
+      TG_OBSERVE_PROBE_POOL_FILE: ${TG_OBSERVE_PROBE_POOL_FILE:-}
+      TG_OBSERVE_PROBE_SNAP_NODE: ${TG_OBSERVE_PROBE_SNAP_NODE:-}
+      TG_OBSERVE_PROBE_CLASSES: ${TG_OBSERVE_PROBE_CLASSES:-}
+      TG_OBSERVE_PROBE_CADENCE: ${TG_OBSERVE_PROBE_CADENCE:-}
+      TG_OBSERVE_PROBE_RESTORE_AFTER: ${TG_OBSERVE_PROBE_RESTORE_AFTER:-}
+      TG_OBSERVE_PROBE_SSH_KEY: ${TG_OBSERVE_PROBE_SSH_KEY:-}
+      TG_OBSERVE_PROBE_SSH_TIMEOUT: ${TG_OBSERVE_PROBE_SSH_TIMEOUT:-}
+      TG_OBSERVE_PROBE_WINDOW: ${TG_OBSERVE_PROBE_WINDOW:-}
+      # spec/024 T-024-5: the HOMELAB-tier passbolt: scheme. Blank addr = substrate OFF; the key ref
+      # points at the robot's ASCII-armored OpenPGP PRIVATE key, which is this tier's secret-zero.
+      TG_PASSBOLT_ADDR: ${TG_PASSBOLT_ADDR:-}
+      TG_PASSBOLT_KEY_REF: ${TG_PASSBOLT_KEY_REF:-}
+      TG_PASSBOLT_PASSPHRASE_REF: ${TG_PASSBOLT_PASSPHRASE_REF:-}
+      # vSphere estate source (TG-91): DARK unless TG_VSPHERE_URL is set. The password is the only sealed
+      # value (TG_VSPHERE_TOKEN_REF); _INSECURE opts INTO skipping TLS verification and defaults off.
+      TG_VSPHERE_URL: ${TG_VSPHERE_URL:-}
+      TG_VSPHERE_USER: ${TG_VSPHERE_USER:-}
+      TG_VSPHERE_TOKEN_REF: ${TG_VSPHERE_TOKEN_REF:-}
+      TG_VSPHERE_INSECURE: ${TG_VSPHERE_INSECURE:-}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      TG_PUBLIC_ADDR: ":8080"
+      TG_ADMIN_ADDR: ":8443"
+      # Browser operator session (spec/006 REQ-508) — read-only console login. Values live in .env,
+      # referenced here indirectly (env: scheme); absent values just leave the browser path unregistered.
+      TG_SESSION_KEY: ${TG_SESSION_KEY:-}
+      # The binary reads the session-key REFERENCE (TG_SESSION_KEY_REF, default env:TG_SESSION_KEY) and
+      # the browser-session TTL (TG_SESSION_TTL, default 12h). Without these passthroughs an operator
+      # override in .env is silently dropped and the value stays at the in-code default.
+      TG_SESSION_KEY_REF: ${TG_SESSION_KEY_REF:-env:TG_SESSION_KEY}
+      TG_SESSION_TTL: ${TG_SESSION_TTL:-12h}
+      TG_OPERATOR_NAME: ${TG_OPERATOR_NAME:-operator}
+      TG_OPERATOR_TOKEN: ${TG_OPERATOR_TOKEN:-}
+      TG_OPERATOR_TOKEN_REF: ${TG_OPERATOR_TOKEN_REF:-env:TG_OPERATOR_TOKEN}
+      # Admin operator tier (task #27 Phase B, REQ-522) — the SEPARATE step-up credential for the
+      # config/secret write lane. Absent = the admin routes are simply not registered (fail closed).
+      TG_ADMIN_NAME: ${TG_ADMIN_NAME:-admin}
+      TG_ADMIN_TOKEN: ${TG_ADMIN_TOKEN:-}
+      TG_ADMIN_TOKEN_REF: ${TG_ADMIN_TOKEN_REF:-env:TG_ADMIN_TOKEN}
+      TG_ADMIN_TTL: ${TG_ADMIN_TTL:-15m}
+      # The gate-decision boundary-case queue's DEFAULT review band (TG-178): a decision within this ε of its
+      # threshold is surfaced for review. Unset ⇒ the compiled 0.05 default; an explicit ?eps= still wins.
+      TG_GATE_MARGIN_EPSILON: ${TG_GATE_MARGIN_EPSILON:-}
+      # Secret-scheme policy (spec/024 REQ-2400): off (default) / warn / enforce. Under enforce the boot
+      # preflight refuses to start on any non-exempt business secret that resolves through a plaintext-bearing
+      # scheme (env:/file:/literal) instead of a backend (bao:/vault:/store:). Ship off, then warn, then enforce.
+      TG_SECRET_POLICY: ${TG_SECRET_POLICY:-off}
+      # OUTBOUND EGRESS METER (TG-324). This process had NO meter at all until now, while being on both
+      # `tg-egress` (it dials OpenBao off-host for its own read credential and the console WRITER AppRole)
+      # and `tg-frontdoor` — the only TG process on the published surface. So the control was strongest on
+      # the least exposed plane and absent on the most exposed one.
+      #
+      # METER, WHERE BOTH WORKER BLOCKS ARE ENFORCE, AND THAT ASYMMETRY IS THE POINT. The workers earned
+      # enforce: they ran metered until tg_egress_offallowlist_requests_total held flat at 0 against a
+      # NON-ZERO tg_egress_allowlist_rules (33 and 10, measured 2026-08-07). This plane has never been
+      # observed against real traffic, and enforcing on first install would gate its OpenBao calls on an
+      # unaudited allowlist — the grounder cannot resolve its own read credential without OpenBao, so a
+      # wrong allowlist here is not a degraded grounder, it is no grounder. Flip it the same way it was
+      # earned: watch the series, then set TG_EGRESS_MODE=enforce. The shared TG_EGRESS_MODE override
+      # deliberately reaches all three services, so an operator flipping it flips them together.
+      TG_EGRESS_ALLOW: ${TG_EGRESS_ALLOW:-}
+      TG_EGRESS_MODE: ${TG_EGRESS_MODE:-meter}
+      # LDAP / FreeIPA console login (spec/006 REQ-508 extension). A FOURTH way to authenticate a browser
+      # operator session: a FreeIPA user logs in with their OWN directory username + password (the console
+      # "Operator token" field carries the password), composed WITH the static break-glass operator above.
+      # Gated ON only when TG_LDAP_AUTH_ENABLED=true AND at least one TG_LDAP_URLS replica is set. The
+      # login binds AS THE USER (password never stored/hashed/logged); their group membership maps to a
+      # role — TG_LDAP_AUTH_ADMIN_GROUP (default tg-admins) → admin-eligible step-up WITHOUT the static
+      # admin credential, TG_LDAP_AUTH_OPERATOR_GROUP (default tg-operators) → read-only operator, neither
+      # → DENY. TG_LDAP_URLS/TG_LDAP_CA/TG_LDAP_STARTTLS are the SAME transport knobs the worker's
+      # credsource/ldap connector uses (LDAPS:636, CA-verified, never InsecureSkipVerify).
+      TG_LDAP_AUTH_ENABLED: ${TG_LDAP_AUTH_ENABLED:-}
+      TG_LDAP_URLS: ${TG_LDAP_URLS:-}
+      TG_LDAP_CA: ${TG_LDAP_CA:-}
+      TG_LDAP_STARTTLS: ${TG_LDAP_STARTTLS:-}
+      # Site user-DN template (one %s), supplied at deploy time — the estate DN suffix is NEVER baked into the
+      # image (STONITH); unset ⇒ the binary's generic FreeIPA/389-DS default (which a real deployment overrides).
+      TG_LDAP_AUTH_USER_DN_TEMPLATE: ${TG_LDAP_AUTH_USER_DN_TEMPLATE:-}
+      TG_LDAP_AUTH_ADMIN_GROUP: ${TG_LDAP_AUTH_ADMIN_GROUP:-tg-admins}
+      TG_LDAP_AUTH_OPERATOR_GROUP: ${TG_LDAP_AUTH_OPERATOR_GROUP:-tg-operators}
+      # Freshness bound for the WORKER's published mutation posture: a runtime_posture row older than this
+      # reads as posture-unknown on /v1/whoami + /v1/governance (never a false OFF). Go duration; default 90s
+      # (3x the worker's 30s posture heartbeat).
+      TG_POSTURE_STALE_AFTER: ${TG_POSTURE_STALE_AFTER:-90s}
+      # Sealed secrets (task #27 Phase D, REQ-524) — envelope master key MATERIAL (≥32 bytes). Absent
+      # = sealing writes and store: references fail closed; env:/file: refs are unaffected.
+      TG_SEAL_KEY: ${TG_SEAL_KEY:-}
+      TG_SEAL_KEY_REF: ${TG_SEAL_KEY_REF:-env:TG_SEAL_KEY}
+      # External secret substrate (spec/022): when TG_OPENBAO_ADDR is set the control plane resolves its own
+      # SecretRefs as bao: references from OpenBao (fail-closed). Empty = substrate OFF (env:/file: as before).
+      TG_OPENBAO_ADDR: ${TG_OPENBAO_ADDR:-}
+      TG_OPENBAO_TOKEN_REF: ${TG_OPENBAO_TOKEN_REF:-}
+      TG_OPENBAO_CA: ${TG_OPENBAO_CA:-}
+      # APPROLE bootstrap (TG-153). Ranked below the mTLS cert and above the token. Present here for
+      # parity with the worker: a deployment that moves one binary to approle and not the other ends up
+      # with two different identities for reasons nobody intended.
+      TG_OPENBAO_ROLE_ID_REF: ${TG_OPENBAO_ROLE_ID_REF:-}
+      TG_OPENBAO_SECRET_ID_REF: ${TG_OPENBAO_SECRET_ID_REF:-}
+      # The CONSOLE WRITER's AppRole (TG-252): a SEPARATE OpenBao identity from TG's read credential
+      # above. Its policy grants create/update on the module secret lanes and NOTHING else — it cannot
+      # read back even the secret it just wrote, so a console compromise can BREAK a connector and
+      # never steal one. Unset => POST /v1/modules/../secret is 503 and the dialog disables the field.
+      TG_OPENBAO_WRITER_ROLE_ID_REF: ${TG_OPENBAO_WRITER_ROLE_ID_REF:-}
+      TG_OPENBAO_WRITER_SECRET_ID_REF: ${TG_OPENBAO_WRITER_SECRET_ID_REF:-}
+      # mTLS machine-identity bootstrap (spec/024 Amendment 2026-07-25, T-024-10): CERT+KEY ⇒ the grounder
+      # authenticates to OpenBao by presenting a FreeIPA-CA client cert (no bootstrap token); empty ⇒ token
+      # fallback. The cert+key live under the /secrets mount (./secrets:/secrets:ro) this service already has.
+      TG_OPENBAO_CERT: ${TG_OPENBAO_CERT:-}
+      TG_OPENBAO_KEY: ${TG_OPENBAO_KEY:-}
+      TG_OPENBAO_CERT_ROLE: ${TG_OPENBAO_CERT_ROLE:-}
+      # Sealed-secret master key via OpenBao Transit (spec/022 REQ-2201) — set TG_SEAL_TRANSIT_KEY to run the
+      # DEK wrap/unwrap inside OpenBao so the worker holds no master key (else the in-process TG_SEAL_KEY_REF).
+      TG_SEAL_TRANSIT_KEY: ${TG_SEAL_TRANSIT_KEY:-}
+      TG_SEAL_TRANSIT_ADDR: ${TG_SEAL_TRANSIT_ADDR:-}
+      TG_SEAL_TRANSIT_TOKEN_REF: ${TG_SEAL_TRANSIT_TOKEN_REF:-}
+      TG_SEAL_TRANSIT_MOUNT: ${TG_SEAL_TRANSIT_MOUNT:-}
+      # Alertmanager push-ingest bearer (sources row ingest_token_ref = env:TG_AM_INGEST_TOKEN). The value
+      # lives in .env; without this passthrough the ref resolves empty and every AM webhook 401s fail-closed
+      # — which is exactly what happened on the first compose recreate after the token was minted.
+      TG_AM_INGEST_TOKEN: ${TG_AM_INGEST_TOKEN:-}
+      # The REFERENCE form of that bearer (TG-278, added by TG-284). Default env:TG_AM_INGEST_TOKEN keeps the
+      # sources row exactly as it is today; set it to bao:… and the grounder boot repoints the row, which is
+      # the migration path the credential never had. Once it resolves from the vault, DELETE the plaintext
+      # TG_AM_INGEST_TOKEN above — a ref repointed while the value stays behind moves nothing, and the boot
+      # gate's shape scan will keep reporting it until it is gone.
+      TG_AM_INGEST_TOKEN_REF: ${TG_AM_INGEST_TOKEN_REF:-env:TG_AM_INGEST_TOKEN}
+      # LibreNMS push-ingest bearer (AuthIngestPush, exactly like Alertmanager). When TG_LIBRENMS_DEPLOYMENTS
+      # is declared AND this resolves non-empty, the grounder boot provisions the `librenms` sources row from
+      # TG_LIBRENMS_INGEST_TOKEN_REF (default env:TG_LIBRENMS_INGEST_TOKEN) — config-not-code, no hand-run SQL.
+      # This is the value the LibreNMS transports present as the bearer on POST /v1/ingest/librenms; the value
+      # lives only in .env. Without this passthrough the ref resolves empty and push is not provisioned.
+      TG_LIBRENMS_DEPLOYMENTS: ${TG_LIBRENMS_DEPLOYMENTS:-}
+      TG_LIBRENMS_INGEST_TOKEN_REF: ${TG_LIBRENMS_INGEST_TOKEN_REF:-env:TG_LIBRENMS_INGEST_TOKEN}
+      TG_LIBRENMS_INGEST_TOKEN: ${TG_LIBRENMS_INGEST_TOKEN:-}
+      # CrowdSec and host auth-log push bearers (TG-291; authlog is TG-315). Both source types are declared
+      # in the registry and advertised at every boot, and neither had a sources row — so AuthIngestPush fell
+      # into "unknown source ⇒ fail closed" and every push 401'd. Unlike the two refs above these have NO
+      # default: those default to an env: ref matching a row already on the box, whereas there is no crowdsec
+      # or authlog row to preserve, and a default that resolves empty would provision nothing while implying
+      # a working knob. Unset ⇒ not provisioned, and the grounder boot log says exactly that.
+      TG_CROWDSEC_INGEST_TOKEN_REF: ${TG_CROWDSEC_INGEST_TOKEN_REF:-}
+      TG_AUTHLOG_INGEST_TOKEN_REF: ${TG_AUTHLOG_INGEST_TOKEN_REF:-}
+      # the grounder dials Temporal (as a client) to mint the ingest→triage session; the binary reads
+      # TG_TEMPORAL_HOSTPORT (an unread TEMPORAL_ADDRESS silently degraded ingest to validate-only).
+      TG_TEMPORAL_HOSTPORT: temporal:7233
+      # The distilled-lessons corpus the WORKER maintains and this grounder serves as the wiki (#24,
+      # cmd/grounder/wiki_read.go). The worker WRITES the untracked maintained corpus (deploy-persistent);
+      # the tracked seed is read-only bootstrap unioned under it (see the worker service notes below).
+      TG_KNOWLEDGE_FILE: ${TG_KNOWLEDGE_FILE:-/knowledge/corpus.maintained.json}
+      # The compiled per-host articles the worker writes and this service serves at /v1/wiki.
+      TG_WIKI_ARTICLES_FILE: ${TG_WIKI_ARTICLES_FILE:-/knowledge/wiki.articles.json}
+      TG_KNOWLEDGE_SEED_FILE: ${TG_KNOWLEDGE_SEED_FILE:-/knowledge/corpus.seed.json}
+      # The actuation SSH key REFERENCE, passed to the grounder ONLY so the deploy-time credential gate
+      # `grounder --check` (TG-113) can prove the key RESOLVES AND PARSES as the distroless runtime user
+      # (uid:gid 65532) before the worker goes live — catching a re-provision that dropped the credential
+      # (the silent-kill that killed ALL native SSH while the worker still booted healthy). Run it on the
+      # box as the deploy gate:
+      #   docker compose run --rm grounder --check   # non-zero if the ref does not resolve+parse
+      #
+      # NOT A FILE ANY MORE (TG-280/TG-304, 2026-08-04). This said "canonically file:/secrets/one_key" and
+      # that is now wrong in two ways. Every SSH key ref resolves from OpenBao — actuation, hostdiag and
+      # syslog-ng — and /secrets/one_key has been removed from the mount entirely: it was STALE material
+      # that authenticated to 0 of 20 estate hosts while three separate surfaces reported the lane healthy.
+      # A `file:` ref here would now also FAIL the boot secret-policy gate, which enumerates SSH key refs
+      # since TG-304 and refuses a plaintext-bearing scheme under enforce.
+      # The grounder itself does not actuate; this ref is inert in its normal run path. See deploy/secrets/README.md.
+      # ALL FOUR KEY-REF SOURCES, because `grounder --check` is the deploy gate (TG-249 item 7).
+      # core/preflight.SSHKeyRefsFromEnv collects refs from four places; compose forwarded only the
+      # first, so the gate resolved one of four and reported green. Measured 2026-08-06: none of the
+      # four is present in the live grounder container at all, so it currently validates ZERO refs and
+      # still passes. A preflight that checks nothing is worse than none — it certifies.
+      TG_ACTUATION_SSH_KEY: ${TG_ACTUATION_SSH_KEY:-}
+      TG_SYSLOGNG_DEPLOYMENTS: ${TG_SYSLOGNG_DEPLOYMENTS:-}
+      TG_HOSTDIAG_DEPLOYMENTS: ${TG_HOSTDIAG_DEPLOYMENTS:-}
+      TG_CREDENTIAL_NATIVE_RULES: ${TG_CREDENTIAL_NATIVE_RULES:-}
+      TG_AWX_CRED_REF_MAP: ${TG_AWX_CRED_REF_MAP:-}
+    # The shared knowledge corpus: deploy/knowledge/ on the box (gitignored — only its .gitignore is
+    # committed) mounts read-only here; the worker mounts it read-write (it maintains the corpus).
+    # Absent/empty dir ⇒ the wiki and precedent retrieval are honestly empty, never an error.
+    # Read-only secret material the grounder resolves via file: refs — the LDAP/FreeIPA console-login CA
+    # (TG_LDAP_CA=file:/secrets/freeipa-ca.crt). deploy/secrets/ on the box (gitignored) mounts at /secrets
+    # read-only; without this the CA is unreadable and every LDAP login fails closed instantly (no dial).
+    volumes:
+      - ./knowledge:/knowledge:ro
+      - ./secrets:/secrets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      litellm:
+        condition: service_started
+      temporal:
+        condition: service_started
+      # The distroless grounder ALSO runs as uid:gid 65532 and reads ./secrets read-only (the LDAP CA, and
+      # the actuation key when `grounder --check` runs the TG-113 credential gate). Wait for the one-shot
+      # perms fixer so a root-owned 750/600 ./secrets does not permission-deny the nonroot grounder.
+      secrets-perms:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8081:8080" # public API (authenticated) — on 8081 so the console owns 8080; front with mTLS/ingress in prod
+    # TG-160 EGRESS: OpenBao (TG_OPENBAO_ADDR — its own read credential AND the console WRITER AppRole) and
+    # LDAPS to FreeIPA for browser operator login (TG_LDAP_URLS), both off-host in this estate. Published
+    # :8081, so frontdoor as well. This service does NOT reach the estate or any model provider — the worker
+    # does — so its egress need is genuinely narrower than the worker's, and the helm NetworkPolicy that
+    # ships with this change encodes that difference rather than giving both the same blanket allowance.
+    networks: [tg-backplane, tg-frontdoor, tg-egress]
+
+  # --- one-shot perms init: the distroless worker/grounder run as uid:gid 65532, but ./secrets AND ./knowledge
+  # are provisioned root-owned. For ./secrets (READ-ONLY to the runtime): a non-root process cannot even
+  # TRAVERSE a 750 root:root dir, so WITHOUT this every native SSH read (hostdiag / syslog-ng / actuation) fails
+  # 'permission denied' — surfacing as "known_hosts …unusable", which silently looked like a host-key problem
+  # for a long time. For ./knowledge (WRITTEN by the worker — it maintains the distilled-lessons corpus): a
+  # root-owned dir permission-denies the corpus WRITEBACK, which SILENTLY breaks the flywheel's de-novel
+  # learning loop (the worker logs "cannot write corpus temp … permission denied" best-effort and continues,
+  # so nothing crashes — it just never learns). Idempotent: make ./secrets group-readable (750/640, private key
+  # NON-world-readable) and ./knowledge group-WRITABLE (775/664) by the worker's gid 65532. Runs as root with
+  # READ-WRITE mounts (the only service needing rw); the worker + grounder depend on it completing first.
+  # NOT HARDENED, by construction (TG-289): chgrp/chmod on files this container does not own is the ENTIRE
+  # job here, and that is precisely what CAP_CHOWN/CAP_FOWNER/CAP_DAC_OVERRIDE buy. Under `cap_drop: [ALL]`
+  # busybox returns `chgrp: Operation not permitted` — measured. Worse, the command below pipes chgrp to
+  # `2>/dev/null || true`, so a capability-stripped run would fail SILENTLY and leave the worker unable to
+  # write the knowledge corpus: the exact quiet-degradation this file's other comments were written about.
+  secrets-perms:
+    # DIGEST-PINNED (TG-283). This tag floated for as long as the stack has existed, and the supply-chain
+    # gate that was supposed to catch that could not see it: scripts/lint-image-pins.sh matched images by
+    # keyword allowlist and `busybox` was not on the list, so TG-159 was closed while THIS service — the one
+    # container in the stack that runs as uid 0 with READ-WRITE mounts of ./secrets and ./knowledge — pulled
+    # whatever `stable` pointed at that day. Of every image here it is the one where a swapped upstream tag
+    # is worst: it holds root and both sensitive mounts. The digest is the manifest-list digest of the exact
+    # busybox:stable that has been running on dc1tg01; the tag stays for readability only.
+    image: busybox:stable@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+    user: "0:0"
+    volumes:
+      - ./secrets:/secrets
+      - ./knowledge:/knowledge
+    command: ["sh","-c","chgrp -R 65532 /secrets 2>/dev/null || true; chmod 750 /secrets; find /secrets -type f -exec chmod 640 {} + ; chgrp -R 65532 /knowledge 2>/dev/null || true; chmod 775 /knowledge; find /knowledge -type f -exec chmod 664 {} + ; echo perms applied for uid:gid 65532 - secrets ro, knowledge rw"]
+    restart: "no"
+    # TG-160: chgrp/chmod on two bind-mounts. It uses the network for NOTHING. It is also the one container
+    # here that runs as uid 0 with READ-WRITE mounts of ./secrets and ./knowledge, which makes "this one
+    # needs no route off the box" worth stating and enforcing rather than leaving to the default bridge.
+    networks: [tg-backplane]
+
+  # --- the Temporal Runner worker (read-only): drives each incident through triage → gated proposal and
+  # stops at propose. WITHOUT this the stack serves the API but never triages anything. Mutation stays OFF
+  # by construction (the worker refuses to boot if mutation is enabled). It reuses the same image build
+  # (BIN=worker) and the same .env; the rich TG_* config knobs (suppression/estate/notifier/…) are optional
+  # and degrade gracefully when unset.
+  worker:
+    image: ${TG_WORKER_IMAGE:-registry-github.com/territory-grounder/grounder/worker}:${TG_TAG:-latest}
+    # TG-170: limits + HEALTHCHECK, mirroring helm's worker.resources. The probe targets the admin
+    # listener's /metrics — the worker admin surface exposes no health route, and /metrics is served
+    # unconditionally while /halt is not, so probing it measures liveness rather than whether the halt
+    # bearer happened to resolve.
+    deploy:
+      resources:
+        limits: {cpus: "1", memory: 512M}
+        reservations: {cpus: "0.1", memory: 128M}
+    healthcheck:
+      test: ["CMD", "/app", "-healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    # Container hardening — ports the helm chart's worker securityContext to compose (audit TG-153 gap #9;
+    # the helm chart at deploy/helm/.../worker-deployment.yaml already proves the worker runs read-only).
+    # Drop ALL Linux capabilities (the distroless worker runs nonroot 65532 and needs none), forbid privilege
+    # escalation (blocks the in-container→node escalation the HF actor used), and make the rootfs read-only —
+    # the only writable state is the /knowledge bind-mount (novelty writeback) plus a tmpfs /tmp. Default
+    # docker seccomp stays applied.
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        BIN: worker
+    environment:
+      # Model-tier ALIASES per component (TG-116). Which alias each component asks for is deployment
+      # policy — the alias→real-model mapping already lives in litellm-config.yaml, so retuning
+      # cost/latency should not need a Go change. Empty = the compiled defaults (investigate "fast",
+      # deep/critical and decide "primary"). The BRANCH that picks deep-vs-ordinary is a safety floor and
+      # stays in code: a floor an operator can flatten from .env is not a floor.
+      TG_MODEL_TIER_INVESTIGATE: ${TG_MODEL_TIER_INVESTIGATE:-}
+      TG_MODEL_TIER_DEEP: ${TG_MODEL_TIER_DEEP:-}
+      TG_MODEL_TIER_DECIDE: ${TG_MODEL_TIER_DECIDE:-}
+      # Self-consistency width for the ONE forced-decision cycle on DEEP/critical sessions ONLY (TG-46):
+      # N samples, mechanical majority on (kind, op_class), conservative tie resolution. Blank/garbage =
+      # the compiled default 3 (the armed behavior); 1 = emergency dial-back to the single-call decide;
+      # clamped at 5. Non-deep, non-critical sessions always decide on ONE call regardless of this value.
+      TG_DECIDE_SAMPLES: ${TG_DECIDE_SAMPLES:-}
+      # TG-47: durable per-turn checkpointing of the investigate loop. EMPTY/false = OFF (a worker crash
+      # re-runs the whole investigation from cycle 1, the shipped behaviour); 1/true = the loop heartbeats its
+      # cycle-boundary state so the retry resumes from the last cycle (read-only loop ⇒ a resumed cycle only
+      # re-reads). Eval-inert when OFF (byte-identical); arming is validated by the on-box gate.
+      TG_INVESTIGATE_DURABLE_CHECKPOINT: ${TG_INVESTIGATE_DURABLE_CHECKPOINT:-}
+      # ★ THE CREDENTIAL PLANE (TG-153). DEFAULTS TO `both` — the pre-TG-153 posture, so a stack that does
+      # not opt in is byte-for-byte unchanged.
+      #
+      # This line MUST exist even though `both` is also the binary's own default, and the reason is a trap
+      # that cost a review: a compose `.env` file is INTERPOLATION-ONLY. It is not injected into containers.
+      # A variable an operator sets in .env reaches this container ONLY if it is named here (or via
+      # env_file, which this service does not use). Without this line, an operator following the split
+      # runbook and setting TG_CREDENTIAL_PLANE=triage in .env would see it silently discarded: the triage
+      # worker would boot as `both`, keep every actuation variable this block already forwards, and ALSO
+      # keep polling tg.actuate alongside worker-actuate — so the two would race for the same mutating
+      # tasks, and the credential-less one would win some of them. A split that is believed but not in
+      # effect is the single worst outcome available here, because it is the one nobody investigates.
+      # TestWorkerServiceCanReceiveTheCredentialPlane in deploy/ is the guard.
+      TG_CREDENTIAL_PLANE: ${TG_CREDENTIAL_PLANE:-both}
+      # ★ THE BOOT-CONFIG BREAK-GLASS (TG-260). boot_config.go's own doc says the environment is "the one
+      # channel that is always reachable without a running worker, which is precisely why the escape hatch
+      # belongs there" — and compose forwarded it NOWHERE, so setting it in .env did nothing and the hatch
+      # could not be pulled by the documented method on a worker that would not boot.
+      TG_CONFIG_IGNORE_STORE: ${TG_CONFIG_IGNORE_STORE:-}
+      # TG-506: arm the durable admin engine-toggle (spec/015 REQ-1519, "the operator owns the paranoia dial").
+      # Default dormant — when set, an authenticated admin can enable/disable the policy engine via the grounder
+      # (double-confirmed, audited to the governance ledger); the constitutional never-auto floor (INV-09) still
+      # clamps beneath, so engine-off routes to a human (`approve`), never `auto`. Both worker planes read the
+      # same durable override (policy_engine_toggle), so a grounder-side change reaches the decision plane.
+      TG_POLICY_ENGINE_TOGGLE: ${TG_POLICY_ENGINE_TOGGLE:-}
+      TG_RUNTIME_DSN: ${TG_RUNTIME_DSN:?set in .env}
+      # SEALED SECRETS — THE SAME KEY THE GROUNDER USES (TG-275).
+      #
+      # The console writes credentials into the sealed_secret table; the WORKER is what opens them
+      # (host diagnostics, syslog-ng, actuation, the AWX credential sync). Until now only the grounder
+      # carried these variables, so every `store:` SecretRef in the worker failed closed and the table
+      # sat at zero rows — an encrypted secret store nothing could read from.
+      #
+      # These MUST stay identical to the grounder's values. A worker sealing under a different master key
+      # than the grounder unseals with is a silent, total data loss of every stored credential.
+      TG_SEAL_KEY: ${TG_SEAL_KEY:-}
+      TG_SEAL_KEY_REF: ${TG_SEAL_KEY_REF:-env:TG_SEAL_KEY}
+      # Transit takes precedence when set: the DEK is wrapped/unwrapped inside OpenBao and the master key
+      # never enters the worker at all.
+      TG_SEAL_TRANSIT_KEY: ${TG_SEAL_TRANSIT_KEY:-}
+      TG_SEAL_TRANSIT_ADDR: ${TG_SEAL_TRANSIT_ADDR:-}
+      TG_SEAL_TRANSIT_TOKEN_REF: ${TG_SEAL_TRANSIT_TOKEN_REF:-}
+      TG_SEAL_TRANSIT_MOUNT: ${TG_SEAL_TRANSIT_MOUNT:-}
+      # (TG_OPENBAO_ADDR / _TOKEN_REF / _CA are already declared further down in this service for
+      # credential delivery; seal.FromEnv falls back to those same three, so they are not repeated here.)
+      # Durable stores + estate snapshot publication (REQ-516): default the worker's DB to the runtime
+      # (DML-only) DSN so it persists predictions/ledger and PUBLISHES its estate graph for /v1/estate.
+      # Empty TG_DB_DSN previously left the worker in-memory-only. Mutation stays OFF regardless.
+      TG_DB_DSN: ${TG_DB_DSN:-${TG_RUNTIME_DSN}}
+      # ★ THE PLANE-SCOPED DB IDENTITY (TG-164). Read ONLY when TG_CREDENTIAL_PLANE=triage; under the default
+      # `both` this process serves BOTH queues and therefore needs the union of both authorities (tg_runtime),
+      # so the value is ignored and the boot log says so. Declared here for the same interpolation-only reason
+      # TG_CREDENTIAL_PLANE is: a variable an operator sets in .env reaches this container ONLY if it is named
+      # here, and a database split that is believed but not in effect is the outcome nobody investigates.
+      TG_DB_DSN_TRIAGE: ${TG_DB_DSN_TRIAGE:-}
+      TG_LITELLM_URL: http://litellm:4000
+      TG_LITELLM_KEY_REF: ${TG_LITELLM_KEY_REF:-env:LITELLM_MASTER_KEY}
+      # TG-81 b3: verdict-ledger Ed25519 provenance (both dormant when blank; verdictsig_wire.go)
+      TG_VERDICT_SIGNING_SEED_REF: ${TG_VERDICT_SIGNING_SEED_REF:-}
+      TG_VERDICT_PUBLIC_KEY: ${TG_VERDICT_PUBLIC_KEY:-}
+      # TG-80 P2-6: the KILLED terminal flip (blank = OFF, jailbreak hits keep polling; arming is eval-gated)
+      TG_SCREEN_KILL_TERMINAL: ${TG_SCREEN_KILL_TERMINAL:-}
+      # spec/016 REQ-1604 T-016-5: gate 4d2 authn-compose (blank = DARK, the gate row says so; 1/true =
+      # every policy-authorized target's identity must resolve via the audited resolver before execute)
+      TG_AUTHN_COMPOSE: ${TG_AUTHN_COMPOSE:-}
+      # spec/024 T-024-6: the HOMELAB-tier vw: scheme (Vaultwarden). Blank addr = substrate OFF and every
+      # vw: reference fails closed; the two refs are REFERENCES to the vault account's own credentials.
+      TG_VAULTWARDEN_ADDR: ${TG_VAULTWARDEN_ADDR:-}
+      TG_VAULTWARDEN_EMAIL_REF: ${TG_VAULTWARDEN_EMAIL_REF:-}
+      TG_VAULTWARDEN_PASSWORD_REF: ${TG_VAULTWARDEN_PASSWORD_REF:-}
+      # TG-85 write slice 4: the Cisco WRITE lane. Blank devices = unconfigured (nothing constructed);
+      # _ARM is the separate owner arming flip. Both are read in worker_actuation_wire.go.
+      TG_CISCO_WRITE_DEVICES: ${TG_CISCO_WRITE_DEVICES:-}
+      TG_CISCO_READ_DEVICES: ${TG_CISCO_READ_DEVICES:-}
+      TG_CISCO_WRITE_ARM: ${TG_CISCO_WRITE_ARM:-}
+      # TG-180: the observability fault-injection PROBE harness. Every key blank = the loop never starts
+      # (the boot line says "not configured"); ENABLED is a separate arm on top of a configured pool.
+      TG_OBSERVE_PROBE_ENABLED: ${TG_OBSERVE_PROBE_ENABLED:-}
+      TG_OBSERVE_PROBE_POOL_FILE: ${TG_OBSERVE_PROBE_POOL_FILE:-}
+      TG_OBSERVE_PROBE_SNAP_NODE: ${TG_OBSERVE_PROBE_SNAP_NODE:-}
+      TG_OBSERVE_PROBE_CLASSES: ${TG_OBSERVE_PROBE_CLASSES:-}
+      TG_OBSERVE_PROBE_CADENCE: ${TG_OBSERVE_PROBE_CADENCE:-}
+      TG_OBSERVE_PROBE_RESTORE_AFTER: ${TG_OBSERVE_PROBE_RESTORE_AFTER:-}
+      TG_OBSERVE_PROBE_SSH_KEY: ${TG_OBSERVE_PROBE_SSH_KEY:-}
+      TG_OBSERVE_PROBE_SSH_TIMEOUT: ${TG_OBSERVE_PROBE_SSH_TIMEOUT:-}
+      TG_OBSERVE_PROBE_WINDOW: ${TG_OBSERVE_PROBE_WINDOW:-}
+      # spec/024 T-024-5: the HOMELAB-tier passbolt: scheme. Blank addr = substrate OFF; the key ref
+      # points at the robot's ASCII-armored OpenPGP PRIVATE key, which is this tier's secret-zero.
+      TG_PASSBOLT_ADDR: ${TG_PASSBOLT_ADDR:-}
+      TG_PASSBOLT_KEY_REF: ${TG_PASSBOLT_KEY_REF:-}
+      TG_PASSBOLT_PASSPHRASE_REF: ${TG_PASSBOLT_PASSPHRASE_REF:-}
+      # vSphere estate source (TG-91): DARK unless TG_VSPHERE_URL is set. The password is the only sealed
+      # value (TG_VSPHERE_TOKEN_REF); _INSECURE opts INTO skipping TLS verification and defaults off.
+      TG_VSPHERE_URL: ${TG_VSPHERE_URL:-}
+      TG_VSPHERE_USER: ${TG_VSPHERE_USER:-}
+      TG_VSPHERE_TOKEN_REF: ${TG_VSPHERE_TOKEN_REF:-}
+      TG_VSPHERE_INSECURE: ${TG_VSPHERE_INSECURE:-}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      TG_TEMPORAL_HOSTPORT: temporal:7233
+      # Secret-scheme policy (spec/024 REQ-2400): off (default) / warn / enforce — the worker half of the boot
+      # gate. Under enforce the worker refuses to start on a non-exempt plaintext (env:/file:/literal) business
+      # secret. Mirrors the grounder gate; flip both off→warn→enforce once the business secrets are on a backend.
+      TG_SECRET_POLICY: ${TG_SECRET_POLICY:-off}
+      # --- Worker admin surface (Phase-2 canary safety plane): the runtime kill-switch (POST /halt →
+      # gate.Disable) + read-only /metrics, on an internal port (:8444). The halt bearer reuses the admin
+      # token (TG_ADMIN_TOKEN_REF → env:TG_ADMIN_TOKEN); absent ⇒ /halt is NOT registered (fail closed) and
+      # only /metrics is served. There is NO enable path here — /halt can only turn mutation more off.
+      TG_WORKER_ADMIN_ADDR: ":8444"
+      TG_ADMIN_TOKEN_REF: ${TG_ADMIN_TOKEN_REF:-env:TG_ADMIN_TOKEN}
+      TG_ADMIN_TOKEN: ${TG_ADMIN_TOKEN:-}
+      # --- THE OUTBOUND METER (TG-160). The in-process half of the egress control; the network tiers above
+      # are the half that holds when this process is compromised. The allowlist needs NO configuration: it
+      # is derived from the endpoint variables already in this block (every *_URL / *_ADDR / *_HOSTS /
+      # *_DEPLOYMENTS value), so a connector that is configured is a connector that is declared.
+      #
+      # TG_EGRESS_ALLOW adds destinations the scan cannot derive — a redirect target, a CDN, an egress
+      # proxy. CSV or whitespace, bare hosts or URLs, `*.example.org` accepted.
+      # TG-336: the dead-man on TG's own input. INTERVAL is how often the intake liveness is re-read;
+      # WINDOW is the baseline a source's silence is judged against — a source that alerts weekly is not
+      # broken, one that delivered 500 alerts this week and nothing today is the estate going deaf.
+      TG_INGEST_FRESHNESS_INTERVAL: ${TG_INGEST_FRESHNESS_INTERVAL:-2m}
+      # How often TG-302's premise is re-measured: the count of credential-shaped rows in
+      # agent_step_evidence, which that decision assumed to be zero (TG-345). Counts only — never a
+      # payload — so the watcher cannot itself become a way to read one.
+      TG_EVIDENCE_SHAPE_INTERVAL: ${TG_EVIDENCE_SHAPE_INTERVAL:-15m}
+      TG_LEDGER_SHAPE_INTERVAL: ${TG_LEDGER_SHAPE_INTERVAL:-}
+      TG_LOOP_CLOSURE_INTERVAL: ${TG_LOOP_CLOSURE_INTERVAL:-}
+      TG_CATEGORY_COVERAGE_INTERVAL: ${TG_CATEGORY_COVERAGE_INTERVAL:-}
+      TG_PREDICTION_WIDTH_INTERVAL: ${TG_PREDICTION_WIDTH_INTERVAL:-}
+      TG_INGEST_FRESHNESS_WINDOW: ${TG_INGEST_FRESHNESS_WINDOW:-168h}
+      # TG-173: how often the HUMAN APPROVAL QUEUE's depth is re-read. Faster than the intake
+      # dead-man because a flood of the operator builds in minutes, not hours.
+      TG_POLL_QUEUE_INTERVAL: ${TG_POLL_QUEUE_INTERVAL:-30s}
+      # TG-344: how often TG asks each source what it currently HAS, so the arrived-count has a
+      # denominator. A quiet estate and a broken connector published identically without it.
+      TG_UPSTREAM_PROBE_INTERVAL: ${TG_UPSTREAM_PROBE_INTERVAL:-2m}
+      TG_EGRESS_ALLOW: ${TG_EGRESS_ALLOW:-}
+      # meter (default) = count, name each undeclared destination in the log, BLOCK NOTHING.
+      # enforce = refuse an off-allowlist request before it is dialled. Read
+      # tg_egress_offallowlist_requests_total on :8444/metrics until it is flat before switching: a wrong
+      # allowlist under enforce takes this worker off the estate. The worker REFUSES to enter enforce with
+      # an empty allowlist (it would block the model gateway and OpenBao too) and says so at boot.
+      # ENFORCE, matching what production has been running since 2026-08-04. The committed default was
+      # `meter` while the box ran `enforce` from its own .env, so a clean redeploy would have silently
+      # dropped the control back to counting (TG-324). Safe as a default because cmd/worker refuses to
+      # enforce against an EMPTY allowlist and falls back to meter with a loud log — a deployment that
+      # declares no destinations degrades to counting rather than losing the network.
+      TG_EGRESS_MODE: ${TG_EGRESS_MODE:-enforce}
+      # Mutation breaker trip threshold (first canary = 1: a single deviation/chain-gap halts). Inert while
+      # mutation is OFF — the interceptor refuses before it ever executes, so nothing trips it today.
+      TG_MUTATION_BREAKER_THRESHOLD: ${TG_MUTATION_BREAKER_THRESHOLD:-1}
+      # --- Cost/budget spend guard + $-ceiling breaker (the INDEPENDENT sibling of the mutation breaker). ---
+      # Accrues approximate USD per model completion (approx tokens x a per-model rate) into durable, cross-
+      # process day(UTC)+session accumulators (0023); a trip force-Shadows every sibling worker + records a
+      # 'cost:breaker-trip' ledger note. ALL DEFAULT 0 = DISABLED: an unset budget/rate never enforces (the
+      # spend-guard fail-OPEN posture — a budget that is not configured must never block work). Set them in
+      # .env to arm it. FAIL-OPEN by design: a cost-store outage degrades to no-enforcement, never a halt.
+      # Per-model rates: add one TG_COST_RATE_<model>_PER_1K per gateway tier the agent calls (fast/primary).
+      TG_COST_DAILY_BUDGET_USD: ${TG_COST_DAILY_BUDGET_USD:-0}
+      TG_COST_SESSION_CEILING_USD: ${TG_COST_SESSION_CEILING_USD:-0}
+      TG_COST_DEFAULT_RATE_PER_1K: ${TG_COST_DEFAULT_RATE_PER_1K:-0}
+      TG_COST_PER_ACTUATION_USD: ${TG_COST_PER_ACTUATION_USD:-0}
+      TG_COST_RATE_fast_PER_1K: ${TG_COST_RATE_fast_PER_1K:-0}
+      TG_COST_RATE_primary_PER_1K: ${TG_COST_RATE_primary_PER_1K:-0}
+      # Tier-3 LLM-observability export (spec/020 REQ-2020), OPTIONAL + OFF by default. Set ENABLED=1 and the
+      # Langfuse endpoint + key REFERENCES (env:/bao:… secret refs, never literals) to ship the redacted LLM
+      # subset to Langfuse over an OTel span backbone. Additive, best-effort, never on the decision path.
+      TG_TRACE_LLM_EXPORT_ENABLED: ${TG_TRACE_LLM_EXPORT_ENABLED:-}
+      TG_TRACE_LLM_EXPORT_LANGFUSE_ENDPOINT: ${TG_TRACE_LLM_EXPORT_LANGFUSE_ENDPOINT:-}
+      TG_TRACE_LLM_EXPORT_LANGFUSE_PUBLIC: ${TG_TRACE_LLM_EXPORT_LANGFUSE_PUBLIC:-}
+      TG_TRACE_LLM_EXPORT_LANGFUSE_SECRET: ${TG_TRACE_LLM_EXPORT_LANGFUSE_SECRET:-}
+      # groundnet federation (spec/021, TG-128), DORMANT + OFF by default. Opt-in, org-admin-set posture toggles
+      # for the far-future wisdom-sharing seam — it reaches no actuator and shares nothing until the network lands.
+      # Set MEMBER=1 to join, then EXPORT / CONSUME / PUBLIC_TIER per capability; unset ⇒ the worker boots it DARK.
+      TG_GROUNDNET_MEMBER: ${TG_GROUNDNET_MEMBER:-}
+      TG_GROUNDNET_EXPORT: ${TG_GROUNDNET_EXPORT:-}
+      TG_GROUNDNET_CONSUME: ${TG_GROUNDNET_CONSUME:-}
+      TG_GROUNDNET_PUBLIC_TIER: ${TG_GROUNDNET_PUBLIC_TIER:-}
+      # --- Estate topology sources (build the causal graph the gate reasons over + the Estate view). ---
+      # Absent ⇒ an empty graph (honest); supply the real values in .env to light it up. Tokens are
+      # secret REFERENCES; the ref DEFAULTS are EMPTY (TG-91 postmortem): a dark-by-default source
+      # carrying a secret-shaped env: default is a boot-refusing violation on an enforcing deployment
+      # that does not run it. Arming a source = setting its URL AND its ref together (see .env.example);
+      # the *_TOKEN passthroughs stay so an explicit env:NAME ref keeps resolving.
+      TG_NETBOX_URL: ${TG_NETBOX_URL:-}
+      TG_NETBOX_TOKEN_REF: ${TG_NETBOX_TOKEN_REF:-}
+      NETBOX_TOKEN: ${NETBOX_TOKEN:-}
+      # TG-56: arm the agent's READ-ONLY NetBox inventory investigation tool (get-inventory-device). Default
+      # dormant — arming a reader changes triage semantics (transparency-gated), a deliberate operator act,
+      # exactly like TG_NETBOX_ACTOREVIDENCE. Triage plane ONLY: it surfaces NetBox record text into the model
+      # loop, so main.go reads the endpoint through the _AGENT_TOOLS sentinel and the actuation worker builds none.
+      TG_NETBOX_INVESTIGATION: ${TG_NETBOX_INVESTIGATION:-}
+      TG_PVE_URL: ${TG_PVE_URL:-}
+      TG_PVE_TOKEN_REF: ${TG_PVE_TOKEN_REF:-}
+      PVE_TOKEN: ${PVE_TOKEN:-}
+      # Slurp'it network-device discovery (TG-91). PLAIN HTTP (no TLS): a scheme-less TG_SLURPIT_URL resolves
+      # to http:// inside the worker, never https://. Absent ⇒ the source is unregistered (dark), like the two above.
+      #
+      # The ref default is EMPTY, not env:SLURPIT_TOKEN — a DARK-by-default source must not ship a
+      # secret-shaped ref default: on a deployment running secret policy=enforce with a bao: backend, the
+      # env:-scheme default is a boot-refusing violation for a feature the box does not even run (this
+      # exact line took the live triage plane down for ~2 minutes on 2026-08-14). The always-on secrets
+      # above keep their env: defaults because every real deployment overrides them; an optional source's
+      # ref exists only when the source is armed. Guarded by TestDarkSourcesCarryNoSecretShapedDefaults.
+      TG_SLURPIT_URL: ${TG_SLURPIT_URL:-}
+      TG_SLURPIT_TOKEN_REF: ${TG_SLURPIT_TOKEN_REF:-}
+      # The actor-attribution PVE task-log reader (spec/023): a SEPARATE least-privilege READ-ONLY token —
+      # never the tg-actuate write token. Unset OR resolving-empty ⇒ the reader is not registered (the
+      # worker gates on the RESOLVED token, so an empty PVE_RO_TOKEN does not arm a reader that would 401).
+      TG_PVE_RO_TOKEN_REF: ${TG_PVE_RO_TOKEN_REF:-}
+      PVE_RO_TOKEN: ${PVE_RO_TOKEN:-}
+      # DEFAULT-OFF arming gate for the TG-466 slice-2 grounded mutation signal (modules/cmdb/pve/confighash):
+      # a per-guest PVE config-hash diff against a persisted baseline, threaded into the actor-attribution
+      # Observation that arms the covered-but-empty → attributed-suspicious escalation (REQ-2304 half 2).
+      # Absent/empty ⇒ ship dark: no baseline sweep runs, Observation stays the zero value, and the
+      # escalation remains exactly as unreachable as it was before TG-466. Reads with the SAME TG_PVE_URL +
+      # TG_PVE_RO_TOKEN_REF pair as the actor-evidence reader above. Arming is a deliberate operator act.
+      TG_PVE_CONFIGHASH_ENABLED: ${TG_PVE_CONFIGHASH_ENABLED:-}
+      # Operator override for the actor-attribution ruleset (site principals + test-pool carve-outs). Point
+      # at a mounted file (see deploy/attribution/README.md); unset ⇒ the generic embedded default (no site
+      # principals — non-self actors read suspicious until you declare your admins, the safe direction).
+      TG_ATTRIBUTION_CONFIG: ${TG_ATTRIBUTION_CONFIG:-}
+      TG_LIBRENMS_DEPLOYMENTS: ${TG_LIBRENMS_DEPLOYMENTS:-}
+      # PLANE-SCOPED (TG-153) agent-tool variants: the read-only investigation tools the TRIAGE plane
+      # registers. Blank ⇒ those tools are not registered on this process (honestly dark).
+      TG_LIBRENMS_DEPLOYMENTS_AGENT_TOOLS: ${TG_LIBRENMS_DEPLOYMENTS_AGENT_TOOLS:-}
+      TG_NETBOX_URL_AGENT_TOOLS: ${TG_NETBOX_URL_AGENT_TOOLS:-}
+      LIBRENMS_TOKEN: ${LIBRENMS_TOKEN:-}
+      # Per-site LibreNMS API tokens: the deployment rows reference these by name (env:LIBRENMS_NL_TOKEN /
+      # env:LIBRENMS_GR_TOKEN). Without the passthrough the ref resolves empty in-container and that
+      # site's estate edges + investigation tools are absent (fail-closed, logged at boot).
+      LIBRENMS_NL_TOKEN: ${LIBRENMS_NL_TOKEN:-}
+      LIBRENMS_GR_TOKEN: ${LIBRENMS_GR_TOKEN:-}
+      # Periodic topology refresh (republishes the estate snapshot); only runs when sources exist.
+      TG_ESTATE_REFRESH_INTERVAL: ${TG_ESTATE_REFRESH_INTERVAL:-5m}
+      # Heartbeat at which the worker republishes its live mutation posture to runtime_posture so the
+      # grounder reports the TRUE posture on /v1/whoami + /v1/governance. Go duration; default 30s.
+      TG_POSTURE_PUBLISH_INTERVAL: ${TG_POSTURE_PUBLISH_INTERVAL:-30s}
+      # The benchmark-axis sampler (REQ-2524): publishes A1 recall + per-source detection LATENCY to
+      # /metrics from the same db.Aggregate cmd/axisscore prints. Interval 0 leaves it unarmed and silent.
+      TG_AXIS_SAMPLE_INTERVAL: ${TG_AXIS_SAMPLE_INTERVAL:-15m}
+      TG_AXIS_SAMPLE_WINDOW: ${TG_AXIS_SAMPLE_WINDOW:-168h}
+      # Observation-census recency window (TG-180): a live host silent this long that has fired before reads
+      # healthy_quiet; one that has NEVER fired reads unobservable. Default 14d. Empty leaves the in-code default.
+      TG_OBSERVATION_CENSUS_WINDOW: ${TG_OBSERVATION_CENSUS_WINDOW:-}
+      # How often the census re-reads fired-alert history (TG-180 slice 1c). The live host set is read every
+      # scrape; only this DB read is cached. Default 15m. Empty leaves the in-code default; 0 = boot-load only.
+      TG_OBSERVATION_CENSUS_REFRESH: ${TG_OBSERVATION_CENSUS_REFRESH:-}
+      # DEFAULT-OFF arming gate for the TG-180 part-2 fault-injection PROBE (the census's null test). Absent/empty
+      # ⇒ the probe is DISARMED: the coverage-of-the-unmeasured dimension is still published, but NOTHING is
+      # injected. Arming the live perturbing loop is a separate owner-gated step; this flag only flips the posture.
+      # Mode-transition RBAC (spec/015 REQ-1502), the LAST gate before the mutation flip: comma-separated
+      # operator ids explicitly authorized to flip the autonomy mode via POST /v1/mode. When set, ONLY
+      # these operators may transition the mode (even an LDAP admin-group member not listed is denied);
+      # when empty, an authenticated LDAP admin-group / static-admin operator is authorized. Empty default
+      # ⇒ no auto-flip: a transition still needs an authenticated authorized operator AND a green preflight.
+      TG_MODE_TRANSITION_OPERATORS: ${TG_MODE_TRANSITION_OPERATORS:-}
+      # Deploy-time INITIAL autonomy mode (spec/015 REQ-1524): on a FRESH deployment only, seed this mode so
+      # a pre-configured stack starts in the chosen posture without a manual /v1/mode flip. Values:
+      # shadow (default) | hitl | semi-auto | full-auto. ABSENT-ONLY — never overrides an existing mode, so
+      # it is a no-op on an established estate. Fail-closed: unset/invalid ⇒ Shadow; seeding into an actuating
+      # mode still requires the green preflight and is ledger-audited. Leave EMPTY (Shadow) unless you
+      # deliberately want a fresh deploy to start actuating (governed by every gate regardless).
+      TG_INITIAL_MODE: ${TG_INITIAL_MODE:-}
+      # HTTP timeout for estate topology pulls (LibreNMS /api/v0/devices is a whole-fleet request that can
+      # exceed the old 15s). Go duration string; default 45s.
+      TG_ESTATE_HTTP_TIMEOUT: ${TG_ESTATE_HTTP_TIMEOUT:-}
+      # Opt-in: disable TLS verification for internal self-signed estate endpoints (LibreNMS, PVE :8006).
+      # Default (unset/false) keeps strict verification. Scoped to the estate READ pollers only.
+      TG_LIBRENMS_INSECURE: ${TG_LIBRENMS_INSECURE:-}
+      TG_PVE_INSECURE: ${TG_PVE_INSECURE:-}
+      # --- syslog-ng investigation reads (REQ-823): the agent's read-only device-log window. ---
+      # Rows 'site|sshhost|sshuser|keyref|basepath'; the key ref is file:/secrets/<name> against the
+      # read-only ./secrets mount below (key material lives on the box, NEVER in the repo). Absent ⇒
+      # the agent simply has no syslog-ng tools.
+      TG_SYSLOGNG_DEPLOYMENTS: ${TG_SYSLOGNG_DEPLOYMENTS:-}
+      # MANDATORY alongside deployments: the OpenSSH known_hosts file pinning each syslog server's
+      # host key. The native in-process SSH client fails closed without it — an unknown or changed
+      # host key refuses the read; there is no insecure bypass.
+      TG_SYSLOGNG_KNOWN_HOSTS: ${TG_SYSLOGNG_KNOWN_HOSTS:-}
+      # How many search-host-logs calls ONE investigation may make (TG-297). Every other bound on that
+      # tool is per-call, and a caller-chosen fixed-string search answered without limit is a
+      # confirmation oracle over the device's log. Blank/invalid/non-positive ⇒ the in-code default (12);
+      # there is no value that disables the cap. Exceeding it REFUSES and says so — never an empty result.
+      TG_SYSLOGNG_SEARCH_SESSION_CAP: ${TG_SYSLOGNG_SEARCH_SESSION_CAP:-}
+      # --- host-diagnostics investigation reads: the agent's read-only SSH df/free/systemctl on the alerting
+      # host (the predecessor's storage-specialist/triage-researcher ability). Rows 'site|hostglob|sshuser|
+      # keyref' (';'-separated); the key ref is file:/secrets/<name> against the read-only ./secrets mount.
+      # Absent ⇒ the agent has no host-diagnostics tools. Same fail-closed native SSH client as syslog-ng:
+      # TG_HOSTDIAG_KNOWN_HOSTS pins each estate host's key or every read refuses. ---
+      TG_HOSTDIAG_DEPLOYMENTS: ${TG_HOSTDIAG_DEPLOYMENTS:-}
+      TG_HOSTDIAG_KNOWN_HOSTS: ${TG_HOSTDIAG_KNOWN_HOSTS:-}
+      # How often, and over what window, TG measures whether it can actually diagnose the hosts it is
+      # alerted about (TG-271). The window is the alert lookback that forms the denominator; the interval is
+      # how often the pass runs. Hourly over 30 days by default — the file changes rarely and each pass
+      # costs one query plus a DNS lookup per distinct host.
+      TG_HOSTDIAG_COVERAGE_WINDOW: ${TG_HOSTDIAG_COVERAGE_WINDOW:-720h}
+      TG_HOSTDIAG_COVERAGE_INTERVAL: ${TG_HOSTDIAG_COVERAGE_INTERVAL:-1h}
+      # --- actor-attribution journal/sudo reader (spec/023 REQ-2314): reads a host's own journal for
+      # privileged sudo actions to answer WHO changed it. Same 'site|hostglob|sshuser|keyref' rows + the same
+      # fail-closed native SSH client + mandatory known_hosts as host-diagnostics above; identity resolves
+      # through the credential engine. Absent ⇒ the journal reader is not registered (journal subjects read
+      # unattributable). ---
+      TG_JOURNAL_DEPLOYMENTS: ${TG_JOURNAL_DEPLOYMENTS:-}
+      # spec/023 T-023-9: k8s audit-log actor-evidence reader — "site|controlplane-host|/abs/audit.log" rows.
+      # BLANK = not registered (k8s subjects read unattributable). Shares TG_JOURNAL_KNOWN_HOSTS.
+      TG_K8SAUDIT_DEPLOYMENTS: ${TG_K8SAUDIT_DEPLOYMENTS:-}
+      TG_JOURNAL_KNOWN_HOSTS: ${TG_JOURNAL_KNOWN_HOSTS:-}
+      # SSH key-fingerprint actor evidence (REQ-2324). DISARMED by default: on an estate administered
+      # over SSH, arming it makes every human login inside the attribution window a named actor.
+      TG_JOURNAL_SSH_SESSIONS: ${TG_JOURNAL_SSH_SESSIONS:-}
+      # The login name TG actuates with. Pairs with TG_ACTUATION_SSH_KEY to derive TG's OWN identity
+      # in the journal domain, exactly as sshd logs it (user!SHA256:fp).
+      TG_ACTUATION_SSH_USER: ${TG_ACTUATION_SSH_USER:-root}
+      # Attribution readers for the machine-automation + CMDB domains (spec/023 T-023-10). EXPLICIT opt-in
+      # (empty = dormant): set truthy to arm — they reuse the already-configured TG_AWX_ADDR/TG_AWX_TOKEN_REF
+      # and TG_NETBOX_URL/TG_NETBOX_TOKEN_REF (read-only). Arming changes triage semantics (transparency-gated).
+      TG_AWX_ACTOREVIDENCE: ${TG_AWX_ACTOREVIDENCE:-}
+      TG_NETBOX_ACTOREVIDENCE: ${TG_NETBOX_ACTOREVIDENCE:-}
+      # GitOps MR-history attribution (spec/023 T-023-11): explicit opt-in; needs a GitLab instance URL +
+      # project id/path + a READ-ONLY project token (never the deploy/admin token). Optional branch/prefix.
+      TG_GITOPSMR_ACTOREVIDENCE: ${TG_GITOPSMR_ACTOREVIDENCE:-}
+      TG_GITLAB_URL: ${TG_GITLAB_URL:-}
+      TG_GITLAB_PROJECT: ${TG_GITLAB_PROJECT:-}
+      TG_GITLAB_RO_TOKEN_REF: ${TG_GITLAB_RO_TOKEN_REF:-}
+      TG_GITOPSMR_BRANCH: ${TG_GITOPSMR_BRANCH:-}
+      TG_GITOPSMR_MANIFEST_PREFIX: ${TG_GITOPSMR_MANIFEST_PREFIX:-}
+      # The op-class → GitOps-MR propose map (spec/017 lane routing), plane-scoped. Blank ⇒ no op-class
+      # routes to the MR lane.
+      TG_GITOPSMR_PROPOSE_MAP: ${TG_GITOPSMR_PROPOSE_MAP:-}
+      # The gitops-MR lane's arming flip (spec/017). Blank = the lane stays inert.
+      TG_GITOPSMR_ARM: ${TG_GITOPSMR_ARM:-}
+      # TG-555: the gitops-mr reconcile-convergence reader (Argo CD Application status). Plane-scoped — the SA
+      # TOKEN is WITHHELD from this triage plane (actuationPlaneEnvKeys), which runs no gitops-mr poller anyway.
+      TG_K8S_CONVERGENCE_API: ${TG_K8S_CONVERGENCE_API:-}
+      TG_K8S_CONVERGENCE_CA: ${TG_K8S_CONVERGENCE_CA:-}
+      TG_K8S_CONVERGENCE_NS: ${TG_K8S_CONVERGENCE_NS:-argocd}
+      TG_K8S_CONVERGENCE_TOKEN: ${TG_K8S_CONVERGENCE_TOKEN:-}
+      # --- Retrieval plane (precedent RAG, spec/012): the corpus file + the semantic pgvector channel. ---
+      # The corpus path is INSIDE the container — bind-mount the corpus (compose override) when enabling.
+      # Semantic retrieval additionally needs TG_EMBED_MODEL served by the litellm gateway (see the
+      # commented embedding example in litellm-config.yaml) and rides on TG_DB_DSN above; unset it stays
+      # honestly disabled and retrieval is the transparent lexical ranking.
+      # The worker READS the union of the read-only tracked seed (deploy-synced bootstrap precedents)
+      # and the untracked maintained corpus it alone WRITES — the split is what makes runtime learning
+      # survive a deploy (the deploy's copy overwrites tracked files, never untracked destination files).
+      TG_KNOWLEDGE_FILE: ${TG_KNOWLEDGE_FILE:-/knowledge/corpus.maintained.json}
+      # The wiki compiler lane: writes the per-host article envelope the grounder serves.
+      TG_WIKI_ARTICLES_FILE: ${TG_WIKI_ARTICLES_FILE:-/knowledge/wiki.articles.json}
+      TG_WIKI_COMPILE_INTERVAL: ${TG_WIKI_COMPILE_INTERVAL:-30m}
+      # The world-model discovery/drift pass. It DRAFTS what the estate sources see and marks STALE what
+      # disappeared; a draft materializes nothing until an operator approves it, and a disappearance never
+      # retires a grant.
+      #
+      # 30m, chosen against the one number that actually bounds this: TG_ESTATE_REFRESH_INTERVAL above runs
+      # the SAME sources every 5m. The first cadence here was 6h on a "do not hammer the APIs" argument that
+      # those 5m refreshes had already falsified 72x over. What the interval really costs is LATENCY — how
+      # long a newly-appeared host waits before an operator can approve it — and DraftEntry is an upsert, so
+      # running more often adds no rows. 30m is 10 minutes of API work per day against a 6h blind spot.
+      TG_WORLD_DISCOVERY_INTERVAL: ${TG_WORLD_DISCOVERY_INTERVAL:-30m}
+      # How often the seam-YIELD register re-reports. The manifest says whether a seam was BOUND at boot;
+      # this says whether a bound seam has PRODUCED anything since. 0 silences the log line but never the
+      # register — the gauges stay live for a dashboard either way.
+      TG_WIRING_YIELD_INTERVAL: ${TG_WIRING_YIELD_INTERVAL:-30m}
+      # The SERVICE-OBSERVING discovery probes (spec/027 plane 2). Both host lists ship EMPTY: the probes
+      # are read-only but they do open an SSH session per host, so an operator arms them deliberately.
+      # Empty ⇒ no probe is constructed and the discovery.service seam declares why in the boot report.
+      TG_DISCOVERY_SYSTEMD_HOSTS: ${TG_DISCOVERY_SYSTEMD_HOSTS:-}
+      TG_DISCOVERY_DOCKER_HOSTS: ${TG_DISCOVERY_DOCKER_HOSTS:-}
+      # Mandatory once a host list is set: an empty path yields a runner that REFUSES every read rather
+      # than one that skips host-key verification.
+      TG_DISCOVERY_KNOWN_HOSTS: ${TG_DISCOVERY_KNOWN_HOSTS:-}
+      TG_DISCOVERY_TIMEOUT: ${TG_DISCOVERY_TIMEOUT:-15s}
+      TG_KNOWLEDGE_SEED_FILE: ${TG_KNOWLEDGE_SEED_FILE:-/knowledge/corpus.seed.json}
+      TG_KNOWLEDGE_REFRESH_INTERVAL: ${TG_KNOWLEDGE_REFRESH_INTERVAL:-}
+      TG_LESSONS_SOURCE_FILE: ${TG_LESSONS_SOURCE_FILE:-}
+      TG_LESSONS_REFRESH_INTERVAL: ${TG_LESSONS_REFRESH_INTERVAL:-}
+      # Recency/decay reconciliation (spec/018): TG_LESSONS_MAX_AGE (blank ⇒ 0 = pruning OFF) is the retention
+      # horizon past which a lesson's provenance ages it out of the corpus, fired by the decay cron below.
+      TG_LESSONS_MAX_AGE: ${TG_LESSONS_MAX_AGE:-}
+      # TG-52 Reflexion caution lane: the failed-trajectory counterpart to the lessons feed. Blank ⇒ dormant
+      # (no caution corpus); a distinct path arms it (knowledge_corpus.go REFUSES to share TG_KNOWLEDGE_FILE's
+      # path — fail-closed). A caution NEVER becomes a learned-match precedent (Source=ProvenanceCaution).
+      TG_CAUTION_FILE: ${TG_CAUTION_FILE:-}
+      # Tracker-history import lane (TG-244): the COMPOUNDING sibling of the lessons feed. All blank ⇒ the
+      # seam stays dark (needs a history-capable tracker AND a durable corpus to arm); blanks fall back to
+      # the code defaults (limit 20, timeout 2m, no re-import ticker).
+      TG_TRACKER_IMPORT_LIMIT: ${TG_TRACKER_IMPORT_LIMIT:-}
+      TG_TRACKER_IMPORT_TIMEOUT: ${TG_TRACKER_IMPORT_TIMEOUT:-}
+      TG_TRACKER_IMPORT_INTERVAL: ${TG_TRACKER_IMPORT_INTERVAL:-}
+      TG_EMBED_MODEL: ${TG_EMBED_MODEL:-}
+      TG_EMBED_DIM: ${TG_EMBED_DIM:-}
+      TG_EMBED_MIN_SIMILARITY: ${TG_EMBED_MIN_SIMILARITY:-}
+      # TG-50: the LEXICAL min-relevance floor (companion to the semantic TG_EMBED_MIN_SIMILARITY above). EMPTY
+      # / ≤0 = OFF (the shipped score>0 behaviour, byte-identical); a positive value trims the low-relevance
+      # lexical tail (same-rule-only noise) the cosine floor cannot see.
+      TG_RETRIEVE_MIN_SCORE: ${TG_RETRIEVE_MIN_SCORE:-}
+      # TG-50: render the retrieved precedent block as XML rather than the plain-text list. EMPTY/false = OFF
+      # (the shipped plain-text rendering, byte-identical); true = XML-delimited (clearer data/instruction
+      # separation for the model). A prompt-surface change — arming is validated by the eval gate.
+      TG_RETRIEVE_XML_CONTEXT: ${TG_RETRIEVE_XML_CONTEXT:-}
+      # TG-50: deterministic multi-query retrieval — retrieve over rule-broadened query variants + RRF-fuse.
+      # EMPTY/false = OFF (base retriever served directly, byte-identical); true = extra recall from the
+      # broadened variant (most valuable over the semantic-fused base). A prompt-surface change — eval-gated.
+      TG_RETRIEVE_MULTIQUERY: ${TG_RETRIEVE_MULTIQUERY:-}
+      # TG-50: LLM QUERY-REWRITE — reformulate the incident into a crisp retrieval query with a fast model, then
+      # run the whole retrieval stack on the rewrite. EMPTY/false = OFF (raw query, byte-identical); a MODEL CALL
+      # in the retrieval hot path (latency), so armed only by operator choice. MODEL selects the fast completer.
+      TG_RETRIEVE_QUERY_REWRITE: ${TG_RETRIEVE_QUERY_REWRITE:-}
+      TG_QUERY_REWRITE_MODEL: ${TG_QUERY_REWRITE_MODEL:-}
+      # TG-50: cross-encoder RERANK — retrieve wide, rerank to a precise top-k via the TEI reranker. UNSET = OFF
+      # (base ranking, byte-identical); a URL arms it, WIDEN sets the wide candidate count. The endpoint host is
+      # deploy config, never a committed estate hostname. Retrieval is eval-INERT to the LLM-judge gate.
+      TG_RERANK_URL: ${TG_RERANK_URL:-}
+      TG_RERANK_WIDEN: ${TG_RERANK_WIDEN:-}
+      # TG-53: incident-knowledge GraphRAG — broaden retrieval by the alerting host's estate blast radius + RRF.
+      # EMPTY/false = OFF (base retriever, byte-identical); true arms it, MAX_HOSTS/DEPTH bound the walk.
+      # DO NOT ARM until graph edge-precision (TG-352) lands — today's graph over-returns from hub nodes.
+      TG_RETRIEVE_GRAPH_PRECEDENT: ${TG_RETRIEVE_GRAPH_PRECEDENT:-}
+      TG_RETRIEVE_GRAPH_MAX_HOSTS: ${TG_RETRIEVE_GRAPH_MAX_HOSTS:-}
+      TG_RETRIEVE_GRAPH_DEPTH: ${TG_RETRIEVE_GRAPH_DEPTH:-}
+      # TG-214: HyDE — embed a hypothetical resolution as a document to match precedent resolutions. A MODEL CALL
+      # in the retrieval hot path (latency), hence OFF by default; MODEL selects the fast completer alias.
+      TG_RETRIEVE_HYDE: ${TG_RETRIEVE_HYDE:-}
+      TG_HYDE_MODEL: ${TG_HYDE_MODEL:-}
+      # TG-214: retrieval-sufficiency (CRAG) — render an explicit "no adequate precedent" when the kept set is weak
+      # instead of padding with off-target hits. EMPTY/false = OFF (byte-identical); MIN_COSINE tunes the bar.
+      TG_RETRIEVE_SUFFICIENCY: ${TG_RETRIEVE_SUFFICIENCY:-}
+      TG_RETRIEVE_SUFFICIENCY_MIN_COSINE: ${TG_RETRIEVE_SUFFICIENCY_MIN_COSINE:-}
+      # TG-86 slice 2b: fold the operator's own host docs into the <estate> grounding block (screened like other
+      # untrusted data). EMPTY/false = OFF (byte-identical). Arming is gated on the TG-486 identifier-redaction pass.
+      TG_ESTATE_DOC_SEED: ${TG_ESTATE_DOC_SEED:-}
+      # TG-508: IDF-weight the retrieval tag channel — a rare curated tag-set outranks a boilerplate one.
+      # EMPTY/false = OFF (shipped flat weightTag*Jaccard, byte-identical); true = tag-rarity (IDF) weighting.
+      # Retrieval is eval-INERT to the LLM-judge gate; arming is validated by eval/retrieval resolution-recall.
+      TG_RETRIEVAL_IDF_TAGS: ${TG_RETRIEVAL_IDF_TAGS:-}
+      TG_EMBED_BACKFILL_INTERVAL: ${TG_EMBED_BACKFILL_INTERVAL:-}
+      TG_EMBED_BACKFILL_BATCH: ${TG_EMBED_BACKFILL_BATCH:-}
+      # =================================================================================================
+      # Env-parity passthroughs (fix/compose-env-parity). Every knob below is read by cmd/worker/main.go
+      # via the getenv family but was NOT previously forwarded here — so an operator override in .env was
+      # silently dropped and the worker ran on its in-code default (the exact prod-gap class this branch
+      # kills). Token knobs are secret REFERENCES (env:NAME) with the referenced secret passed alongside
+      # as ${NAME:-} (never a literal value). All optional: unset ⇒ in-code default / feature-off.
+      # deploy/envparity_test.go fails CI if any read key here regresses. Mutation stays OFF regardless.
+      # --- Gate inputs: blast-radius width (default 8), criticality tiers, self-protected services ---
+      TG_BLAST_RADIUS_WIDE_THRESHOLD: ${TG_BLAST_RADIUS_WIDE_THRESHOLD:-8}
+      TG_CRITICALITY_TIER_HOSTS: ${TG_CRITICALITY_TIER_HOSTS:-}
+      TG_SELF_PROTECTED_SERVICES: ${TG_SELF_PROTECTED_SERVICES:-}
+      # Prior-verdict poll lookback (spec/001 REQ-015): a same-rule-family DEVIATION inside this window
+      # POLL_PAUSEs the next action on that target. Empty ⇒ the in-code default (48h).
+      TG_PRIOR_VERDICT_WINDOW: ${TG_PRIOR_VERDICT_WINDOW:-}
+      # Incident correlation window (TG-169): how far either side of an alert's arrival the correlation stage
+      # looks for co-occurring alerts when deciding whether an incident spans MULTIPLE systems (and therefore
+      # takes the deep path). Only the SPAN is tunable — how fast this estate's failures propagate is a
+      # property of the estate; the cluster thresholds are constants in core/correlate, because a knob able to
+      # lower them is a way back to the `severity == critical` state this replaced. Empty ⇒ in-code default (10m).
+      TG_CORRELATION_WINDOW: ${TG_CORRELATION_WINDOW:-}
+      # Staged-canary allowlist file (REQ-009): a (host,op) here is FORCED to POLL_PAUSE (human vote). Empty ⇒ inert.
+      TG_CANARY_POLL_POLICY_FILE: ${TG_CANARY_POLL_POLICY_FILE:-}
+      # --- Estate: declared/tunnel/learned topology files, per-source cascade-alert names, poll interval,
+      # expected-capabilities reconcile. Cascade defaults preserved so an empty passthrough can't blank them. ---
+      TG_ESTATE_DECLARED_FILE: ${TG_ESTATE_DECLARED_FILE:-}
+      TG_ESTATE_TUNNEL_FILE: ${TG_ESTATE_TUNNEL_FILE:-}
+      TG_ESTATE_LEARNED_FILE: ${TG_ESTATE_LEARNED_FILE:-}
+      TG_NETBOX_CASCADE_ALERT: ${TG_NETBOX_CASCADE_ALERT:-HostDown}
+      TG_LIBRENMS_CASCADE_ALERT: ${TG_LIBRENMS_CASCADE_ALERT:-DeviceDown}
+      TG_PVE_CASCADE_ALERT: ${TG_PVE_CASCADE_ALERT:-HostDown}
+      TG_SLURPIT_CASCADE_ALERT: ${TG_SLURPIT_CASCADE_ALERT:-DeviceDown}
+      TG_LIBRENMS_ALERT_POLL_INTERVAL: ${TG_LIBRENMS_ALERT_POLL_INTERVAL:-}
+      TG_LIBRENMS_ALERT_POLL_MIN_AGE: ${TG_LIBRENMS_ALERT_POLL_MIN_AGE:-}
+      TG_EXPECTED_CAPABILITIES: ${TG_EXPECTED_CAPABILITIES:-}
+      # --- Estate-doc GROUNDING (TG-86 slice 1c: ARM). The worker's boot coverage job
+      # (cmd/worker/estate_doc_coverage.go) reads BOTH of these via getenv, but before this block NEITHER was
+      # forwarded — so an operator override in .env was silently discarded and the live tg_estate_doc_* gauges
+      # read empty (tg_estate_doc_files an empty vector: the arming oracle stuck RED). That is the TG-384
+      # compose-parity class exactly: a feature reachable in code, inert in prod on a blank compose default.
+      # It is now guarded from BOTH sides — deploy/envparity_test.go scans estate_doc_coverage.go for parity,
+      # and deploy/compose_estate_doc_corpus_test.go pins the safe-default shape below.
+      #
+      # ALL DEFAULT EMPTY, so a stack that does not opt in is byte-for-byte unchanged (honest absence, the
+      # TG-394 self-dep discipline): DOCS_DIR unset ⇒ the coverage job emits nothing (no phantom zero-gauges);
+      # CORPUS unset ⇒ no corpus is persisted. ARMING is setting them — mount a documentation root at
+      # DOCS_DIR to light coverage, and point CORPUS at a file under the ./knowledge mount (already
+      # bind-mounted below) to persist the corpus for the slice-2 retriever. PERSISTING from a DOCS_DIR walk
+      # additionally requires REDACT_PATTERNS (mount github-sync/denylist.txt + scripts/estate-redact-extra.txt
+      # and list them comma-separated): without it the walk is secret-scrubbed but identifier-LADEN, and the
+      # worker REFUSES the write (TG-486 — the offline scripts/estate-docs-corpus.sh is the gated alternative).
+      TG_ESTATE_DOCS_DIR: ${TG_ESTATE_DOCS_DIR:-}
+      TG_ESTATE_DOC_CORPUS: ${TG_ESTATE_DOC_CORPUS:-}
+      TG_ESTATE_DOC_REDACT_PATTERNS: ${TG_ESTATE_DOC_REDACT_PATTERNS:-}
+      # --- Actuation (SSH). Inert while mutation is OFF (the interceptor refuses before executing). The
+      # native in-process crypto/ssh runner verifies each target host key against KNOWN_HOSTS and authenticates
+      # with the KEY reference (env:/file:); both empty ⇒ the runner fails closed (no unverified connection). ---
+      TG_ACTUATION_SSH_HOST: ${TG_ACTUATION_SSH_HOST:-}
+      TG_ACTUATION_SSH_IDENTITY: ${TG_ACTUATION_SSH_IDENTITY:-}
+      TG_ACTUATION_SSH_KNOWN_HOSTS: ${TG_ACTUATION_SSH_KNOWN_HOSTS:-}
+      TG_ACTUATION_SSH_KEY: ${TG_ACTUATION_SSH_KEY:-}
+      # TG-423: OpenBao ssh CA/signed-cert auth for actuation. EMPTY TG_SSHCA_ADDR = OFF (default) ⇒ actuations
+      # present the static TG_ACTUATION_SSH_KEY exactly as before — behaviour-preserving, safe to merge. ARMED
+      # by setting the address + a sign role + a token ref: each actuation then presents a short-lived
+      # OpenBao-signed CERTIFICATE the target trusts via TrustedUserCAKeys, so the exposure window becomes the
+      # cert TTL. A set-but-unconstructable engine fails the worker boot CLOSED (never falls back to the key).
+      # Arming also needs the estate step: roll the CA public key into each target sshd's TrustedUserCAKeys.
+      TG_SSHCA_ADDR: ${TG_SSHCA_ADDR:-}
+      TG_SSHCA_MOUNT: ${TG_SSHCA_MOUNT:-}
+      TG_SSHCA_ROLE: ${TG_SSHCA_ROLE:-}
+      TG_SSHCA_TOKEN_REF: ${TG_SSHCA_TOKEN_REF:-}
+      TG_SSHCA_CA: ${TG_SSHCA_CA:-}
+      TG_ACTUATION_ALLOWED_UNITS: ${TG_ACTUATION_ALLOWED_UNITS:-}
+      TG_ACTUATION_ALLOWED_CONTAINERS: ${TG_ACTUATION_ALLOWED_CONTAINERS:-}
+      # Per-target actuation (spec/017 REQ-1717, P3-B2): OFF ⇒ the native-ssh lane binds one leaf to the single
+      # TG_ACTUATION_SSH_HOST above (default, behaviour-preserving). ON ⇒ each action's leaf binds to its OWN
+      # target host (fleet restart/start-service) via the actuation identity+key above over KNOWN_HOSTS. Stays
+      # dormant until the mode is flipped to actuate AND the allowed-units allowlist is non-empty.
+      TG_ACTUATION_SSH_PER_TARGET: ${TG_ACTUATION_SSH_PER_TARGET:-}
+      # --- Credential/identity engine (spec/016), instantiated LIVE + syncing from the real systems-of-record.
+      # Each source's TRIGGER (its address / URL list) gates whether it is built; absent ⇒ that source is off.
+      # A present-but-PARTIAL source config fails the worker boot CLOSED. Every credential is a SecretRef
+      # reference (env:NAME / file:), never a literal; the referenced secret is passed alongside as ${NAME:-}.
+      # SYNC_INTERVAL gates the scheduled re-sync (OFF by default; an initial sync always runs at boot).
+      # Coverage + sync state (NON-SECRET) are published to migration-0017 tables for the console. Mutation OFF.
+      TG_CREDENTIAL_NATIVE_RULES: ${TG_CREDENTIAL_NATIVE_RULES:-}
+      TG_CREDENTIAL_SYNC_INTERVAL: ${TG_CREDENTIAL_SYNC_INTERVAL:-}
+      TG_MODULE_PROBE_INTERVAL: ${TG_MODULE_PROBE_INTERVAL:-}
+      # OpenBao / HashiCorp Vault (machine plane, KV v2). AUTH_METHOD ∈ token|approle|jwt (default token).
+      TG_OPENBAO_ADDR: ${TG_OPENBAO_ADDR:-}
+      TG_OPENBAO_SOURCE_ID: ${TG_OPENBAO_SOURCE_ID:-}
+      TG_OPENBAO_AUTH_METHOD: ${TG_OPENBAO_AUTH_METHOD:-}
+      TG_OPENBAO_TOKEN_REF: ${TG_OPENBAO_TOKEN_REF:-}
+      TG_OPENBAO_ROLE_ID_REF: ${TG_OPENBAO_ROLE_ID_REF:-}
+      TG_OPENBAO_SECRET_ID_REF: ${TG_OPENBAO_SECRET_ID_REF:-}
+      # Secret-zero-free bootstrap (spec/024 REQ-2407, TG_OPENBAO_AUTH_METHOD=wrapped-approle): a single-use
+      # response-wrapping token on tmpfs (file:/run/tg/bao-wrap) — no durable secret_id on disk.
+      TG_OPENBAO_WRAP_TOKEN_REF: ${TG_OPENBAO_WRAP_TOKEN_REF:-}
+      TG_OPENBAO_JWT_REF: ${TG_OPENBAO_JWT_REF:-}
+      TG_OPENBAO_JWT_ROLE: ${TG_OPENBAO_JWT_ROLE:-}
+      # mTLS machine-identity bootstrap (spec/024 Amendment 2026-07-25): set CERT+KEY to a FreeIPA-CA client
+      # cert+key path to authenticate with NO bootstrap token; empty ⇒ fall back to TG_OPENBAO_TOKEN_REF
+      # (transition-safe deploy switch). CERT_ROLE names the OpenBao cert auth role (optional).
+      TG_OPENBAO_CERT: ${TG_OPENBAO_CERT:-}
+      TG_OPENBAO_KEY: ${TG_OPENBAO_KEY:-}
+      TG_OPENBAO_CERT_ROLE: ${TG_OPENBAO_CERT_ROLE:-}
+      TG_OPENBAO_CA: ${TG_OPENBAO_CA:-}
+      TG_OPENBAO_KV_MOUNT: ${TG_OPENBAO_KV_MOUNT:-}
+      TG_OPENBAO_KV_PREFIX: ${TG_OPENBAO_KV_PREFIX:-}
+      OPENBAO_TOKEN: ${OPENBAO_TOKEN:-}
+      OPENBAO_ROLE_ID: ${OPENBAO_ROLE_ID:-}
+      OPENBAO_SECRET_ID: ${OPENBAO_SECRET_ID:-}
+      # AWX (machine plane, inventory). TOKEN_REF is required when ADDR is set (Bearer OAuth2 token reference).
+      TG_AWX_ADDR: ${TG_AWX_ADDR:-}
+      TG_AWX_SOURCE_ID: ${TG_AWX_SOURCE_ID:-}
+      TG_AWX_TOKEN_REF: ${TG_AWX_TOKEN_REF:-env:AWX_TOKEN}
+      TG_AWX_CA: ${TG_AWX_CA:-}
+      TG_AWX_INVENTORY_ID: ${TG_AWX_INVENTORY_ID:-}
+      TG_AWX_REF_SCHEME: ${TG_AWX_REF_SCHEME:-}
+      TG_AWX_REF_PREFIX: ${TG_AWX_REF_PREFIX:-}
+      TG_AWX_REF_FIELD: ${TG_AWX_REF_FIELD:-}
+      # Job-template mode: map each AWX Machine-credential NAME to a sealed SecretRef TG holds locally
+      # (';'-separated "AWX cred name=SecretRef"). Unset ⇒ the job-template walk does not run (host-only).
+      TG_AWX_CRED_REF_MAP: ${TG_AWX_CRED_REF_MAP:-}
+      TG_AWX_DEFAULT_USER: ${TG_AWX_DEFAULT_USER:-}
+      AWX_TOKEN: ${AWX_TOKEN:-}
+      # Semaphore (machine plane, inventory). TOKEN_REF is required when ADDR is set (Bearer API token reference).
+      TG_SEMAPHORE_ADDR: ${TG_SEMAPHORE_ADDR:-}
+      TG_SEMAPHORE_SOURCE_ID: ${TG_SEMAPHORE_SOURCE_ID:-}
+      TG_SEMAPHORE_TOKEN_REF: ${TG_SEMAPHORE_TOKEN_REF:-${SEMAPHORE_TOKEN:+env:SEMAPHORE_TOKEN}}
+      TG_SEMAPHORE_CA: ${TG_SEMAPHORE_CA:-}
+      TG_SEMAPHORE_PROJECT_ID: ${TG_SEMAPHORE_PROJECT_ID:-}
+      TG_SEMAPHORE_REF_SCHEME: ${TG_SEMAPHORE_REF_SCHEME:-}
+      TG_SEMAPHORE_REF_PREFIX: ${TG_SEMAPHORE_REF_PREFIX:-}
+      TG_SEMAPHORE_REF_FIELD: ${TG_SEMAPHORE_REF_FIELD:-}
+      SEMAPHORE_TOKEN: ${SEMAPHORE_TOKEN:-}
+      # UN-CONTROLLED Ansible (machine plane, plain files, NO controller). ROOT (the inventory +
+      # group_vars/host_vars directory) gates whether the source is built; a present ROOT with no
+      # VAULT_PASS_REF fails the boot closed. TG parses the tree and natively decrypts inline !vault
+      # secrets at use time (no ansible CLI). Point ROOT at a directory MOUNTED into this service (e.g.
+      # a demo dir) and VAULT_PASS_REF at a sealed password (file:/secrets/... via the ./secrets mount).
+      TG_ANSIBLE_ROOT: ${TG_ANSIBLE_ROOT:-}
+      TG_ANSIBLE_SOURCE_ID: ${TG_ANSIBLE_SOURCE_ID:-}
+      TG_ANSIBLE_INVENTORY: ${TG_ANSIBLE_INVENTORY:-}
+      TG_ANSIBLE_VAULT_PASS_REF: ${TG_ANSIBLE_VAULT_PASS_REF:-}
+      TG_ANSIBLE_DEFAULT_USER: ${TG_ANSIBLE_DEFAULT_USER:-}
+      # LDAP / FreeIPA (human plane, approvers). BIND_DN + BIND_PW are required SecretRefs when URLS is set.
+      TG_LDAP_URLS: ${TG_LDAP_URLS:-}
+      TG_LDAP_SOURCE_ID: ${TG_LDAP_SOURCE_ID:-}
+      # Site base DNs (deploy-time; the estate dc=… suffix is NEVER compiled in — STONITH). Unset ⇒ the
+      # binary's generic FreeIPA/389-DS RDN default, which a real deployment overrides with its full suffix.
+      TG_LDAP_USER_BASE: ${TG_LDAP_USER_BASE:-}
+      TG_LDAP_GROUP_BASE: ${TG_LDAP_GROUP_BASE:-}
+      TG_LDAP_BIND_DN: ${TG_LDAP_BIND_DN:-env:LDAP_BIND_DN}
+      TG_LDAP_BIND_PW: ${TG_LDAP_BIND_PW:-env:LDAP_BIND_PW}
+      TG_LDAP_CA: ${TG_LDAP_CA:-}
+      TG_LDAP_STARTTLS: ${TG_LDAP_STARTTLS:-}
+      # (TG_LDAP_USER_BASE / TG_LDAP_GROUP_BASE are defined once above — the attribution identity resolver
+      # spec/023 REQ-2315 reuses the same site base DNs.)
+      LDAP_BIND_DN: ${LDAP_BIND_DN:-}
+      LDAP_BIND_PW: ${LDAP_BIND_PW:-}
+      # OIDC client-credentials token minter (machine plane, oidc: SecretRef scheme, REQ-1619). TOKEN_URL
+      # present ⇒ the oidc: resolver is wired; CLIENT_ID_REF + CLIENT_SECRET_REF are required SecretRefs (the
+      # client_secret is sealed under ./secrets, referenced file:/secrets/…). Resolver-only (mints at use
+      # time, no Sync source). Absent TOKEN_URL ⇒ the capability is off.
+      TG_OIDC_TOKEN_URL: ${TG_OIDC_TOKEN_URL:-}
+      TG_OIDC_CLIENT_ID_REF: ${TG_OIDC_CLIENT_ID_REF:-}
+      TG_OIDC_CLIENT_SECRET_REF: ${TG_OIDC_CLIENT_SECRET_REF:-}
+      TG_OIDC_SCOPE: ${TG_OIDC_SCOPE:-}
+      TG_OIDC_AUDIENCE: ${TG_OIDC_AUDIENCE:-}
+      TG_OIDC_CA: ${TG_OIDC_CA:-}
+      TG_OIDC_AUTH_STYLE: ${TG_OIDC_AUTH_STYLE:-}
+      # --- Falsifiability scoring loop. SCORE_INTERVAL gates the loop; default 5m keeps it ON, so it is
+      # passed explicitly (an empty passthrough would silently DISABLE scoring). BATCH falls back to its
+      # in-code default (200) when blank.
+      # The observation window is LEARNED per edge — max(FLOOR, 2 x p95 observed cascade latency), capped by
+      # MAX (spec/002 REQ-110, TG-220). Blank ⇒ the in-code defaults 900s / 2h / 14d, all of which fail safe
+      # toward waiting LONGER; nothing here can shorten a window and manufacture a miss. TG_FALSIFIABILITY_WINDOW
+      # is RETIRED — still FORWARDED only so the worker can say so loudly at boot instead of ignoring a stale
+      # operator setting in silence. ---
+      TG_FALSIFIABILITY_SCORE_INTERVAL: ${TG_FALSIFIABILITY_SCORE_INTERVAL:-5m}
+      TG_FALSIFIABILITY_WINDOW_FLOOR: ${TG_FALSIFIABILITY_WINDOW_FLOOR:-}
+      TG_FALSIFIABILITY_WINDOW_MAX: ${TG_FALSIFIABILITY_WINDOW_MAX:-}
+      TG_FALSIFIABILITY_LATENCY_LOOKBACK: ${TG_FALSIFIABILITY_LATENCY_LOOKBACK:-}
+      TG_FALSIFIABILITY_WINDOW: ${TG_FALSIFIABILITY_WINDOW:-} # RETIRED — forwarded only for the boot warning
+      TG_FALSIFIABILITY_BATCH: ${TG_FALSIFIABILITY_BATCH:-}
+      # --- Discovery corpus (design-wisdom #10) + shared recency/decay reconciliation (design-wisdom #11).
+      # The Scorer captures each live-scored deviation into the in-memory rolling corpus (CAP); the FLUSH_INTERVAL
+      # (blank ⇒ OFF, opt-in) drains it to CORPUS_FILE (mount it writable) via eval.IngestCaptured. The decay cron
+      # (DECAY_INTERVAL, blank ⇒ OFF, opt-in) ages the three learned stores: learn half-life (LEARN_HALFLIFE,
+      # in-code 30d) + estate decay-on-disproof (ESTATE_DECAY_FACTOR, in-code 0.5). Competence-plane, mutation OFF. ---
+      TG_DISCOVERY_CORPUS_CAP: ${TG_DISCOVERY_CORPUS_CAP:-}
+      TG_DISCOVERY_CORPUS_FILE: ${TG_DISCOVERY_CORPUS_FILE:-eval/discovery-corpus.json}
+      TG_DISCOVERY_FLUSH_INTERVAL: ${TG_DISCOVERY_FLUSH_INTERVAL:-}
+      TG_DECAY_INTERVAL: ${TG_DECAY_INTERVAL:-}
+      TG_LEARN_HALFLIFE: ${TG_LEARN_HALFLIFE:-}
+      TG_ESTATE_DECAY_FACTOR: ${TG_ESTATE_DECAY_FACTOR:-}
+      # How often the co-occurrence learner's snapshot is persisted to the co_occurrence table (TG-388 face c),
+      # loaded on boot so the self-learning tier survives a restart instead of re-learning from zero (measured
+      # 1,524 learned edges -> 0 on a redeploy). Ships ARMED at 15m — persistence that shipped inert would not
+      # fix the wipe; competence-plane, a save/load failure is non-fatal. 0 disables (in-memory-only lifetime).
+      TG_LEARN_PERSIST_INTERVAL: ${TG_LEARN_PERSIST_INTERVAL:-15m}
+      # axis A2 (blast-radius precision): drop predicted/control blast-radius impacts below this path-product
+      # confidence (0/unset = behavior-preserving; tune toward ~0.70 to cut low-confidence false positives).
+      TG_PREDICT_MIN_CONFIDENCE: ${TG_PREDICT_MIN_CONFIDENCE:-}
+      # --- Confidence calibrator (spec/020 T-020-15, REQ-2021). Read-only: periodically joins persisted agent
+      # confidence (session_triage.confidence) to the LLM-free verified falsify outcome (infragraph_prediction,
+      # by external_ref) and logs the reliability curve (Brier/ECE/MCE). OBSERVE-ONLY — adjudicates/gates nothing;
+      # the policy min_confidence clamp stays OFF until an operator judges the reliability trustworthy. INTERVAL
+      # in-code default 15m; BINS/SAMPLE_LIMIT fall back to 10/5000 when blank. Armed only with a DSN. ---
+      TG_CALIBRATION_INTERVAL: ${TG_CALIBRATION_INTERVAL:-15m}
+      # THE LEDGER-HEAD ANCHOR (TG-80 P1#1): how often the append-only governance_ledger HEAD is witnessed into
+      # the append-only ledger_anchor store — external tamper-evidence for the audit spine (a truncated tail or
+      # re-linked history that VerifyChain cannot see becomes a HEAD that regressed below a recorded witness).
+      # OBSERVE-ONLY — it records a HEAD digest and never actuates. INTERVAL in-code default 1h; WINDOW = the
+      # trailing rows folded into each digest (default 64). Armed only with a DSN. ---
+      TG_LEDGER_ANCHOR_INTERVAL: ${TG_LEDGER_ANCHOR_INTERVAL:-1h}
+      TG_LEDGER_ANCHOR_WINDOW: ${TG_LEDGER_ANCHOR_WINDOW:-64}
+      # TG-509: the CONSUMING half — periodically CHECK the live ledger against its recorded witnesses
+      # (VerifyAgainstAnchors) and surface a tamper. Coarse cadence (full-chain verify is O(chain×anchors)).
+      TG_LEDGER_VERIFY_INTERVAL: ${TG_LEDGER_VERIFY_INTERVAL:-24h}
+      # TG-510 Slice A: tamper-EVIDENCE for the maintained knowledge corpus (TG_KNOWLEDGE_FILE), reusing the
+      # same append-only ledger_anchor witness under the 'knowledge-corpus' domain. OFF by default; blank/unset
+      # ⇒ byte-identical to before (no chain, no witness, no verify). When ON (and a DSN is set), every corpus
+      # write records a HEAD witness and a periodic pass WARNS if the on-disk corpus no longer reproduces the
+      # latest witness — a raw edit outside the write path. EVIDENCE-ONLY: it never blocks retrieval. WINDOW =
+      # trailing rows folded into each digest (default 64); VERIFY_INTERVAL is coarse (a full re-derive/pass).
+      TG_CORPUS_APPEND_ONLY: ${TG_CORPUS_APPEND_ONLY:-}
+      TG_CORPUS_ANCHOR_WINDOW: ${TG_CORPUS_ANCHOR_WINDOW:-64}
+      TG_CORPUS_VERIFY_INTERVAL: ${TG_CORPUS_VERIFY_INTERVAL:-24h}
+      # TG-519 Slice C: tamper-ENFORCEMENT — the owner-armed ESCALATION of TG-510 evidence. OFF by default;
+      # blank/unset ⇒ byte-identical to TG-510 (evidence-only warn, the maintained corpus always composes). When
+      # ON, every corpus load VERIFIES the maintained corpus against its latest witness and DROPS it from trusted
+      # retrieval — composing from the SEED corpus alone — on tamper OR any unverifiable state (no witness store,
+      # unreadable witnesses, no witness yet, an unparseable file). Fail-CLOSED, the deliberate INVERSE of TG-510
+      # (evidence fails safe-WARN; enforcement fails safe-DROP: a false verify degrades retrieval to the seed —
+      # safe — while a missed tamper reaching the agent is the real danger). Verifies against the witness TG-510
+      # records, so arm it TOGETHER with TG_CORPUS_APPEND_ONLY (+ a DSN) or the corpus is dropped after the first
+      # unwitnessed write.
+      TG_CORPUS_ENFORCE: ${TG_CORPUS_ENFORCE:-}
+      # TG-80: airgap the ledger + risk-audit WRITE domain — point at an INSERT+SELECT-only role's DSN so the
+      # runtime pool cannot UPDATE/DELETE the governance spine. EMPTY = off (writes via the runtime pool,
+      # append-only by grant). A set-but-unusable DSN fails the worker boot CLOSED (never a silent downgrade).
+      TG_LEDGER_WRITE_DSN: ${TG_LEDGER_WRITE_DSN:-}
+      # TG-422: dynamic Postgres credentials from OpenBao's `database` engine. EMPTY TG_DYNDB_ADDR = OFF (the
+      # default) ⇒ the `dyn:` SecretRef scheme stays unregistered, every dyn: ref fails closed, and DB DSNs
+      # keep resolving from their static passwords exactly as before — merging this changes nothing. ARMED by
+      # setting the address + a token ref (env:/file:/bao:) + a userinfo-less DSN template `dyn:<role>` reads:
+      # the worker then leases a short-lived login per role, renews it before its TTL, and revokes it at exit.
+      # A set-but-unconstructable engine fails the worker boot CLOSED (never a silent fall back to static).
+      TG_DYNDB_ADDR: ${TG_DYNDB_ADDR:-}
+      TG_DYNDB_TOKEN_REF: ${TG_DYNDB_TOKEN_REF:-}
+      TG_DYNDB_MOUNT: ${TG_DYNDB_MOUNT:-}
+      TG_DYNDB_CA: ${TG_DYNDB_CA:-}
+      TG_DYNDB_DSN_TEMPLATE: ${TG_DYNDB_DSN_TEMPLATE:-}
+      # The earned-catalog clustering pass (spec/028 REQ-2811, epic TG-227 Stage 2): how often recurring
+      # free-form proposals are re-evaluated for candidacy. OBSERVE-ONLY — the pass can advance a candidate
+      # to ratify_ready and no further, so this interval tunes how quickly an operator SEES a recurring
+      # desire, never whether anything executes. Empty disables the pass.
+      TG_OPCLASS_CLUSTER_INTERVAL: ${TG_OPCLASS_CLUSTER_INTERVAL:-1h}
+      # TG-227: ratified-overlay refresh cadence (the ratify/revoke verbs also kick an immediate pass).
+      TG_OPCLASS_OVERLAY_REFRESH: ${TG_OPCLASS_OVERLAY_REFRESH:-60s}
+      # TG-251: worker capability-projection heartbeat (grounder staleness window is 3x this).
+      TG_CAPABILITY_PROJECTION_INTERVAL: ${TG_CAPABILITY_PROJECTION_INTERVAL:-60s}
+      # --- Evidence retention (TG-295). agent_step_evidence holds screened, UNSEALED verbatim tool output;
+      # 0053 made it append-only with no erasure path at all, so it grew forever. RETENTION is generous on
+      # purpose (the console's ground-truth citation must still resolve for anything it lists) and is clamped
+      # UP to the 24h floor the SECURITY DEFINER reaper enforces; INTERVAL is how often the sweep runs. Every
+      # purge is journalled in agent_step_evidence_reap. Armed only with a DSN. ---
+      TG_EVIDENCE_RETENTION: ${TG_EVIDENCE_RETENTION:-8760h}
+      TG_EVIDENCE_REAP_INTERVAL: ${TG_EVIDENCE_REAP_INTERVAL:-6h}
+      # ESTATE-SNAPSHOT RETENTION (TG-355). estate_snapshot was 84 MB of a 140 MB database on 2026-08-06 —
+      # bigger than the next seven tables combined, 6692 rows at 334.6/day, no reaper. Both workers write a
+      # full serialized graph every refresh, so BOTH run the sweep: the reaper ranks per plane and keeps the
+      # newest N of each, so two sweepers converge rather than fight, and gating it to one plane would mean a
+      # triage-only deployment never reaps.
+      #
+      # Every floor is in the DATABASE (migration 0065) — the keep-per-plane clamp, the 24h window, the
+      # first-of-day sample, the journalled DELETE. Setting KEEP_PER_PLANE below the floor is clamped, not
+      # honoured; the boot line prints both so an operator can see which number is in force.
+      TG_ESTATE_SNAPSHOT_KEEP_PER_PLANE: ${TG_ESTATE_SNAPSHOT_KEEP_PER_PLANE:-}
+      TG_ESTATE_SNAPSHOT_REAP_INTERVAL: ${TG_ESTATE_SNAPSHOT_REAP_INTERVAL:-}
+      # RELAY MAX AGE (TG-346): read on the ACTUATION plane, where it bounds how stale a relayed triage
+      # snapshot may be before the relay refuses it. Declared on BOTH plane blocks (shared-state parity):
+      # the triage worker ignores it today, and a key set on one block only is the exact defect that left
+      # TG_PREDICT_MIN_CONFIDENCE split across planes.
+      TG_ESTATE_SNAPSHOT_RELAY_MAX_AGE: ${TG_ESTATE_SNAPSHOT_RELAY_MAX_AGE:-}
+      # --- Read-lane recon budget (TG-165, docs/THREAT-MODEL.md §5.2). The read lane fails OPEN by law and,
+      # until TG-165, that also meant UNBOUNDED: nothing counted estate reads, /halt never reached recon, and
+      # a fresh session (one Temporal retry) reset every per-session limit there was. These bound VOLUME, not
+      # any individual read. Sized so a real investigation cannot reach them — 25/session sits above the
+      # agent loop's own 10-cycle ceiling, and 500/hour is ~90 full-budget investigations, an order of
+      # magnitude above this estate's measured rate. BURST (150 reads in 5m) is the anomaly: it forces the
+      # mode to Shadow and refuses reads until the window drains. A blank value restores the in-code default
+      # rather than disabling a bound — there is deliberately no value that means "unlimited". ---
+      TG_RECON_PER_SESSION: ${TG_RECON_PER_SESSION:-25}
+      TG_RECON_PER_HOUR: ${TG_RECON_PER_HOUR:-500}
+      TG_RECON_BURST: ${TG_RECON_BURST:-150}
+      TG_RECON_BURST_WINDOW: ${TG_RECON_BURST_WINDOW:-5m}
+      TG_RECON_FANOUT_OBSERVE: ${TG_RECON_FANOUT_OBSERVE:-12}
+      TG_CALIBRATION_BINS: ${TG_CALIBRATION_BINS:-}
+      TG_CALIBRATION_SAMPLE_LIMIT: ${TG_CALIBRATION_SAMPLE_LIMIT:-}
+      # The rubric score at which the judge's correct_diagnosis dimension counts as a clean outcome for the
+      # SECOND calibration reference class (TG-335). The rubric is 1-5 and a reliability curve needs a
+      # boolean, so this is a stated judgement rather than a derived constant — which is exactly why it is
+      # an operator knob and not a literal. Default 4; published beside that curve's own base rate so a
+      # reader can see how easy the target is.
+      TG_CALIBRATION_DIAGNOSIS_CLEAN_SCORE: ${TG_CALIBRATION_DIAGNOSIS_CLEAN_SCORE:-4}
+      # --- Escalation requeue lane (spec/003 wired). The FireDue cron fires enqueued re-checks; an
+      # unresolved reconcile decision (an orphaned poll) is requeued here. CAP bounds per-incident
+      # re-checks (default 3); DELAY is the re-check eligibility delay (default 15m). Both fall back to
+      # their in-code defaults when blank. The lane arms only with a durable store (a DSN). ---
+      TG_ESCALATION_RECHECK_CAP: ${TG_ESCALATION_RECHECK_CAP:-3}
+      TG_ESCALATION_RECHECK_DELAY: ${TG_ESCALATION_RECHECK_DELAY:-15m}
+      # --- Skill-store flywheel (generation + trial + offline gate). Blank ⇒ in-code defaults
+      # (gen 3.5/5/14d · trial 30/0.2/0.05/14d · offline limit 6 / slack 0.25 / min-incidents 3). This
+      # whole surface was previously UNforwarded — the flywheel silently ran on defaults in prod. ---
+      TG_SKILL_GEN_THRESHOLD: ${TG_SKILL_GEN_THRESHOLD:-}
+      TG_SKILL_GEN_MIN_SAMPLES: ${TG_SKILL_GEN_MIN_SAMPLES:-}
+      TG_SKILL_GEN_WINDOW: ${TG_SKILL_GEN_WINDOW:-}
+      TG_SKILL_GEN_MAX_SKILLS: ${TG_SKILL_GEN_MAX_SKILLS:-}
+      TG_SKILL_LESSON_SKILL: ${TG_SKILL_LESSON_SKILL:-}
+      TG_SKILL_LESSON_DIMENSION: ${TG_SKILL_LESSON_DIMENSION:-}
+      TG_SKILL_LESSON_MAX: ${TG_SKILL_LESSON_MAX:-}
+      # TG-52 caution flywheel-feed: the failing-session counterpart to TG_SKILL_LESSON_* — feeds low-scored
+      # judge comments (screened, INV-08) to skill generation. All blank ⇒ code defaults (dormant/opt-in).
+      TG_SKILL_CAUTION_SKILL: ${TG_SKILL_CAUTION_SKILL:-}
+      TG_SKILL_CAUTION_DIMENSION: ${TG_SKILL_CAUTION_DIMENSION:-}
+      TG_SKILL_CAUTION_MAX: ${TG_SKILL_CAUTION_MAX:-}
+      TG_SKILL_CAUTION_MAX_SCORE: ${TG_SKILL_CAUTION_MAX_SCORE:-}
+      TG_SKILL_OFFLINE_MAX_ADMIT_PER_RUN: ${TG_SKILL_OFFLINE_MAX_ADMIT_PER_RUN:-}
+      TG_SKILL_TRIAL_MIN_SAMPLES: ${TG_SKILL_TRIAL_MIN_SAMPLES:-}
+      TG_SKILL_TRIAL_MIN_LIFT: ${TG_SKILL_TRIAL_MIN_LIFT:-}
+      TG_SKILL_TRIAL_P: ${TG_SKILL_TRIAL_P:-}
+      TG_SKILL_TRIAL_DURATION: ${TG_SKILL_TRIAL_DURATION:-}
+      # Steering horizon (spec: TG-67 follow-up): bounds which regressed dimension the flywheel targets so an
+      # over-long TRIAL_DURATION (set to clear the traffic bar on a data-starved estate) can't defeat the
+      # anti-starvation steering. Default 14d; usually leave unset.
+      TG_SKILL_TRIAL_FILL_HORIZON: ${TG_SKILL_TRIAL_FILL_HORIZON:-}
+      TG_SKILL_TRIAL_MAX_CANDIDATES: ${TG_SKILL_TRIAL_MAX_CANDIDATES:-}
+      TG_SKILL_OFFLINE_DISCOVERY_LIMIT: ${TG_SKILL_OFFLINE_DISCOVERY_LIMIT:-}
+      TG_SKILL_OFFLINE_REGRESSION_SLACK: ${TG_SKILL_OFFLINE_REGRESSION_SLACK:-}
+      TG_SKILL_OFFLINE_MIN_INCIDENTS: ${TG_SKILL_OFFLINE_MIN_INCIDENTS:-}
+      # The offline pre-filter's model tier. Default "fast" (low-latency) — NOT the "primary" reasoning tier
+      # whose ~50s judge-sized latency times the whole admission out. Both arms share it so the delta holds.
+      TG_SKILL_OFFLINE_MODEL: ${TG_SKILL_OFFLINE_MODEL:-fast}
+      # Model-call observability: log a structured line for any gateway call slower than this many seconds
+      # (non-ok outcomes are always logged). Metrics (tg_model_calls_total / tg_model_call_seconds_total)
+      # capture every call regardless. Default 60s — above a reasoning model's normal judge-sized latency.
+      TG_MODEL_SLOW_CALL_SECONDS: ${TG_MODEL_SLOW_CALL_SECONDS:-60}
+      # Max concurrent model completions in flight (TG-384). Ships ARMED at 8 — the measured in-flight capacity
+      # of the deployed sidecar — so defence-in-depth is ON by default rather than a knob someone must remember
+      # to set after the next burst. Excess investigations PARK for a slot (never dropped) instead of storming
+      # the sidecar and tripping the breaker (the pve03 self-DoS). 8 is a conservative floor a normal load never
+      # reaches; an operator raises it for a bigger sidecar, or 0 disables the bound. Sized with the belt below.
+      TG_MODEL_MAX_CONCURRENCY: ${TG_MODEL_MAX_CONCURRENCY:-8}
+      # Per-completion OUTPUT ceiling sent as max_tokens (TG-48). BLANK/0 = omitted = the model/gateway default
+      # (today's behaviour), so this is INERT until an operator sets it. It bounds a runaway high-severity
+      # investigation up front rather than after the daily cost breaker trips; size it as a runaway ceiling
+      # (high enough not to truncate a legitimate long completion), not a normal-operation limit.
+      TG_MODEL_MAX_TOKENS: ${TG_MODEL_MAX_TOKENS:-}
+      # Tighter output ceiling for the FAST execution classes ONLY (TG-42): a DETERMINISTIC/FAST_AGENT
+      # session sends this as max_tokens, tighten-only against TG_MODEL_MAX_TOKENS above (it can bound a
+      # cheap class below the ceiling, never raise it). Deep/standard/human-led sessions keep the
+      # class-blind ceiling untouched. BLANK/0 = no per-class cap (today's behaviour).
+      TG_MODEL_MAX_TOKENS_FAST: ${TG_MODEL_MAX_TOKENS_FAST:-}
+      # Per-SESSION cumulative output-token budget (TG-48); 0/unset = unbounded (today). Arms the gateway to
+      # refuse a session's next completion once it has spent this many output tokens across the investigation.
+      TG_MODEL_SESSION_TOKEN_BUDGET: ${TG_MODEL_SESSION_TOKEN_BUDGET:-}
+      # Max concurrent activities the RUNNER worker executes (TG-384, Temporal-native belt beside the gateway
+      # semaphore above). Ships ARMED at 16 — above the gateway's 8 so cheap activities are not throttled, but
+      # far below Temporal's default 1000, so a 157-alert burst cannot become 157 simultaneous investigations.
+      # This is the DURABLE half: activities past the cap wait in Temporal's task queue (persisted, retried) and
+      # run as slots free, so a burst drains in order and NONE is lost — the fix for the 133 unrecoverable empty
+      # diagnoses. An operator raises it for a bigger sidecar, or 0 restores Temporal's default (unbounded).
+      TG_MAX_CONCURRENT_INVESTIGATIONS: ${TG_MAX_CONCURRENT_INVESTIGATIONS:-16}
+      # --- PRODUCTION model-path circuit breaker (TG-221, spec/008 REQ-826/827). Per-model-tier named breakers
+      # over the shared cross-process store; an open circuit returns a TYPED error (never an empty result), so
+      # the actuation path fails CLOSED and the judging path fails LOUD. Defaults mirror the predecessor
+      # (3 consecutive upstream failures / 60s cooldown / 1 probe success to close). Forwarded explicitly so a
+      # blank operator value keeps the code default rather than disarming the guard. ---
+      TG_MODEL_BREAKER_THRESHOLD: ${TG_MODEL_BREAKER_THRESHOLD:-3}
+      TG_MODEL_BREAKER_COOLDOWN: ${TG_MODEL_BREAKER_COOLDOWN:-60s}
+      TG_MODEL_BREAKER_HALF_OPEN_SUCCESSES: ${TG_MODEL_BREAKER_HALF_OPEN_SUCCESSES:-1}
+      # --- Governance monitors (TG-222, spec/004 REQ-307/308). Judge-liveness runs hourly over the durable
+      # session/judgment tables; the frontier cross-check re-judges a sample with an INDEPENDENT model and is
+      # the only detector that catches a judge which stopped scoring while every local signal read healthy.
+      # A confirmed death HALTS judged accrual (no skill graduates on an unverified judge) until an operator
+      # re-arms. TG_FRONTIER_JUDGE_MODEL is OFF by default and MUST differ from the local judge tier — the
+      # worker refuses an equal tier, which would be the judge grading itself. ---
+      TG_JUDGE_LIVENESS_WINDOW: ${TG_JUDGE_LIVENESS_WINDOW:-24h}
+      TG_JUDGE_LIVENESS_LAG: ${TG_JUDGE_LIVENESS_LAG:-2h}
+      TG_JUDGE_LIVENESS_LIMIT: ${TG_JUDGE_LIVENESS_LIMIT:-500}
+      TG_FRONTIER_JUDGE_MODEL: ${TG_FRONTIER_JUDGE_MODEL:-}
+      TG_FRONTIER_CROSSCHECK_SAMPLE: ${TG_FRONTIER_CROSSCHECK_SAMPLE:-20}
+      # --- Alert suppression: freeze windows, rules, dedup window, patterns, schedules, reboot buffers, folds ---
+      TG_SUPPRESSION_FREEZE_FILE: ${TG_SUPPRESSION_FREEZE_FILE:-}
+      TG_SUPPRESSION_RULES_FILE: ${TG_SUPPRESSION_RULES_FILE:-}
+      TG_SUPPRESSION_DEDUP_WINDOW: ${TG_SUPPRESSION_DEDUP_WINDOW:-}
+      TG_SUPPRESSION_PATTERNS_FILE: ${TG_SUPPRESSION_PATTERNS_FILE:-}
+      TG_SUPPRESSION_SCHEDULES_FILE: ${TG_SUPPRESSION_SCHEDULES_FILE:-}
+      TG_SUPPRESSION_REBOOT_PRE_BUFFER: ${TG_SUPPRESSION_REBOOT_PRE_BUFFER:-}
+      TG_SUPPRESSION_REBOOT_WINDOW: ${TG_SUPPRESSION_REBOOT_WINDOW:-}
+      TG_SUPPRESSION_FOLDS_FILE: ${TG_SUPPRESSION_FOLDS_FILE:-}
+      # How often the FREEZE file is re-read. Every window carries an absolute Start/End and the file used
+      # to be read once at boot, so declaring a maintenance window meant restarting the worker that would
+      # observe it. 0 disables the reload (boot-only, the pre-2026-08-06 behaviour).
+      TG_SUPPRESSION_FREEZE_RELOAD: ${TG_SUPPRESSION_FREEZE_RELOAD:-1m}
+      # The estate's OWN scheduler as a SECOND freeze source (spec/019, TG-411). Grammar (config-not-code):
+      # `id|baseurl|keyref[|defaultduration][|cacertpath]`, semicolon-separated rows; keyref is a SecretRef
+      # (env:/file:/store:), never a literal key. Unset ⇒ the maintenance-window sensor stays dark. An active
+      # Cronicle maintenance window is projected into the freeze plane on the reload above (same cadence).
+      TG_CRONICLE_DEPLOYMENTS: ${TG_CRONICLE_DEPLOYMENTS:-}
+      # The LEARNED scheduled-reboot lane (spec/005 REQ-409..411). Lands DARK: unset ⇒ only
+      # operator-declared schedules suppress and nothing is learned.
+      TG_SUPPRESSION_LEARN_ENABLED: ${TG_SUPPRESSION_LEARN_ENABLED:-}
+      TG_SUPPRESSION_LEARN_TZ: ${TG_SUPPRESSION_LEARN_TZ:-UTC}
+      TG_SUPPRESSION_DEMOTE_INTERVAL: ${TG_SUPPRESSION_DEMOTE_INTERVAL:-1h}
+      TG_SUPPRESSION_REBOOT_RULES: ${TG_SUPPRESSION_REBOOT_RULES:-}
+      # --- Observability export: OpenObserve / Langfuse / Healthchecks (endpoints + refs + referenced secrets) ---
+      TG_OBSERVABILITY_EXPORT_INTERVAL: ${TG_OBSERVABILITY_EXPORT_INTERVAL:-}
+      TG_OPENOBSERVE_URL: ${TG_OPENOBSERVE_URL:-}
+      TG_OPENOBSERVE_TOKEN_REF: ${TG_OPENOBSERVE_TOKEN_REF:-${OPENOBSERVE_TOKEN:+env:OPENOBSERVE_TOKEN}}
+      OPENOBSERVE_TOKEN: ${OPENOBSERVE_TOKEN:-}
+      # TG-39 read side: the stream the syslog-ng logs ship into + the field carrying the source host, read by
+      # the correlate-logs agent tool. Blank ⇒ the connector defaults (stream "syslog", host field "host").
+      TG_OPENOBSERVE_LOG_STREAM: ${TG_OPENOBSERVE_LOG_STREAM:-}
+      TG_OPENOBSERVE_HOST_FIELD: ${TG_OPENOBSERVE_HOST_FIELD:-}
+      TG_LANGFUSE_URL: ${TG_LANGFUSE_URL:-}
+      # Langfuse PUBLIC key is non-secret + gate-exempt, but use the same enforce-ready idiom as its SECRET
+      # sibling for consistency (unconfigured ⇒ empty ⇒ tracing simply off).
+      TG_LANGFUSE_PUBLIC_REF: ${TG_LANGFUSE_PUBLIC_REF:-${LANGFUSE_PUBLIC_KEY:+env:LANGFUSE_PUBLIC_KEY}}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      TG_LANGFUSE_SECRET_REF: ${TG_LANGFUSE_SECRET_REF:-${LANGFUSE_SECRET_KEY:+env:LANGFUSE_SECRET_KEY}}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      TG_HEALTHCHECKS_URL: ${TG_HEALTHCHECKS_URL:-}
+      TG_HEALTHCHECKS_CHECK_REF: ${TG_HEALTHCHECKS_CHECK_REF:-${HEALTHCHECKS_UUID:+env:HEALTHCHECKS_UUID}}
+      HEALTHCHECKS_UUID: ${HEALTHCHECKS_UUID:-}
+      # --- Notifiers / ITSM (approval routing + ticketing). Each channel: endpoint(s) + a token REF + the
+      # referenced secret as ${NAME:-}. All optional; unset ⇒ that channel is simply not wired. ---
+      # ENFORCE-READY REF IDIOM (all OPTIONAL secret refs below + semaphore/observability above):
+      #   ${TG_X_REF:-${RAW:+env:RAW}}  — explicit ref wins; else if the raw value is set, point at it
+      #   (env:RAW, backward-compatible); else EMPTY. An unconfigured integration therefore renders "" (not
+      #   env:RAW-pointing-at-nothing), so the TG_SECRET_POLICY gate SKIPS it (empty ⇒ feature off) instead of
+      #   flagging a plaintext scheme — the only thing that let unused channels block `enforce`. Functionally
+      #   identical to the old `${TG_X_REF:-env:RAW}` in every configured case; the change is intentional, not a
+      #   byte-identity regression. CORE/required refs keep the plain `${TG_X_REF:-env:RAW}` form (they must be
+      #   configured anyway, and the gate's plaintext message then guides the operator to a backend).
+      # YouTrack
+      TG_YOUTRACK_URL: ${TG_YOUTRACK_URL:-}
+      TG_YOUTRACK_TOKEN_REF: ${TG_YOUTRACK_TOKEN_REF:-${YOUTRACK_TOKEN:+env:YOUTRACK_TOKEN}}
+      YOUTRACK_TOKEN: ${YOUTRACK_TOKEN:-}
+      TG_YOUTRACK_STATE_INPROGRESS: ${TG_YOUTRACK_STATE_INPROGRESS:-}
+      TG_YOUTRACK_STATE_RESOLVED: ${TG_YOUTRACK_STATE_RESOLVED:-}
+      TG_YOUTRACK_STATE_OPEN: ${TG_YOUTRACK_STATE_OPEN:-}
+      TG_YOUTRACK_STATE_FIELD: ${TG_YOUTRACK_STATE_FIELD:-}
+      # READ-ONLY unless explicitly "1". The corpus TG reads for incident memory is the one the
+      # predecessor is driven by, so an accidental write contaminates a running comparison at the input.
+      TG_YOUTRACK_WRITES: ${TG_YOUTRACK_WRITES:-}
+      # TG-490: the entry-ticket creator — dark unless a project is named (creation additionally
+      # needs the tracker's writes armed above).
+      TG_TRACKER_CREATE_PROJECT: ${TG_TRACKER_CREATE_PROJECT:-}
+      # Jira
+      TG_JIRA_URL: ${TG_JIRA_URL:-}
+      TG_JIRA_EMAIL: ${TG_JIRA_EMAIL:-}
+      TG_JIRA_TOKEN_REF: ${TG_JIRA_TOKEN_REF:-${JIRA_TOKEN:+env:JIRA_TOKEN}}
+      JIRA_TOKEN: ${JIRA_TOKEN:-}
+      TG_JIRA_TRANSITION_INPROGRESS: ${TG_JIRA_TRANSITION_INPROGRESS:-}
+      TG_JIRA_TRANSITION_RESOLVED: ${TG_JIRA_TRANSITION_RESOLVED:-}
+      TG_JIRA_TRANSITION_OPEN: ${TG_JIRA_TRANSITION_OPEN:-}
+      # GitHub
+      TG_GITHUB_URL: ${TG_GITHUB_URL:-}
+      TG_GITHUB_OWNER: ${TG_GITHUB_OWNER:-}
+      TG_GITHUB_REPO: ${TG_GITHUB_REPO:-}
+      TG_GITHUB_TOKEN_REF: ${TG_GITHUB_TOKEN_REF:-${GITHUB_TOKEN:+env:GITHUB_TOKEN}}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      # ServiceNow
+      TG_SERVICENOW_URL: ${TG_SERVICENOW_URL:-}
+      TG_SERVICENOW_USER: ${TG_SERVICENOW_USER:-}
+      TG_SERVICENOW_TOKEN_REF: ${TG_SERVICENOW_TOKEN_REF:-${SERVICENOW_TOKEN:+env:SERVICENOW_TOKEN}}
+      SERVICENOW_TOKEN: ${SERVICENOW_TOKEN:-}
+      TG_SERVICENOW_STATE_INPROGRESS: ${TG_SERVICENOW_STATE_INPROGRESS:-}
+      TG_SERVICENOW_STATE_RESOLVED: ${TG_SERVICENOW_STATE_RESOLVED:-}
+      TG_SERVICENOW_STATE_OPEN: ${TG_SERVICENOW_STATE_OPEN:-}
+      # Matrix
+      TG_MATRIX_HOMESERVER: ${TG_MATRIX_HOMESERVER:-}
+      TG_MATRIX_TOKEN_REF: ${TG_MATRIX_TOKEN_REF:-${MATRIX_TOKEN:+env:MATRIX_TOKEN}}
+      MATRIX_TOKEN: ${MATRIX_TOKEN:-}
+      TG_MATRIX_APPROVERS: ${TG_MATRIX_APPROVERS:-}
+      TG_MATRIX_ROOMS: ${TG_MATRIX_ROOMS:-}
+      # TG-463 (B26): presented chat identity -> canonical approve_by login; resolution only, never a wider set
+      TG_VOTER_ALIASES: ${TG_VOTER_ALIASES:-}
+      TG_MATRIX_DEFAULT_ROOM: ${TG_MATRIX_DEFAULT_ROOM:-}
+      # How often the inbound vote reader polls Matrix /sync. It is what makes an approval poll posted to
+      # chat actually answerable there; without it a click reaches nothing and every vote must go
+      # through the console. 0 is not special — the reader is armed whenever matrix is configured.
+      TG_MATRIX_VOTE_POLL_INTERVAL: ${TG_MATRIX_VOTE_POLL_INTERVAL:-15s}
+      # TG-386: arm the proposal-less-handoff page. When a substantive investigation concludes "a human is
+      # needed, no safe action exists" (a non-empty conclusion on a DEEP_INVESTIGATION or handoff-limit
+      # escalation), route it to the notifier. INERT by default (unset/empty ⇒ the notice is scheduled for
+      # observability but not delivered) — opening this new outward paging path is a deliberate operator opt-in.
+      TG_HANDOFF_NOTIFY_ENABLED: ${TG_HANDOFF_NOTIFY_ENABLED:-}
+      # How long a console-saved module setting may be cached before the worker sees it. Short enough that
+      # a Save lands in seconds; long enough that the config store is not on the hot path of the
+      # notification lane — the lane whose whole job is to work during an incident.
+      TG_MODULE_CONFIG_TTL: ${TG_MODULE_CONFIG_TTL:-10s}
+      # Slack
+      TG_SLACK_URL: ${TG_SLACK_URL:-}
+      TG_SLACK_TOKEN_REF: ${TG_SLACK_TOKEN_REF:-${SLACK_TOKEN:+env:SLACK_TOKEN}}
+      SLACK_TOKEN: ${SLACK_TOKEN:-}
+      TG_SLACK_APPROVERS: ${TG_SLACK_APPROVERS:-}
+      TG_SLACK_CHANNELS: ${TG_SLACK_CHANNELS:-}
+      TG_SLACK_DEFAULT_CHANNEL: ${TG_SLACK_DEFAULT_CHANNEL:-}
+      # Microsoft Teams
+      TG_TEAMS_URL: ${TG_TEAMS_URL:-}
+      TG_TEAMS_CONVERSATION: ${TG_TEAMS_CONVERSATION:-}
+      TG_TEAMS_TOKEN_REF: ${TG_TEAMS_TOKEN_REF:-${TEAMS_TOKEN:+env:TEAMS_TOKEN}}
+      TEAMS_TOKEN: ${TEAMS_TOKEN:-}
+      TG_TEAMS_APPROVERS: ${TG_TEAMS_APPROVERS:-}
+      # Email (SMTP)
+      TG_EMAIL_SMTP: ${TG_EMAIL_SMTP:-}
+      TG_EMAIL_FROM: ${TG_EMAIL_FROM:-}
+      TG_EMAIL_TO: ${TG_EMAIL_TO:-}
+      TG_EMAIL_APPROVERS: ${TG_EMAIL_APPROVERS:-}
+      TG_EMAIL_SMTP_USER: ${TG_EMAIL_SMTP_USER:-}
+      TG_EMAIL_SMTP_TOKEN_REF: ${TG_EMAIL_SMTP_TOKEN_REF:-${EMAIL_SMTP_PASSWORD:+env:EMAIL_SMTP_PASSWORD}}
+      EMAIL_SMTP_PASSWORD: ${EMAIL_SMTP_PASSWORD:-}
+      # Twilio (SMS / voice)
+      TG_TWILIO_URL: ${TG_TWILIO_URL:-}
+      TG_TWILIO_SID: ${TG_TWILIO_SID:-}
+      TG_TWILIO_FROM: ${TG_TWILIO_FROM:-}
+      TG_TWILIO_TO: ${TG_TWILIO_TO:-}
+      TG_TWILIO_TOKEN_REF: ${TG_TWILIO_TOKEN_REF:-${TWILIO_TOKEN:+env:TWILIO_TOKEN}}
+      TWILIO_TOKEN: ${TWILIO_TOKEN:-}
+      # Mattermost
+      TG_MATTERMOST_URL: ${TG_MATTERMOST_URL:-}
+      TG_MATTERMOST_TOKEN_REF: ${TG_MATTERMOST_TOKEN_REF:-${MATTERMOST_TOKEN:+env:MATTERMOST_TOKEN}}
+      MATTERMOST_TOKEN: ${MATTERMOST_TOKEN:-}
+      TG_MATTERMOST_APPROVERS: ${TG_MATTERMOST_APPROVERS:-}
+      TG_MATTERMOST_CHANNELS: ${TG_MATTERMOST_CHANNELS:-}
+      # --- Actuation Regime Engine (spec/017, TG-110) — WIRED but INERT (mutation stays OFF). ---
+      # Config-not-code regime rules over the SHARED estate object-model, JSON:
+      # [{"id":"awx-edge","selector":"group:awx-managed","regime":"awx-job"}]. Absent ⇒ every target takes
+      # the default lane. Selecting/launching through a lane happens only post-flip (mode stays Shadow).
+      TG_REGIME_RULES: ${TG_REGIME_RULES:-}
+      # The default lane for an UNMATCHED target: native-ssh (the existing SSH effect leaf) or none (refuse).
+      TG_REGIME_DEFAULT_LANE: ${TG_REGIME_DEFAULT_LANE:-native-ssh}
+      # AWX-job lane (the first non-SSH mutating channel). ABSENT base URL / launch token ⇒ the lane keeps its
+      # FAIL-CLOSED pendingActuator (it can only refuse). The launch token is DISTINCT from the sensor token.
+      TG_AWXJOB_BASE_URL: ${TG_AWXJOB_BASE_URL:-}
+      TG_AWXJOB_LAUNCH_TOKEN_REF: ${TG_AWXJOB_LAUNCH_TOKEN_REF:-}
+      TG_AWXJOB_CA: ${TG_AWXJOB_CA:-}
+      # Operator template allowlist + op-class bindings + typed extra_vars schema, JSON:
+      # [{"template_id":42,"op_class":"restart-service","extra_vars":{"target_host":"string"}}]. Empty ⇒ the
+      # actuator is read-only (it can only refuse); a template not on the allowlist is never launchable.
+      TG_AWXJOB_ALLOWLIST: ${TG_AWXJOB_ALLOWLIST:-}
+      # Proxmox VE hypervisor guest-lifecycle lane (start-guest). The proxmox effect leaf is wired ONLY with a
+      # PVE API base URL (https://{host}:8006/api2/json/) AND a PVEAPIToken secret ref; ABSENT ⇒ the lane is
+      # fail-closed pendingActuator (refuse only). Guests are allowlisted (comma/space-separated names);
+      # empty ⇒ default-deny (no guest actuatable). _INSECURE opt-in disables TLS verify for the internal
+      # self-signed :8006 cert. Lifecycle floor (reboot/shutdown/reset/destroy) is non-configurable in-code.
+      TG_PROXMOX_BASE_URL: ${TG_PROXMOX_BASE_URL:-}
+      TG_PROXMOX_TOKEN_REF: ${TG_PROXMOX_TOKEN_REF:-}
+      TG_PROXMOX_ALLOWED_GUESTS: ${TG_PROXMOX_ALLOWED_GUESTS:-}
+      TG_PROXMOX_INSECURE: ${TG_PROXMOX_INSECURE:-}
+      # TG-native guest-liveness detector (A1 detection latency): opt-in poll interval (e.g. 45s) that mints a
+      # triage on an observed running→stopped transition of a watched guest, beating LibreNMS's ~6–11min
+      # device-down push. Unset ⇒ OFF. SITE = estate label.
+      #
+      # It reads with the ESTATE READ pair (TG_PVE_URL + TG_PVE_TOKEN_REF, above), NOT the actuation lane's
+      # write token — TG-350. It used to read TG_PROXMOX_BASE_URL/TOKEN_REF/ALLOWED_GUESTS, which the
+      # credential plane split withholds from this triage worker, so on 2026-07-31 the detector silently lost
+      # its credential and delivered nothing for six days. The TG_PROXMOX_* pair is still the fallback for a
+      # `both`-plane worker, which is why those keys stay forwarded here.
+      #
+      # GUESTS is a fail-safe, not a filter: empty watches NOTHING, so a guest going down for maintenance
+      # never mints a triage. Watching is not healing — what TG may START is the actuation worker's own
+      # TG_ACTUATE_PROXMOX_ALLOWED_GUESTS, and the two lists are deliberately separate now.
+      TG_PVE_LIVENESS_POLL_INTERVAL: ${TG_PVE_LIVENESS_POLL_INTERVAL:-}
+      # TG-315 authlog collector — DARK BY DEFAULT. Empty means the loop does not run. Arming it opens an
+      # SSH session per host per tick against the syslog-ng trees, which is an operator's posture decision.
+      # TG_AUTHLOG_HOSTS is deliberately explicit: probed 2026-08-06 across all 126 monitored dc1 hosts,
+      # exactly 15 ship logs, and enumerating the tree instead would read every directory syslog-ng ever
+      # created — including the malformed hostnames it mints — and triage on them.
+      TG_AUTHLOG_POLL_INTERVAL: ${TG_AUTHLOG_POLL_INTERVAL:-}
+      TG_AUTHLOG_HOSTS: ${TG_AUTHLOG_HOSTS:-}
+      TG_PVE_LIVENESS_SITE: ${TG_PVE_LIVENESS_SITE:-}
+      TG_PVE_LIVENESS_GUESTS: ${TG_PVE_LIVENESS_GUESTS:-}
+      # GLOBAL deferred-verify poll cron (armed only WITH an AWX launch client): poll interval + the bound
+      # within which a launched job must reach a terminal or be recorded unverified. Inert at Shadow (empty queue).
+      TG_REGIME_VERIFY_INTERVAL: ${TG_REGIME_VERIFY_INTERVAL:-1m}
+      TG_REGIME_VERIFY_BOUND: ${TG_REGIME_VERIFY_BOUND:-30m}
+      # --- gitops-mr SENSOR (TG-122 slice 2). The allowlist is a JSON array of per-repo policies
+      # ({repo_id,base_url,project_path,target_branch,branch_prefix,token_ref,op_class}) — it CARRIES
+      # api-scoped GitLab PAT refs, so it is plane-scoped like every actuation credential. Empty = no
+      # poller: a reserved gitops-mr launch resolves `unverified` at its bound (fail-safe). The poller
+      # never emits `successful` — merge is not convergence (see modules/actuation/gitopsmr/poller.go);
+      # the per-lane bound reflects a human review cycle, not awx-job minutes. ---
+      TG_GITOPSMR_ALLOWLIST: ${TG_GITOPSMR_ALLOWLIST:-}
+      TG_GITOPSMR_VERIFY_BOUND: ${TG_GITOPSMR_VERIFY_BOUND:-72h}
+      # Read-only playbooks-as-knowledge lane (T-017-5): pulls AWX runbooks READ-ONLY into the corpus. The
+      # sensor token is READ-ONLY + DISTINCT from the launch token. Disabled unless all four are set.
+      TG_AWXPLAYBOOKS_BASE_URL: ${TG_AWXPLAYBOOKS_BASE_URL:-}
+      TG_AWXPLAYBOOKS_SENSOR_TOKEN_REF: ${TG_AWXPLAYBOOKS_SENSOR_TOKEN_REF:-}
+      TG_AWXPLAYBOOKS_CA: ${TG_AWXPLAYBOOKS_CA:-}
+      TG_AWXPLAYBOOKS_CORPUS: ${TG_AWXPLAYBOOKS_CORPUS:-}
+      TG_AWXPLAYBOOKS_INTERVAL: ${TG_AWXPLAYBOOKS_INTERVAL:-}
+    # Read-only secret material for the syslog-ng SSH reads: deploy/secrets/ on the box (gitignored —
+    # only its .gitignore is committed) mounts at /secrets read-only; .env references file:/secrets/….
+    # The knowledge mount is READ-WRITE here: the worker MAINTAINS the corpus (lessons merge + refresh);
+    # the grounder mounts the same dir read-only to serve it as the wiki.
+    volumes:
+      - ./secrets:/secrets:ro
+      - ./knowledge:/knowledge
+    depends_on:
+      postgres:
+        condition: service_healthy
+      litellm:
+        condition: service_started
+      temporal:
+        condition: service_started
+      secrets-perms:
+        condition: service_completed_successfully
+    # TG-160 EGRESS: this is the service the ticket's enumeration is about. It legitimately reaches OpenBao,
+    # the estate (LibreNMS, NetBox, PVE, AWX/Semaphore, SSH hosts, journald hosts), the trackers (YouTrack,
+    # Jira, GitHub, ServiceNow), the notifiers (Matrix, Slack, Teams, Mattermost, Twilio, e-mail), the
+    # observability exporters (Langfuse, OpenObserve, healthchecks.io) and LDAPS — every one of them
+    # declared as an endpoint env above. It publishes NO port (prometheus scrapes worker:8444 over the
+    # backplane), so it gets no frontdoor.
+    #
+    # It is also the process that runs the LLM agent over UNTRUSTED alert/syslog/host content, so it is the
+    # one container where "it can reach the internet" is the actual threat rather than a convenience. The
+    # network tier cannot narrow that further without breaking triage; what narrows it is the per-destination
+    # meter this same change installs in-process (core/egress, wired at cmd/worker/main.go), which names any
+    # destination outside the declared set. Network tier = coarse and unbypassable; meter = precise and
+    # bypassable. Both, deliberately.
+    networks:
+      tg-backplane: {}
+      tg-egress:
+        # Pinned (TG-381): the host-side TG-EGRESS-LAN chain exempts this container from the tier's
+        # RFC1918 default-drop BY SOURCE — its estate reach is wildcard SSH, not enumerable destinations.
+        ipv4_address: 172.23.0.10
+
+  # ===================================================================================================
+  # --- THE ACTUATION-PLANE WORKER (TG-153). OPT-IN. NOT STARTED BY DEFAULT. ---
+  # ===================================================================================================
+  #
+  # WHY IT EXISTS. Until 2026-08-04 the single `worker` above did two things in one address space: it ran
+  # the LLM triage agent over UNTRUSTED alert / syslog / host content, and it held the credential that
+  # MUTATES the estate (TG_ACTUATION_SSH_KEY). A compromise of the first yields the second — the chain the
+  # July-2026 HuggingFace intrusion walked. OpenBao already refuses each plane the other's credentials
+  # (policies tg-triage-ro / tg-actuate-ro, AppRoles tg-triage / tg-actuate, verified live 2026-08-04);
+  # this service is what gives that substrate split two processes to bind to.
+  #
+  # THE DEFAULT STACK IS UNCHANGED. This service sits behind the `split-planes` compose profile, so a plain
+  # `docker compose up -d` does not start it and `worker` keeps running TG_CREDENTIAL_PLANE=both — the
+  # pre-TG-153 posture, byte for byte. A profile rather than a commented-out block on purpose: commented
+  # YAML is never parsed, never validated and rots silently, whereas this is checked by `docker compose
+  # config` and by deploy/*_test.go on every CI run while still being inert until asked for.
+  #
+  # TO SPLIT (both steps, or you have not split anything):
+  #   1. In .env set the TRIAGE worker's plane and REMOVE every actuation variable from it:
+  #        TG_CREDENTIAL_PLANE=triage
+  #        TG_OPENBAO_ROLE_ID_REF=file:/secrets/tg-triage-role-id
+  #        TG_OPENBAO_SECRET_ID_REF=file:/secrets/tg-triage-secret-id
+  #        TG_OPENBAO_AUTH_METHOD=approle
+  #        # and unset: TG_ACTUATION_SSH_KEY, TG_ACTUATION_SSH_HOST, TG_ACTUATION_SSH_IDENTITY,
+  #        #            TG_ACTUATION_SSH_KNOWN_HOSTS, TG_ACTUATION_ALLOWED_UNITS,
+  #        #            TG_ACTUATION_ALLOWED_CONTAINERS, TG_ACTUATION_SSH_PER_TARGET,
+  #        #            TG_PROXMOX_TOKEN_REF, TG_AWXJOB_LAUNCH_TOKEN_REF
+  #      The triage worker REFUSES TO BOOT if any of those is still set — the split is asserted, not assumed.
+  #   2. Set the actuation worker's own AppRole (the TG_ACTUATE_* variables below) and bring it up:
+  #        docker compose --profile split-planes up -d worker-actuate
+  #   3. SPLIT THE DATABASE TOO (TG-164), or step 1 has bounded what the triage worker can FETCH and
+  #      nothing about what it can WRITE. Both workers connected as tg_runtime until this step, so a
+  #      compromised triage worker could still forge action_verdict / action_execution /
+  #      interceptor_gate_verdict / policy_decision — the record of the actuation it could not perform.
+  #        TG_TRIAGE_PASSWORD / TG_ACTUATE_PASSWORD   (creates the roles at FIRST postgres init only;
+  #                                                    on an existing DB see postgres-init/01-plane-roles.sh)
+  #        TG_DB_DSN_TRIAGE  on `worker`
+  #        TG_DB_DSN_ACTUATE on `worker-actuate`
+  #      Each worker's boot log then names the role it authenticated as and whether that role can still
+  #      write its off-plane tables — "LIVE EXPOSURE" until it cannot.
+  #
+  # WHAT EACH PLANE'S COMPROMISE THEN YIELDS is written down in docs/THREAT-MODEL.md §5 — read it before
+  # relying on this, because the bound is real but it is not "nothing".
+  worker-actuate:
+    profiles: ["split-planes"] # inert unless `--profile split-planes` / COMPOSE_PROFILES names it
+    image: ${TG_WORKER_IMAGE:-registry-github.com/territory-grounder/grounder/worker}:${TG_TAG:-latest}
+    # TG-170: the ACTUATION plane gets the same bound as the triage plane. The ticket names worker,
+    # grounder and litellm; worker-actuate is the same binary on the split-planes profile and was not
+    # listed. Leaving it unbounded while bounding triage would repeat TG-330 exactly — the brake fitted to
+    # the plane that cannot mutate the estate and missing from the one that can.
+    #
+    # Probe port is :8445, its own admin listener (TG_WORKER_ADMIN_ADDR), not the triage worker's :8444 —
+    # the binary reads that variable itself, so the same -healthcheck entry point resolves the right one.
+    deploy:
+      resources:
+        limits: {cpus: "1", memory: 512M}
+        reservations: {cpus: "0.1", memory: 128M}
+    healthcheck:
+      test: ["CMD", "/app", "-healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    # Identical hardening to `worker` (deploy/hardening_parity_test.go asserts both, and asserts that a new
+    # service cannot arrive without declaring a posture).
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        BIN: worker
+    environment:
+      # ★ THE ACTUATION PLANE READS TG_ACTUATE_*-PREFIXED VARIABLES (TG-153).
+      #
+      # Found by actually deploying the split on one host. Both worker services interpolate from the SAME
+      # .env, so the runbook step "remove TG_ACTUATION_* from .env" (required, because the triage worker
+      # REFUSES TO BOOT while an actuation ref is in its environment) also emptied them here — and the
+      # actuation worker came up with no credentials at all. The split was undeployable on a single host,
+      # which is the only shape most installations have.
+      #
+      # The prefix is the convention this block already used for TG_ACTUATE_OPENBAO_*: the two planes are
+      # two identities and two configurations that happen to share a file, so they need distinct names. An
+      # operator sets TG_ACTUATE_ACTUATION_SSH_KEY and deletes TG_ACTUATION_SSH_KEY; the triage worker then
+      # cannot see a value that does not exist, which is a stronger guarantee than asking it not to look.
+      # ★ THE PLANE. This process polls ONLY tg.actuate, registers ONLY the estate-mutating activity, and
+      # constructs NO untrusted-content reader (no agent investigation tools, no alert ingest poller). It
+      # REFUSES TO BOOT if it is handed a read-triage reference.
+      TG_CREDENTIAL_PLANE: actuation
+      TG_CONFIG_IGNORE_STORE: ${TG_CONFIG_IGNORE_STORE:-}
+      # TG-506: the actuation plane runs the SAME AuditedEngine as the interceptor's policy decider, so it must
+      # observe the same admin engine-toggle override (read from the shared durable policy_engine_toggle row).
+      # Default dormant; the never-auto floor (INV-09) clamps regardless of the toggle.
+      TG_POLICY_ENGINE_TOGGLE: ${TG_POLICY_ENGINE_TOGGLE:-}
+      # ★ ITS OWN OpenBao IDENTITY — the whole point. `tg-actuate` is bound to policy tg-actuate-ro, which
+      # can read ONLY tg/actuator and tg/proxmox and is DENIED everything the triage plane reads. Give this
+      # service the tg-actuate AppRole and the triage worker the tg-triage AppRole; sharing one identity
+      # between them re-creates the gap in the substrate while the processes look split.
+      TG_OPENBAO_ADDR: ${TG_OPENBAO_ADDR:-}
+      TG_OPENBAO_CA: ${TG_OPENBAO_CA:-}
+      TG_OPENBAO_AUTH_METHOD: ${TG_ACTUATE_OPENBAO_AUTH_METHOD:-approle}
+      TG_OPENBAO_ROLE_ID_REF: ${TG_ACTUATE_OPENBAO_ROLE_ID_REF:-}
+      TG_OPENBAO_SECRET_ID_REF: ${TG_ACTUATE_OPENBAO_SECRET_ID_REF:-}
+      TG_OPENBAO_KV_MOUNT: ${TG_OPENBAO_KV_MOUNT:-}
+      TG_OPENBAO_KV_PREFIX: ${TG_OPENBAO_KV_PREFIX:-}
+      # --- Blast-radius PREDICTION TUNING. Read from the SAME env keys the triage worker reads, because
+      # both planes run the same binary and the same core/predict code — but until 2026-08-06 these were
+      # declared on the `worker` block ONLY, so the two planes computed DIFFERENT blast radii for the same
+      # incident. Measured live on that date:
+      #
+      #   worker          TG_PREDICT_MIN_CONFIDENCE=0.70   TG_BLAST_RADIUS_WIDE_THRESHOLD=8
+      #   worker-actuate  (both absent -> code defaults 0 and 8)
+      #
+      # MinConfidence 0 keeps EVERY impact regardless of path-product confidence; 0.70 drops the
+      # low-confidence far/learned edges. So the plane that gates a proposal and the plane that executes it
+      # were reasoning over different widths. The direction happens to be conservative (the actuation plane
+      # predicted MORE hosts, and for blast radius over-prediction is the cautious side) — but a safety
+      # parameter that differs by plane BY ACCIDENT is not a posture, and nothing recorded an intent either
+      # way. One operator setting now governs both, which is the convention every non-credential key here
+      # already follows.
+      TG_PREDICT_MIN_CONFIDENCE: ${TG_PREDICT_MIN_CONFIDENCE:-}
+      TG_BLAST_RADIUS_WIDE_THRESHOLD: ${TG_BLAST_RADIUS_WIDE_THRESHOLD:-8}
+      # ESTATE-SNAPSHOT RETENTION (TG-355) — the SAME keys the triage worker reads, because both planes run
+      # the same binary and the same sweep. Forwarded here so one operator setting governs both: a key set on
+      # one block only is how TG_PREDICT_MIN_CONFIDENCE ended up 0.70 on the gating plane and unset on the
+      # executing one, which had the two computing different blast radii for the same incident.
+      TG_ESTATE_SNAPSHOT_KEEP_PER_PLANE: ${TG_ESTATE_SNAPSHOT_KEEP_PER_PLANE:-}
+      TG_ESTATE_SNAPSHOT_REAP_INTERVAL: ${TG_ESTATE_SNAPSHOT_REAP_INTERVAL:-}
+      # ATTRIBUTION RULESET (TG-309). THIS is the plane that ACTS, and it had no attribution config at
+      # all — measured live 2026-08-07 on the running actuation worker:
+      #   attribution: TG_ATTRIBUTION_CONFIG unset — using the generic embedded default
+      #   attribution: carve-out host coverage 0/20 — NOT covered: <every allowlisted guest>
+      #     "A harness cycle on an uncovered guest resolves to an unadjudicated contradiction and
+      #      escalates to a human"
+      # while the TRIAGE worker — which performs no heals — held the operator ruleset and both carve-outs.
+      # The config was on the plane that cannot act and absent from the plane that does.
+      #
+      # No new secret and no new mount: this block already mounts ./secrets:/secrets:ro, so the file the
+      # triage worker reads is ALREADY present here and was simply never pointed at.
+      TG_ATTRIBUTION_CONFIG: ${TG_ATTRIBUTION_CONFIG:-}
+      # RELAY MAX AGE (TG-346): THIS is the plane that reads it — the snapshot relay is what lets this
+      # plane's mutation gate refuse over the triage plane's whole persisted graph instead of the 17 edges
+      # its own credentials can see, without ever holding a read-triage secret.
+      TG_ESTATE_SNAPSHOT_RELAY_MAX_AGE: ${TG_ESTATE_SNAPSHOT_RELAY_MAX_AGE:-}
+      # COST / SPEND GUARD (TG-48) — the SAME keys the triage worker reads. This plane forwarded NONE of
+      # them, so it ran with the model gateway un-wrapped while triage metered: `tg_cost_metering` read 1
+      # on worker and 0 on worker-actuate. The cost store is explicitly cross-process — the boot line says
+      # "backed by the DURABLE cross-process store (cost_accrual + cost_breaker_state); a trip
+      # force-Shadows every sibling worker" — so a plane that cannot see the config never accrues its
+      # share, and TG_COST_PER_ACTUATION_USD is about ACTUATION cost on the plane that actuates.
+      # Same defect as TG_PREDICT_MIN_CONFIDENCE being set on one block only (!1085).
+      TG_COST_DAILY_BUDGET_USD: ${TG_COST_DAILY_BUDGET_USD:-0}
+      TG_COST_SESSION_CEILING_USD: ${TG_COST_SESSION_CEILING_USD:-0}
+      TG_COST_DEFAULT_RATE_PER_1K: ${TG_COST_DEFAULT_RATE_PER_1K:-0}
+      TG_COST_PER_ACTUATION_USD: ${TG_COST_PER_ACTUATION_USD:-0}
+      TG_COST_RATE_fast_PER_1K: ${TG_COST_RATE_fast_PER_1K:-0}
+      TG_COST_RATE_primary_PER_1K: ${TG_COST_RATE_primary_PER_1K:-0}
+      # --- Actuation credentials. THESE LIVE HERE AND NOWHERE ELSE once the split is on. ---
+      TG_ACTUATION_SSH_HOST: ${TG_ACTUATE_ACTUATION_SSH_HOST:-}
+      TG_ACTUATION_SSH_IDENTITY: ${TG_ACTUATE_ACTUATION_SSH_IDENTITY:-}
+      TG_ACTUATION_SSH_KNOWN_HOSTS: ${TG_ACTUATE_ACTUATION_SSH_KNOWN_HOSTS:-}
+      TG_ACTUATION_SSH_KEY: ${TG_ACTUATE_ACTUATION_SSH_KEY:-}
+      # TG-423: ssh CA/signed-cert auth on the ACTUATION plane (these live here once the split is on). EMPTY =
+      # OFF ⇒ the static key path, unchanged. See the worker service block for the full contract; arming still
+      # needs the estate step (the CA into each target's TrustedUserCAKeys).
+      TG_SSHCA_ADDR: ${TG_ACTUATE_SSHCA_ADDR:-}
+      TG_SSHCA_MOUNT: ${TG_ACTUATE_SSHCA_MOUNT:-}
+      TG_SSHCA_ROLE: ${TG_ACTUATE_SSHCA_ROLE:-}
+      TG_SSHCA_TOKEN_REF: ${TG_ACTUATE_SSHCA_TOKEN_REF:-}
+      TG_SSHCA_CA: ${TG_ACTUATE_SSHCA_CA:-}
+      TG_ACTUATION_SSH_USER: ${TG_ACTUATE_ACTUATION_SSH_USER:-root}
+      TG_ACTUATION_SSH_PER_TARGET: ${TG_ACTUATE_ACTUATION_SSH_PER_TARGET:-}
+      TG_ACTUATION_ALLOWED_UNITS: ${TG_ACTUATE_ACTUATION_ALLOWED_UNITS:-}
+      TG_ACTUATION_ALLOWED_CONTAINERS: ${TG_ACTUATE_ACTUATION_ALLOWED_CONTAINERS:-}
+      TG_PROXMOX_BASE_URL: ${TG_ACTUATE_PROXMOX_BASE_URL:-}
+      TG_PROXMOX_TOKEN_REF: ${TG_ACTUATE_PROXMOX_TOKEN_REF:-}
+      TG_PROXMOX_ALLOWED_GUESTS: ${TG_ACTUATE_PROXMOX_ALLOWED_GUESTS:-}
+      TG_PROXMOX_INSECURE: ${TG_ACTUATE_PROXMOX_INSECURE:-}
+      TG_AWXJOB_BASE_URL: ${TG_ACTUATE_AWXJOB_BASE_URL:-}
+      TG_AWXJOB_LAUNCH_TOKEN_REF: ${TG_ACTUATE_AWXJOB_LAUNCH_TOKEN_REF:-}
+      TG_AWXJOB_CA: ${TG_ACTUATE_AWXJOB_CA:-}
+      TG_AWXJOB_ALLOWLIST: ${TG_ACTUATE_AWXJOB_ALLOWLIST:-}
+      # gitops-mr sensor on the ACTUATE plane (TG-122): same TG_ACTUATE_ host-env remap as awxjob above.
+      TG_GITOPSMR_ALLOWLIST: ${TG_ACTUATE_GITOPSMR_ALLOWLIST:-}
+      # TG-555: the gitops-mr reconcile-convergence reader (Argo CD Application status) — the ACTUATE plane
+      # builds the poller, so its read-only k8s SA token/CA/API are remapped here from the TG_ACTUATE_ host env.
+      TG_K8S_CONVERGENCE_API: ${TG_ACTUATE_K8S_CONVERGENCE_API:-}
+      TG_K8S_CONVERGENCE_CA: ${TG_ACTUATE_K8S_CONVERGENCE_CA:-}
+      TG_K8S_CONVERGENCE_NS: ${TG_ACTUATE_K8S_CONVERGENCE_NS:-argocd}
+      TG_K8S_CONVERGENCE_TOKEN: ${TG_ACTUATE_K8S_CONVERGENCE_TOKEN:-}
+      # TG-122: the arm flip and the op-class->propose map belong HERE, on the plane that builds the
+      # actuator and runs the effect. They were forwarded only to `worker`, whose TRIAGE plane has the
+      # allowlist WITHHELD (credential_plane.go actuationPlaneEnvKeys) — so the plane with the allowlist
+      # had no arm flag and the plane with the arm flag had no allowlist, and the lane could not be armed
+      # on a split deployment at all, in either process.
+      TG_GITOPSMR_ARM: ${TG_GITOPSMR_ARM:-}
+      TG_GITOPSMR_PROPOSE_MAP: ${TG_GITOPSMR_PROPOSE_MAP:-}
+      TG_GITOPSMR_VERIFY_BOUND: ${TG_ACTUATE_GITOPSMR_VERIFY_BOUND:-72h}
+      TG_REGIME_RULES: ${TG_REGIME_RULES:-}
+      TG_REGIME_DEFAULT_LANE: ${TG_REGIME_DEFAULT_LANE:-}
+      TG_REGIME_VERIFY_INTERVAL: ${TG_REGIME_VERIFY_INTERVAL:-1m}
+      TG_REGIME_VERIFY_BOUND: ${TG_REGIME_VERIFY_BOUND:-30m}
+      # --- Shared substrate. The mutation gate, the sealed store and the ledger are the SAME ones the
+      # triage worker uses: the split bounds which credentials each process holds, it does NOT create a
+      # second, weaker governance path. The mode chokepoint still fails closed to Shadow here. ---
+      TG_RUNTIME_DSN: ${TG_RUNTIME_DSN:?set in .env}
+      TG_DB_DSN: ${TG_DB_DSN:-${TG_RUNTIME_DSN}}
+      # ★ THE PLANE-SCOPED DB IDENTITY (TG-164). Until this existed, "the SAME ledger and sealed store" above
+      # also meant the same DATABASE ROLE — so the triage worker, which reads untrusted content, could write
+      # action_verdict / action_execution / interceptor_gate_verdict / policy_decision: it could forge the
+      # record of the actuation only THIS process can perform. Set TG_DB_DSN_ACTUATE (and TG_DB_DSN_TRIAGE on
+      # `worker`) to give each plane its own role; unset, both fall back to TG_DB_DSN and the boot log says
+      # the database half is not in force.
+      TG_DB_DSN_ACTUATE: ${TG_DB_DSN_ACTUATE:-}
+      TG_TEMPORAL_HOSTPORT: temporal:7233
+      TG_SEAL_KEY: ${TG_SEAL_KEY:-}
+      TG_SEAL_KEY_REF: ${TG_SEAL_KEY_REF:-env:TG_SEAL_KEY}
+      TG_SEAL_TRANSIT_KEY: ${TG_SEAL_TRANSIT_KEY:-}
+      TG_SEAL_TRANSIT_ADDR: ${TG_SEAL_TRANSIT_ADDR:-}
+      TG_SEAL_TRANSIT_TOKEN_REF: ${TG_SEAL_TRANSIT_TOKEN_REF:-}
+      TG_SEAL_TRANSIT_MOUNT: ${TG_SEAL_TRANSIT_MOUNT:-}
+      TG_SECRET_POLICY: ${TG_SECRET_POLICY:-off}
+      TG_MUTATION_BREAKER_THRESHOLD: ${TG_MUTATION_BREAKER_THRESHOLD:-1}
+      TG_MODE_TRANSITION_OPERATORS: ${TG_MODE_TRANSITION_OPERATORS:-}
+      # The model gateway: still needed (the post-execution verifier and the ledger writer share the worker
+      # binary), but this process registers no agent toolset, so no untrusted content reaches a prompt here.
+      TG_LITELLM_URL: http://litellm:4000
+      TG_LITELLM_KEY_REF: ${TG_LITELLM_KEY_REF:-env:LITELLM_MASTER_KEY}
+      # TG-81 b3: verdict-ledger Ed25519 provenance (both dormant when blank; verdictsig_wire.go)
+      TG_VERDICT_SIGNING_SEED_REF: ${TG_VERDICT_SIGNING_SEED_REF:-}
+      TG_VERDICT_PUBLIC_KEY: ${TG_VERDICT_PUBLIC_KEY:-}
+      # TG-80 P2-6: the KILLED terminal flip (blank = OFF, jailbreak hits keep polling; arming is eval-gated)
+      TG_SCREEN_KILL_TERMINAL: ${TG_SCREEN_KILL_TERMINAL:-}
+      # spec/016 REQ-1604 T-016-5: gate 4d2 authn-compose (blank = DARK, the gate row says so; 1/true =
+      # every policy-authorized target's identity must resolve via the audited resolver before execute)
+      TG_AUTHN_COMPOSE: ${TG_AUTHN_COMPOSE:-}
+      # spec/024 T-024-6: the HOMELAB-tier vw: scheme (Vaultwarden). Blank addr = substrate OFF and every
+      # vw: reference fails closed; the two refs are REFERENCES to the vault account's own credentials.
+      TG_VAULTWARDEN_ADDR: ${TG_VAULTWARDEN_ADDR:-}
+      TG_VAULTWARDEN_EMAIL_REF: ${TG_VAULTWARDEN_EMAIL_REF:-}
+      TG_VAULTWARDEN_PASSWORD_REF: ${TG_VAULTWARDEN_PASSWORD_REF:-}
+      # TG-85 write slice 4: the Cisco WRITE lane. Blank devices = unconfigured (nothing constructed);
+      # _ARM is the separate owner arming flip. Both are read in worker_actuation_wire.go.
+      TG_CISCO_WRITE_DEVICES: ${TG_CISCO_WRITE_DEVICES:-}
+      TG_CISCO_READ_DEVICES: ${TG_CISCO_READ_DEVICES:-}
+      TG_CISCO_WRITE_ARM: ${TG_CISCO_WRITE_ARM:-}
+      # TG-180: the observability fault-injection PROBE harness. Every key blank = the loop never starts
+      # (the boot line says "not configured"); ENABLED is a separate arm on top of a configured pool.
+      TG_OBSERVE_PROBE_ENABLED: ${TG_OBSERVE_PROBE_ENABLED:-}
+      TG_OBSERVE_PROBE_POOL_FILE: ${TG_OBSERVE_PROBE_POOL_FILE:-}
+      TG_OBSERVE_PROBE_SNAP_NODE: ${TG_OBSERVE_PROBE_SNAP_NODE:-}
+      TG_OBSERVE_PROBE_CLASSES: ${TG_OBSERVE_PROBE_CLASSES:-}
+      TG_OBSERVE_PROBE_CADENCE: ${TG_OBSERVE_PROBE_CADENCE:-}
+      TG_OBSERVE_PROBE_RESTORE_AFTER: ${TG_OBSERVE_PROBE_RESTORE_AFTER:-}
+      TG_OBSERVE_PROBE_SSH_KEY: ${TG_OBSERVE_PROBE_SSH_KEY:-}
+      TG_OBSERVE_PROBE_SSH_TIMEOUT: ${TG_OBSERVE_PROBE_SSH_TIMEOUT:-}
+      TG_OBSERVE_PROBE_WINDOW: ${TG_OBSERVE_PROBE_WINDOW:-}
+      # spec/024 T-024-5: the HOMELAB-tier passbolt: scheme. Blank addr = substrate OFF; the key ref
+      # points at the robot's ASCII-armored OpenPGP PRIVATE key, which is this tier's secret-zero.
+      TG_PASSBOLT_ADDR: ${TG_PASSBOLT_ADDR:-}
+      TG_PASSBOLT_KEY_REF: ${TG_PASSBOLT_KEY_REF:-}
+      TG_PASSBOLT_PASSPHRASE_REF: ${TG_PASSBOLT_PASSPHRASE_REF:-}
+      # vSphere estate source (TG-91): DARK unless TG_VSPHERE_URL is set. The password is the only sealed
+      # value (TG_VSPHERE_TOKEN_REF); _INSECURE opts INTO skipping TLS verification and defaults off.
+      TG_VSPHERE_URL: ${TG_VSPHERE_URL:-}
+      TG_VSPHERE_USER: ${TG_VSPHERE_USER:-}
+      TG_VSPHERE_TOKEN_REF: ${TG_VSPHERE_TOKEN_REF:-}
+      TG_VSPHERE_INSECURE: ${TG_VSPHERE_INSECURE:-}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      # A DISTINCT admin port: two workers on one host cannot both own :8444, and /halt must stay reachable
+      # for THIS process — it is the one that can actuate, so it is the one whose kill-switch matters most.
+      TG_WORKER_ADMIN_ADDR: ":8445"
+      TG_ADMIN_TOKEN_REF: ${TG_ADMIN_TOKEN_REF:-env:TG_ADMIN_TOKEN}
+      TG_ADMIN_TOKEN: ${TG_ADMIN_TOKEN:-}
+      # The outbound meter (TG-160), same binary and same knobs as the triage worker above. Present here
+      # for parity, deliberately: a deployment that meters one plane and not the other ends up with two
+      # different outbound postures for reasons nobody intended — and THIS is the plane holding the
+      # estate-mutating credential, so it is the one whose destinations matter most.
+      # TG-336: the dead-man on TG's own input. INTERVAL is how often the intake liveness is re-read;
+      # WINDOW is the baseline a source's silence is judged against — a source that alerts weekly is not
+      # broken, one that delivered 500 alerts this week and nothing today is the estate going deaf.
+      TG_INGEST_FRESHNESS_INTERVAL: ${TG_INGEST_FRESHNESS_INTERVAL:-2m}
+      # How often TG-302's premise is re-measured: the count of credential-shaped rows in
+      # agent_step_evidence, which that decision assumed to be zero (TG-345). Counts only — never a
+      # payload — so the watcher cannot itself become a way to read one.
+      TG_EVIDENCE_SHAPE_INTERVAL: ${TG_EVIDENCE_SHAPE_INTERVAL:-15m}
+      TG_LEDGER_SHAPE_INTERVAL: ${TG_LEDGER_SHAPE_INTERVAL:-}
+      TG_LOOP_CLOSURE_INTERVAL: ${TG_LOOP_CLOSURE_INTERVAL:-}
+      TG_CATEGORY_COVERAGE_INTERVAL: ${TG_CATEGORY_COVERAGE_INTERVAL:-}
+      TG_PREDICTION_WIDTH_INTERVAL: ${TG_PREDICTION_WIDTH_INTERVAL:-}
+      TG_INGEST_FRESHNESS_WINDOW: ${TG_INGEST_FRESHNESS_WINDOW:-168h}
+      # TG-173: how often the HUMAN APPROVAL QUEUE's depth is re-read. Faster than the intake
+      # dead-man because a flood of the operator builds in minutes, not hours.
+      TG_POLL_QUEUE_INTERVAL: ${TG_POLL_QUEUE_INTERVAL:-30s}
+      # TG-344: how often TG asks each source what it currently HAS, so the arrived-count has a
+      # denominator. A quiet estate and a broken connector published identically without it.
+      TG_UPSTREAM_PROBE_INTERVAL: ${TG_UPSTREAM_PROBE_INTERVAL:-2m}
+      TG_EGRESS_ALLOW: ${TG_EGRESS_ALLOW:-}
+      # ENFORCE, matching what production has been running since 2026-08-04. The committed default was
+      # `meter` while the box ran `enforce` from its own .env, so a clean redeploy would have silently
+      # dropped the control back to counting (TG-324). Safe as a default because cmd/worker refuses to
+      # enforce against an EMPTY allowlist and falls back to meter with a loud log — a deployment that
+      # declares no destinations degrades to counting rather than losing the network.
+      TG_EGRESS_MODE: ${TG_EGRESS_MODE:-enforce}
+      # The estate TOPOLOGY the mutation gate reasons over (host-match, blast radius). Inventory, not alert
+      # prose — see docs/THREAT-MODEL.md §5 for why this is read here and what it costs.
+      #
+      # A SEPARATE VALUE FROM THE TRIAGE PLANE'S, pointing at TOPOLOGY-SCOPED credentials (TG-337). The
+      # triage plane's tokens can read alert bodies and the event log, because triage legitimately does.
+      # This plane must not: it holds the estate's mutation keys, and withholding untrusted content from it
+      # is what stops IT from becoming the thing that gets popped. The scoped LibreNMS accounts hold
+      # device.view/viewAny/viewAll and nothing else — verified 2026-08-06 by the only check that means
+      # anything here, which is that the token is REFUSED where it should be:
+      #
+      #   /api/v0/devices       200 (126 devices dc1, 50 dc2 — a real graph, not an empty one)
+      #   /api/v0/alerts        403
+      #   /api/v0/logs/eventlog 403
+      #   /api/v0/rules         403
+      #   DELETE /api/v0/devices/<id>  403
+      #
+      # The empty-graph trap is why the device count is quoted beside the refusals. The first version of
+      # the scoped role passed every 403 and returned ZERO devices, because LibreNMS gates the device LIST
+      # on per-device visibility separately from the route policy. It looked perfectly scoped and would
+      # have blinded the blast-radius gate — swapping this ticket's risk for the one TG-331 just closed.
+      #
+      # FALLING BACK to the triage value is deliberate. Unset, this plane keeps its graph and loses only
+      # the credential scoping; empty, it loses the graph, and a mutation gate reasoning over an empty
+      # graph cannot refuse. The lesser failure is the unscoped token — but SILENCE about it is not
+      # acceptable, so the boot log names the fallback and compose_topology_scope_test.go pins the repo
+      # side. Do not "simplify" this back into one shared value.
+      TG_LIBRENMS_DEPLOYMENTS: ${TG_LIBRENMS_DEPLOYMENTS_TOPOLOGY:-${TG_LIBRENMS_DEPLOYMENTS:-}}
+      # THE NETBOX OBJECT GRAPH IS *NOT* WIRED HERE, AND THE ATTEMPT IS RECORDED (TG-346).
+      #
+      # tg_estate_edges shipped and read 392 on triage, 17 here, sources_failed 0 on both — the plane that
+      # starts and stops guests computing blast radius over 4% of the estate the triage plane models.
+      # credential_plane.go's exception names "NetBox/PVE object graph" in its own text, so adding NetBox
+      # here looked like applying the documented exception to a source it was written for.
+      #
+      # IT TOOK THE ACTUATION WORKER DOWN. The plane split is enforced on the SECRET REFERENCE, not on the
+      # env-key name, and secret/data/tg/netbox is classified read-triage:
+      #
+      #   credential plane split (REQ-2203, TG-153): this process declared TG_CREDENTIAL_PLANE=actuation
+      #   but was handed the READ-TRIAGE reference "bao:secret/data/tg/netbox#token" — the actuation
+      #   process must hold nothing beyond what mutates the estate, or a compromise of it also yields the
+      #   read plane
+      #
+      # The guard is right and it FAILS CLOSED, which is why this cost a restart rather than a silent
+      # widening of the plane split. TG_NETBOX_URL being absent from triagePlaneEnvKeys is not permission:
+      # that list names env KEYS, and the reference classifier is the authority.
+      #
+      # Closing the 17-vs-392 gap needs a credential this plane may legitimately hold — a NetBox token
+      # classified for the actuation plane, or a topology-scoped one on its own path, in the shape TG-337
+      # used for LibreNMS. It is not a compose line. Tracked on TG-346.
+      LIBRENMS_NL_TOKEN: ${LIBRENMS_NL_TOKEN:-}
+      LIBRENMS_GR_TOKEN: ${LIBRENMS_GR_TOKEN:-}
+      TG_LIBRENMS_INSECURE: ${TG_LIBRENMS_INSECURE:-}
+      TG_ESTATE_DECLARED_FILE: ${TG_ESTATE_DECLARED_FILE:-}
+      TG_ESTATE_REFRESH_INTERVAL: ${TG_ESTATE_REFRESH_INTERVAL:-5m}
+      TG_POSTURE_PUBLISH_INTERVAL: ${TG_POSTURE_PUBLISH_INTERVAL:-30s}
+      TG_KNOWLEDGE_FILE: ${TG_KNOWLEDGE_FILE:-/knowledge/corpus.maintained.json}
+      TG_KNOWLEDGE_SEED_FILE: ${TG_KNOWLEDGE_SEED_FILE:-/knowledge/corpus.seed.json}
+    # /secrets holds the actuation key material; /knowledge is READ-ONLY here — the triage worker is the
+    # single writer of the maintained corpus, and two writers would race the learning loop.
+    volumes:
+      - ./secrets:/secrets:ro
+      - ./knowledge:/knowledge:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+      secrets-perms:
+        condition: service_completed_successfully
+    # TG-160 EGRESS: the actuation plane reaches the estate to MUTATE it — SSH to the target hosts, the PVE
+    # API, the AWX job lane — plus OpenBao for its own AppRole. All off-host. It publishes no port (its
+    # /halt + /metrics live on :8445 inside the stack). It is behind the `split-planes` profile and is not
+    # started by default, which changes nothing about the declaration it owes: a service that is inert today
+    # is a service somebody turns on later, and this table exists because one arrived unexamined once.
+    networks:
+      tg-backplane: {}
+      tg-egress:
+        # Pinned (TG-381): source-exempt in the host-side TG-EGRESS-LAN chain, same as `worker` above.
+        ipv4_address: 172.23.0.11
+
+  # The operator console (spec/010): a read-only React SPA served by nginx, proxying /api to the grounder.
+  # Published on 8080 so http://<host>:8080 shows the console. The static bundle carries no secret; the API
+  # it calls stays auth-gated (an unauthenticated browser resolves to the console's restrictive state).
+  console:
+    image: ${TG_CONSOLE_IMAGE:-registry-github.com/territory-grounder/grounder/console}:${TG_TAG:-latest}
+    # Container hardening (TG-289 — the gap the first hardening pass inverted). The earlier pass (TG-153
+    # gap #9) hardened worker, grounder and litellm and left THIS service — the only one published on
+    # 0.0.0.0, i.e. the only one an unauthenticated host on the network can reach — at docker defaults:
+    # live `docker inspect` on dc1tg01 read RO=False CapDrop=None SecOpt=None with `root 1 nginx:
+    # master process`. So the internal services were constrained and the front door was not.
+    #
+    # Posture now matches worker/grounder exactly: non-root, ALL capabilities dropped (nothing added
+    # back — the listen port moved to 8080 inside the container so no CAP_NET_BIND_SERVICE is needed),
+    # no privilege escalation, read-only rootfs. The single writable path is a tmpfs at /var/cache/nginx,
+    # which holds nginx's proxy/client temp dirs AND its pid file (relocated there by the Dockerfile).
+    # The published port is unchanged (host 8080), so the HTTPS front and every operator URL still work.
+    # The image and this file ship from the same commit (TG_TAG), so the two never drift apart.
+    user: "101:101" # nginx uid/gid in nginx:1.27-alpine
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/var/cache/nginx"]
+    build:
+      context: ..
+      dockerfile: deploy/console/Dockerfile
+    depends_on:
+      - grounder
+    ports:
+      - "8080:8080" # operator console — reachable on the network at http://<host>:8080
+    # TG-160: nginx serves a static bundle and proxies /api to `grounder:8080` (deploy/console/nginx.conf,
+    # the file's only proxy_pass). It has no reason to reach anything off-box. It is ALSO the only service
+    # published on 0.0.0.0 — the one an unauthenticated host on the network can reach — so it is the most
+    # likely first foothold and the one where "compromised, and now it can dial out" matters most. Frontdoor:
+    # reachable, cannot reach out.
+    networks: [tg-backplane, tg-frontdoor]
+
+  # --- Phase-2 canary monitoring: Prometheus scrape + Alertmanager + Grafana. READ-ONLY: they scrape the
+  # grounder/worker /metrics; nothing here can mutate a managed estate. The load-bearing alert is
+  # ActuationPermittedWhileModeForbidsIt (tg_may_actuate == 1 while the declared mode is non-actuating or
+  # unreadable) — it pages immediately. Prometheus + Alertmanager are the required minimum; Grafana renders
+  # the safety gauges.
+  prometheus:
+    image: prom/prometheus:v2.54.1@sha256:f6639335d34a77d9d9db382b92eeb7fc00934be8eae81dbc03b31cfe90411a94
+    # Container hardening (TG-289). Full posture, same as worker/grounder/console: the image already runs
+    # nobody, its config mounts are :ro, and its ONLY writable state is the promdata volume at /prometheus
+    # — a volume, so it stays writable under a read-only rootfs. Measured under this exact posture: the
+    # TSDB created /prometheus/data and the log carried 0 permission errors.
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert.rules.yml:/etc/prometheus/alert.rules.yml:ro
+      - promdata:/prometheus
+    depends_on:
+      - grounder
+      - worker
+    ports:
+      - "127.0.0.1:9090:9090" # Prometheus UI — localhost only
+    # TG-160: every scrape target in deploy/monitoring/prometheus.yml is in-stack (grounder:8080,
+    # worker:8444, alertmanager:9093, localhost:9090). Frontdoor for the published UI.
+    # IF YOU ADD AN OFF-HOST SCRAPE TARGET (an estate node_exporter, a remote_write endpoint), this service
+    # needs tg-egress — add it here AND to deploy/egress_parity_test.go, which will otherwise fail.
+    # tg-egress IS REQUIRED, and it is required by one target: opus-sidecar at dc1claude01:8094.
+    #
+    # tg-backplane is `internal: true` (no gateway at all) and tg-frontdoor runs with
+    # com.docker.network.bridge.enable_ip_masquerade=false, so a packet leaving this container keeps its
+    # 172.22.x source and the destination host has no route back. Measured 2026-08-06: the scrape timed out
+    # after exactly 10.0s, BY RAW IP as well as by name, while the same GET from the TG host returned 200 in
+    # 2ms. SidecarDown — severity CRITICAL, the only such alert TG raises about its own single brain — had
+    # been firing all day against a healthy sidecar, which is the alert that teaches an operator to ignore
+    # criticals.
+    #
+    # This is the file's OWN convention, not a new posture: grounder, litellm, litellm-secrets, worker and
+    # worker-actuate all carry tg-egress for exactly this reason. A monitoring container that may only scrape
+    # inside the compose project cannot monitor anything TG depends on that lives outside it.
+    #
+    # ...AND IT IS GIVEN BACK (TG-413/TG-324). Everything above is still true about WHY the grant was made;
+    # it simply no longer applies, because the one off-host target that earned it — the Opus sidecar on
+    # dc1claude01:8094 — is now a compose service on this box. prometheus.yml has no remote_write and no
+    # other external target, so this scraper's entire reason to leave the host went with the migration.
+    #
+    # Removing it rather than leaving it is the point. An egress grant nobody needs is indistinguishable
+    # from one somebody does, and deploy/egress_parity_test.go requires every grant to carry an enumerated
+    # reason — a grant whose stated reason has become false is worse than an undocumented one, because it
+    # reads as reviewed. TestEveryOffHostScrapeTargetHasAPathToIt is the guard that would catch a future
+    # off-host target being added back without the network to reach it.
+    networks: [tg-backplane, tg-frontdoor]
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0@sha256:e13b6ed5cb929eeaee733479dce55e10eb3bc2e9c4586c705a4e8da41e5eacf5
+    # Container hardening (TG-289). Caps + no-new-privileges only; read_only is deliberately NOT set.
+    # Alertmanager writes its notification/silence log to `data/` under its workdir /alertmanager, and that
+    # path cannot be made writable here: a tmpfs whose target EXISTS in the image inherits the image dir's
+    # MODE and is reset to root:root, and this daemon (20.10.24) IGNORES a `mode=` option on such a target
+    # — measured, the process died with `Unable to create data directory: mkdir data/: permission denied`.
+    # Fixing it properly means giving alertmanager a named volume; that is a storage change, not hardening,
+    # so it is left to its own ticket rather than smuggled in here.
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "127.0.0.1:9093:9093" # Alertmanager UI — localhost only
+    # TG-160: the SHIPPED receiver is the empty sink (deploy/monitoring/alertmanager.yml — "self-contained
+    # by default … alerts are visible in the Alertmanager UI"), so as configured in this repo it sends
+    # nowhere and needs no route off the box.
+    # THIS IS THE ONE MOST LIKELY TO NEED MOVING. The moment a deployment wires a real webhook / Matrix /
+    # Slack / PagerDuty receiver, this service needs tg-egress or those pages silently stop leaving the
+    # host. Add it here AND to deploy/egress_parity_test.go; the test fails if the two disagree, which is
+    # the point — egress must be a declaration, never a side effect of editing a receiver block.
+    networks: [tg-backplane, tg-frontdoor]
+
+  grafana:
+    image: grafana/grafana:11.2.0@sha256:408afb9726de5122b00a2576763a8a57a3c86d5b0eff5305bc994ceb3eb96c3f
+    # Container hardening (TG-289). Caps + no-new-privileges; read_only is NOT set — Grafana unpacks and
+    # writes plugin state under /usr/share/grafana on its rootfs, so a read-only rootfs would need a tmpfs
+    # per plugin path and was not attempted. Verified booting clean under the two settings kept here.
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafanadata:/var/lib/grafana
+    depends_on:
+      - prometheus
+    ports:
+      - "127.0.0.1:3000:3000" # Grafana UI — localhost only
+    # TG-160: Grafana's only datasource is the in-stack Prometheus and no plugins are installed
+    # (GF_INSTALL_PLUGINS is unset), so it needs no route off the box. Its built-in update check will now
+    # fail; that is a log line, not a fault. Frontdoor for the published UI.
+    networks: [tg-backplane, tg-frontdoor]
+
+volumes:
+  pgdata:
+  temporaldata:
+  promdata:
+  grafanadata:

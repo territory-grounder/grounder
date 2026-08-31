@@ -1,0 +1,3 @@
+views.policy = polView;
+VIEW_META.policy = ["Policy", "the ASA-style policy engine — autonomy mode & honest posture, rules-as-data, the graduation ladder, and the decision log (authZ metadata only, no secrets · TG-94)"];
+

@@ -1,0 +1,8 @@
+FACETS.signals = [["all","All"],["anom","Anomalies"],["pred","Predicted overlay"],["evt","TG events"]];
+facetState.signals = facetState.signals || "all";
+/* Filter logic lives in sigFacetPass(panel, facet) inside the module JS and is applied by sigDraw():
+   "anom" keeps panels flagged anom:true (p99, imagefs, restarts, volume1);
+   "pred" keeps panels with a map overlay (band / futureBand / forecast rays);
+   "evt"  keeps panels with TG event markers (sigEVENTS entries).
+   Sections with zero surviving panels are hidden. The shell just needs to re-invoke views.signals()
+   (or the view rereads facetState.signals on each sigDraw). */

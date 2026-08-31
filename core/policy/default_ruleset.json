@@ -1,0 +1,82 @@
+{
+  "rules": [
+    {
+      "id": "semi-auto-restart-service",
+      "match": {
+        "op_class": "restart-service",
+        "reversible": true
+      },
+      "verdict": "auto",
+      "params": {
+        "min_confidence": 0
+      }
+    },
+    {
+      "id": "semi-auto-start-service",
+      "match": {
+        "op_class": "start-service",
+        "reversible": true
+      },
+      "verdict": "auto",
+      "params": {
+        "min_confidence": 0
+      }
+    },
+    {
+      "id": "semi-auto-reload-service",
+      "match": {
+        "op_class": "reload-service",
+        "reversible": true
+      },
+      "verdict": "auto",
+      "params": {
+        "min_confidence": 0
+      }
+    },
+    {
+      "id": "semi-auto-restart-container",
+      "match": {
+        "op_class": "restart-container",
+        "reversible": true
+      },
+      "verdict": "auto",
+      "params": {
+        "min_confidence": 0
+      }
+    },
+    {
+      "id": "semi-auto-start-container",
+      "match": {
+        "op_class": "start-container",
+        "reversible": true
+      },
+      "verdict": "auto",
+      "params": {
+        "min_confidence": 0
+      }
+    },
+    {
+      "id": "semi-auto-start-guest",
+      "match": {
+        "op_class": "start-guest",
+        "reversible": true
+      },
+      "verdict": "auto",
+      "params": {
+        "min_confidence": 0
+      }
+    },
+    {
+      "id": "semi-auto-stop-guest-commit-confirm-inverse",
+      "match": {
+        "op_class": "stop-guest",
+        "reversible": true,
+        "inverse_only": true
+      },
+      "verdict": "auto",
+      "params": {
+        "min_confidence": 0
+      }
+    }
+  ]
+}

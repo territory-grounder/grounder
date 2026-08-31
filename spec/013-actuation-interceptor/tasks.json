@@ -1,0 +1,453 @@
+{
+  "spec": "013-actuation-interceptor",
+  "tasks": [
+    {
+      "id": "T-013-1",
+      "title": "actuate.Interceptor wired-by-construction chain: single unexported Execute chokepoint; admission->floor->gate->evidence->execute->verify->audit; fail loud; enable-mutation only behind the proven gate",
+      "files_owned": [
+        "core/actuate/interceptor.go",
+        "core/actuate/mutation.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-1201",
+        "REQ-1202",
+        "REQ-1203",
+        "REQ-1204",
+        "REQ-1205",
+        "REQ-1206",
+        "REQ-1207",
+        "REQ-1208",
+        "REQ-1209",
+        "REQ-1216"
+      ],
+      "acceptance": {
+        "feature": "actuation-interceptor.feature",
+        "scenarios": [
+          "A mutating request is refused while mutation is off",
+          "An unwired interception chain fails loud and does not execute",
+          "A never-auto floor op is refused at the adapter even with mutation on",
+          "An ungated action is refused",
+          "An action_id mismatch is refused",
+          "An action with no bound evidence is refused",
+          "Mutation is enabled only through the proven wired gate",
+          "A fully-admissible governed actuation executes, verifies, and audits",
+          "A mutating action with no post-execution observer is refused before executing",
+          "A mispredicted post-state verifies as a deviation",
+          "An executed mutation records an execution_log bound to the action id",
+          "A policy approve verdict with a recorded human approval executes",
+          "A policy approve verdict with no recorded approval is refused",
+          "A policy deny verdict is refused even with a recorded human approval",
+          "The never-auto floor refuses an irreversible op even when approved and policy-auto"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 600,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-013-2",
+      "title": "core/cost cost/budget accountant + $-ceiling breaker (the mutation breaker's spend-guard sibling): a metering model-gateway completer accrues approx-token USD into durable, cross-process day(UTC)/session accumulators; the daily-budget/session-ceiling trip force-Shadows + records a cost:breaker-trip ledger note + sets a shared OPEN state so a trip force-Shadows every sibling; disabled at 0 budget; FAIL-OPEN on a store read error (spend guard, not a safety floor); pgx store + migration 0023",
+      "files_owned": [
+        "core/cost/cost.go",
+        "core/cost/accountant.go",
+        "core/cost/metering.go",
+        "core/cost/memstore.go",
+        "core/db/cost_read.go",
+        "core/db/cost_write.go"
+      ],
+      "deps": [
+        "T-013-1"
+      ],
+      "req_ids": [
+        "REQ-1211",
+        "REQ-1212",
+        "REQ-1213",
+        "REQ-1214",
+        "REQ-1215"
+      ],
+      "acceptance": {
+        "feature": "actuation-interceptor.feature",
+        "scenarios": [
+          "Cost accrues for each model completion into the daily and session accumulators",
+          "Exceeding the daily budget trips the cost breaker and force-Shadows",
+          "Exceeding a session ceiling trips the cost breaker and force-Shadows",
+          "A cost breaker trip force-Shadows a sibling worker sharing the durable store",
+          "A zero budget disables cost enforcement",
+          "An unreadable cost store fails open and does not halt operations"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 900,
+        "max_wall_clock_minutes": 180
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-013-R1",
+      "title": "A non-zero effect-leaf exit is the TARGET's refusal \u2014 refused, no verdict, no graduation credit",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-1220"
+      ],
+      "acceptance": {
+        "go_test": "core/actuate: TestNonZeroExitIsRefusedAndEarnsNoGraduation, TestMutationControl_DiscardingExitCodeLaundersARefusalAsSuccess"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-013-R2",
+      "title": "A no-op earns no credit \u2014 an effect leaf that changed nothing is not a heal",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-1221"
+      ],
+      "acceptance": {
+        "go_test": "core/actuate: TestNoOpIsNotExecutedAndEarnsNoGraduation, TestRealMutationStillVerifiesAndProducesAVerdict, TestMutationControl_NoOpAndRealMutationDifferOnlyByTheNoOpFlag"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-013-R3",
+      "title": "The immediate post-execution verdict may DEMOTE or break a streak, never promote",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-1222",
+        "REQ-1217"
+      ],
+      "acceptance": {
+        "go_test": "core/actuate: TestGraduationDefersTheCleanRunToTheTerminus, TestGraduationDeviationDemotesAndResets, TestGraduationMapsVerdictToOutcome, TestUnobservablePostStateIsNotVerifiedClean"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-013-R4",
+      "title": "An actuating posture with NO policy authorizer wired refuses (fail closed)",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-1207c"
+      ],
+      "acceptance": {
+        "go_test": "core/actuate: TestNilDeciderRefusesWhenActuatingAndIsHarmlessAtShadow, TestPolicyEngineErrorFailsClosed, TestModeChokepointFloorsEvenWhenPolicyAuto"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-013-R5",
+      "title": "ONE durable row per EXECUTION, carrying the fresh verdict \u2014 the run log is not the verdict store",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-1207b"
+      ],
+      "acceptance": {
+        "go_test": "core/actuate: TestExecutionSink_RecordsEveryRunWhileTheVerdictStoreKeepsOnlyTheFirst, TestExecutionSink_RecordsUnverifiableRunsHonestly, TestExecutionSink_RecordFailureIsNotFatal"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-013-R6",
+      "title": "The mutation breaker persists across processes and force-shadows a sibling",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-1210"
+      ],
+      "acceptance": {
+        "go_test": "core/actuate: TestBreakerWireIsInertUnderMutationOff, TestCrossProcessBreakerTripForceShadowsSibling, TestGateDrill_TrippedBreakerRefuses"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-013-R7",
+      "title": "Every band-sensitive gate CAN refuse \u2014 the drill matrix, not an argument",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-1218"
+      ],
+      "acceptance": {
+        "go_test": "core/actuate: TestGateDrillMatrix_EveryGateCanRefuse, TestGateDrill_TerritoryRefusesWithoutAcknowledgement"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-013-R8",
+      "title": "A single-host-bound leaf refuses a target mismatch BEFORE execute \u2014 never mis-routed onto its configured host",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-1219"
+      ],
+      "acceptance": {
+        "go_test": "core/actuate: TestHostMatchGateRefusesTargetMismatch, TestHostMatchGateExecutesWhenTargetMatches, TestHostMatchGateNoOpWhenUnbound (the no-op case proves the gate does not block per-target leaves)"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-013-22",
+      "title": "Every op-class declares a FAMILY and a SAFETY TIER from closed sets; irreversible/vendor-critical are never auto-eligible",
+      "files_owned": [
+        "core/actuate/opschema/family_tier_test.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-1223"
+      ],
+      "acceptance": {
+        "go_test": "core/actuate/opschema: TestEveryShippedOpClassDeclaresAFamilyAndTier, TestRegistryRejectsAnUnknownFamily, TestRegistryRejectsAnUnknownTier, TestFamilyAndTierAreNormalized, TestAutoEligibleIsSafeDirectionOnly",
+        "mutation_control": "EXECUTED RED 2026-07-28: (1) dropping the closed-set family check (`if false`) -> TestRegistryRejectsAnUnknownFamily ('an unknown family must panic at registry build'); (2) THE FAIL-OPEN \u2014 widening AutoEligible to `t != TierVendorCritical` so irreversible becomes auto-eligible -> TestAutoEligibleIsSafeDirectionOnly reports AutoEligible(\"irreversible\")=true want false; (3) removing family normalization -> TestFamilyAndTierAreNormalized panics on '  Service-Lifecycle '. Baseline green before and after each."
+      },
+      "budget": {
+        "max_loc_delta": 260,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-013-23",
+      "title": "specvalidate opcover --check: every op-class is provoked by a fault class or its absence is declared",
+      "files_owned": [
+        "tools/specvalidate/opcover/opcover.go",
+        "tools/specvalidate/opcover/opcover_test.go",
+        "spec/opcover-exemptions.json"
+      ],
+      "deps": [
+        "T-013-22"
+      ],
+      "req_ids": [
+        "REQ-1224"
+      ],
+      "acceptance": {
+        "go_test": "tools/specvalidate/opcover: TestUncoveredOpClassIsAFinding, TestDeclaredExemptionSatisfiesCoverage, TestEmptyExemptionReasonIsAFinding, TestStaleExemptionIsAFinding, TestExemptionForAnUnregisteredClassIsAFinding, TestPhantomProvokesIsAFinding, TestMissingExemptionsFileFailsClosed, TestNormalizationCannotDodgeTheCheck",
+        "mutation_control": "EXECUTED RED 2026-07-28: (1) dropping the uncovered-op-class report -> TestUncoveredOpClassIsAFinding; (2) accepting a reasonless exemption (the mute-the-checker fail-open) -> TestEmptyExemptionReasonIsAFinding; (3) treating an ABSENT exemptions file as all-clear (the vacuous pass) -> TestMissingExemptionsFileFailsClosed; (4) ignoring stale exemptions -> TestStaleExemptionIsAFinding. Baseline green before and after each."
+      },
+      "budget": {
+        "max_loc_delta": 420,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-013-24",
+      "title": "WIRE the tier floor into the decision path \u2014 it shipped defined, tested and unreachable",
+      "files_owned": [
+        "core/policy/tier_floor_test.go"
+      ],
+      "deps": [
+        "T-013-22"
+      ],
+      "req_ids": [
+        "REQ-1223"
+      ],
+      "acceptance": {
+        "go_test": "core/policy: TestTierFloorIsWiredIntoTheDecisionPath, TestEveryRegisteredClassAgreesWithItsTier, TestIneligibleTierNeverAccumulatesAnAutoRow",
+        "mutation_control": "EXECUTED RED 2026-07-28 after TWO false starts that are the point of the task: (1) unwiring the decision floor -> 'destructive-verb is at LevelAuto in the store and got auto'; (2) THE FAIL-OPEN, an unregistered slug becoming auto-eligible -> 'unregistered op-class seeded to auto got auto, want approve'; (3) removing the durable-row guard -> 'destructive-verb reached LevelAuto in the durable ladder'. FALSE START A: the first oracle EARNED auto instead of seeding it, so the promotion guard masked the decision guard and neither mutation fired \u2014 two defence-in-depth guards make each other unprovable unless isolated. FALSE START B: every shipped op-class is auto-eligible, so without a substituted resolver there is no input the floor can bite on and the test passes either way."
+      },
+      "budget": {
+        "max_loc_delta": 240,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-013-25",
+      "title": "Templated op-classes: an argv template is DATA, and the compiled builder was never the safety property",
+      "files_owned": [
+        "core/actuate/opschema/template_test.go"
+      ],
+      "deps": [
+        "T-013-24"
+      ],
+      "req_ids": [
+        "REQ-1225"
+      ],
+      "acceptance": {
+        "go_test": "core/actuate/opschema: TestTemplateRendersTheSameArgvAsTheCompiledBuilder, TestTemplateSubstitutionIsWholeElementOnly, TestTemplateRejectsAnUndeclaredSlotAtInit, TestTemplateRejectsAnOptionalSlotAtInit, TestTemplateRejectsASlotEmbeddedInALargerElement, TestBuilderAndTemplateAreMutuallyExclusive, TestValidatorToleranceEqualsRendererTolerance",
+        "mutation_control": "EXECUTED RED 2026-07-28, five controls, each verified to APPLY before running (an earlier pass reported PASS because the edits silently never landed, and a control that cannot fail is not a control). (B) allow an OPTIONAL slot -> 'an OPTIONAL template slot must panic'. (C) allow builder AND template together -> 'declaring BOTH a builder and a template must panic'. (D) render an absent/blank required param -> 'validator and renderer disagree about what is legal'. (E) allow a slot naming an undeclared param -> 'an undeclared template slot must panic'. (F) accept a slot embedded in a larger element -> 4x 'embeds a slot in a larger string and was ACCEPTED'. NOTE ON THE MUTANT FORM: `cond` -> `false` does not compile here (it deletes the only use of the loop variable), so each control mutates to `cond && false` \u2014 a build failure is not a behavioural RED and must not be mis-read as one. FINDING: control F did not exist until writing control A ('renderer does substring interpolation') failed to fire and forced the question of what the whole-element anchor actually rejects \u2014 the answer was that `--unit=${unit}` shipped SILENTLY as a literal. The oracle found a live fail-open defect in this change before it merged.",
+        "notes": "TestTemplateRendersTheSameArgvAsTheCompiledBuilder is the migration-safety oracle: the four shipped ssh verbs are asserted byte-identical between template and compiled builder, so migrating a verb to data is checkable rather than a leap of faith. It Fatals if a named class is unregistered, so it cannot pass vacuously."
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-013-26",
+      "status": "completed",
+      "title": "Registry-driven argv classification \u2014 migrate the four ssh verbs to templates and delete the hand-maintained if-chain",
+      "files_owned": [
+        "core/actuate/opschema/match_test.go"
+      ],
+      "deps": [
+        "T-013-25"
+      ],
+      "req_ids": [
+        "REQ-1226"
+      ],
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 150
+      },
+      "acceptance": {
+        "go_test": "core/actuate/opschema: TestMigratedVerbsStillRenderTheirPreMigrationArgv, TestLoadedSchemaAndCompiledBuildersAreInLockstep",
+        "mutation_control": "EXECUTED RED 2026-07-28, five controls. (A) length equality -> prefix match: an argv with EXTRA arguments classifies. (B) literal equality -> case-insensitive: 'Systemctl restart nginx' classifies. (C) drop the empty-slot check: 'systemctl restart \"\"' classifies with an empty value. (D2) `slots != 1` -> `slots > 1`: a zero-slot template classifies, and a COMPILED class (empty template) matches an EMPTY argv \u2014 an empty template becomes a wildcard. (E2) ambiguity `return` -> `break`: two classes building the same argv resolve to the first. TWO OF THESE DID NOT FIRE ON THE FIRST ATTEMPT, and both times the ORACLE was at fault, not the mutation. (D) the original clause `len(ArgvTemplate)==0` is REDUNDANT with the length check, so no mutation of it is observable \u2014 the real guard is `slots != 1`, and the test was rewritten to drive an empty argv against every compiled class. (E) the live registry is injective, so the double-match branch is UNREACHABLE from any registry-driven test; a `classifyAgainst(specs, argv)` seam was added so an ambiguous pair can be constructed. A branch no test can reach is a branch no control can falsify.",
+        "notes": "The four ssh verbs (restart-service, reload-service, start-service, restart-container) moved from compiled Go builders to argv templates carried as registry data; their compiled builders are DELETED. The equivalence test written in T-013-25 compared the template against the live builder \u2014 which became a TAUTOLOGY the moment the verbs migrated, since Lookup then returns the template and it compared the template to itself. It is replaced by hardcoded goldens transcribed from the deleted builders, because an oracle whose subject becomes its own reference has stopped being an oracle. The schema-builder lockstep test now asserts builder XOR template."
+      }
+    },
+    {
+      "id": "T-013-27",
+      "status": "completed",
+      "title": "A new verb is registry DATA: derived resolvable set, family-keyed vocabulary, declared rollback",
+      "files_owned": [
+        "core/actuate/opschema/rollback_test.go"
+      ],
+      "deps": [
+        "T-013-26"
+      ],
+      "req_ids": [
+        "REQ-1227"
+      ],
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 150
+      },
+      "acceptance": {
+        "go_test": "core/actuate/opschema: TestRollbackDefaultsToARerunOfTheForward, TestADeclaredRollbackIsRenderedNotTheForward, TestADeclaredRollbackTemplateIsValidatedLikeTheForward, TestEveryShippedNonIdempotentVerbDeclaresItsInverse",
+        "mutation_control": "EXECUTED RED 2026-07-28, two controls. (F) exclude rollback_template from the init-time template validation loop -> a rollback carrying an undeclared slot or an embedded ${slot} is ACCEPTED at boot and would render the literal text in the RECOVERY path, which is the worst place to discover it. (G2) delete start-service's declared rollback from the shipped registry -> 'start-service is a `start` verb with NO declared rollback \u2014 its compensating action would default to another start, which undoes nothing while the ledger records a rollback'. G was first attempted as a regex over the JSON and did not apply; it was redone by editing the parsed document, with the substitution asserted, because a control that silently fails to apply reports GREEN and reads exactly like a control that fired and passed.",
+        "notes": "rollback_template is validated at registry build by the SAME init-time checks as argv_template \u2014 whole-element slots only, every slot naming a declared REQUIRED param \u2014 because a rollback with a silent literal ${slot} in it is a rollback that runs the wrong command at the worst possible moment."
+      }
+    },
+    {
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed",
+      "id": "T-013-28",
+      "title": "The baseline gate: refuse to execute what cannot be adjudicated; record baseline provenance on deviations",
+      "req_ids": [
+        "REQ-1228"
+      ],
+      "acceptance": {
+        "go_test": "core/actuate: TestUnestablishedBaselineRefusesToExecute, TestBaselineRetryRecoversATransientBlip, TestPreAnomalousHostDoesNotDeviate, TestDegradedPairArmStillAdjudicatesViaHostArm, TestDeviationReasonCarriesBaselineProvenance, TestUnestablishedHostArmIsNotAnEmptyOne"
+      }
+    },
+    {
+      "id": "T-013-29",
+      "title": "Thread the estate-derived site authority into the post-execution verdict (spec/002 REQ-107 on the execute path)",
+      "files_owned": [
+        "core/actuate/site_scope_test.go"
+      ],
+      "deps": [
+        "T-013-28"
+      ],
+      "req_ids": [
+        "REQ-1229"
+      ],
+      "budget": {
+        "max_loc_delta": 120,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed",
+      "acceptance": {
+        "go_test": "core/actuate: TestCrossSiteFlapDoesNotDeviateOnTheExecutePath, TestUnknownAndSameSiteSurprisesStillDeviateOnTheExecutePath"
+      }
+    },
+    {
+      "id": "T-013-30",
+      "title": "Per-session/per-target actuation-frequency + in-flight-concurrency governor at the chokepoint",
+      "files_owned": [
+        "core/actuate/limiter.go",
+        "core/actuate/actuation_limit_test.go",
+        "core/regime/actuation_limit_seam_test.go"
+      ],
+      "deps": [
+        "T-013-29"
+      ],
+      "req_ids": [
+        "REQ-1230"
+      ],
+      "budget": {
+        "max_loc_delta": 420,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed",
+      "acceptance": {
+        "go_test": "core/actuate: TestSubvertedAgentLoopIsThrottledPerSession, TestPerTargetBudgetSurvivesAFreshSessionRefEachTime, TestConcurrentActuationsAgainstOneTargetAreRefused, TestAbsentSessionRefSharesOneBucketAndNeverExempts, TestBudgetReturnsAfterTheWindowRollsPast, TestASharedLimiterCountsAcrossEveryInterceptor, TestNoLimitCanBeConfiguredAway, TestANilLimiterRefusesRatherThanPasses; core/regime: TestRoutedLaneSharesOneActuationBudgetAcrossFreshInterceptors"
+      }
+    },
+    {
+      "id": "T-013-31",
+      "title": "Execute-time necessity re-check: refuse an action whose fault has already cleared",
+      "files_owned": [
+        "core/actuate/necessity_gate_test.go",
+        "temporal/runner/necessity_wire_test.go"
+      ],
+      "deps": [
+        "T-013-30"
+      ],
+      "req_ids": [
+        "REQ-1231"
+      ],
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed",
+      "acceptance": {
+        "go_test": "core/actuate: TestAnAlreadyHealedTargetIsNotMutated, TestAnUnreadableNecessityProbeRefusesWithItsOwnReason, TestAnUnwiredNecessityCheckRefusesRatherThanPasses, TestAStillFaultedTargetStillHeals, TestNecessityIsRecheckedAtTheLastPreEffectInstant; temporal/runner: TestExecuteActivityRefusesWhenTheFaultAlreadyCleared, TestExecuteActivityStillHealsAHostThatIsStillAlerting, TestExecuteActivityRefusesWhenTheNecessityProbeCannotRead, TestExecuteActivityRefusesWithNoClearReaderWired"
+      }
+    }
+  ]
+}

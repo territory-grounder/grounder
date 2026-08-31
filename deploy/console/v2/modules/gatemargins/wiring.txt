@@ -1,0 +1,7 @@
+views.gatemargins = gmView;
+VIEW_META.gatemargins = ["Gate margins", "The gate-decision boundary-case queue — interceptor gates that passed or refused within ε of their numeric threshold, sorted by distance to threshold (TG-178 · GET /v1/gates/within-epsilon)"];
+/* nav rail — STATIC in console.html (assemble.py strips module-side AddNav; nav is not registered from here).
+   Placed in the Evidence/OBSERVE group, right after Logs:
+   <a class="navi" href="#gatemargins" data-view="gatemargins"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2v12"/><path d="M2.5 5.5h2.6M2.5 10.5h2.6M10.9 5.5h2.6M10.9 10.5h2.6"/><circle cx="6.4" cy="8" r="1.3"/><circle cx="9.7" cy="8" r="1.3"/></svg><span class="t">Gate margins</span><span class="n" data-badge="gatemargins">—</span></a>
+   badge feed: elements with data-badge="gatemargins" are set from the REAL live case count in modules/_live/js.txt
+   (never from the fixture); they stay "—" until a live read lands. */

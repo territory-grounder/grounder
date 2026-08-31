@@ -1,0 +1,315 @@
+{
+  "spec": "001-risk-classification",
+  "tasks": [
+    {
+      "id": "T-001-1",
+      "title": "Mechanical fail-closed primitives: Band zero-value, never-auto floor, remediation lane",
+      "files_owned": [
+        "core/safety/safety.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-004",
+        "REQ-006"
+      ],
+      "acceptance": {
+        "feature": "risk-classification.feature",
+        "scenarios": [
+          "The zero-value band is POLL_PAUSE",
+          "An unmatched band value stringifies as POLL_PAUSE",
+          "Irreversible operation classes are on the never-auto floor",
+          "A reversible operation class is not on the never-auto floor",
+          "The remediation lane fails closed by default"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 150,
+        "max_wall_clock_minutes": 30
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-001-2",
+      "title": "core/risk.Classifier typed admission gate: emit AUTO / AUTO_NOTICE / POLL_PAUSE; write session_risk_audit",
+      "files_owned": [
+        "core/risk/classifier.go",
+        "core/risk/input.go",
+        "core/risk/audit.go"
+      ],
+      "deps": [
+        "T-001-1"
+      ],
+      "req_ids": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-003",
+        "REQ-007"
+      ],
+      "acceptance": {
+        "feature": "risk-classification.feature",
+        "scenarios": [
+          "A low-risk reversible action is classified AUTO",
+          "A reversible-mixed action on a critical host is classified AUTO_NOTICE",
+          "A high-risk irreversible action is classified POLL_PAUSE",
+          "An incident with no learned prior is classified POLL_PAUSE"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-001-3",
+      "title": "Evidence-bound AUTO-RESOLVE stripping under silent_cognition_guard",
+      "files_owned": [
+        "core/risk/evidence.go"
+      ],
+      "deps": [
+        "T-001-2"
+      ],
+      "req_ids": [
+        "REQ-008"
+      ],
+      "acceptance": {
+        "feature": "risk-classification.feature",
+        "scenarios": [
+          "An AUTO-RESOLVE lacking bound evidence is downgraded to a poll"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 200,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-001-4",
+      "title": "Deterministic secret/PII redaction in the input screen (core/screen.Scrub) before model/log/ledger",
+      "files_owned": [
+        "core/screen/screen.go",
+        "core/screen/screen_test.go"
+      ],
+      "deps": [
+        "T-001-1"
+      ],
+      "req_ids": [
+        "REQ-010"
+      ],
+      "acceptance": {
+        "feature": "risk-classification.feature",
+        "scenarios": [
+          "A leaked credential in the untrusted seed is redacted before it reaches the model or the ledger",
+          "A benign alert body is not mangled by the secret redaction pass"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 320,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-001-R1",
+      "title": "A canary-pinned (host, op_class) is forced to POLL_PAUSE \u2014 the graduation on-ramp",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-009"
+      ],
+      "acceptance": {
+        "feature": "risk-classification.feature",
+        "scenarios": [
+          "A canary-pinned action is forced to POLL_PAUSE"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-001-R2",
+      "title": "Legacy byte-identical output while the autonomy sentinel is absent",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-005"
+      ],
+      "acceptance": {
+        "go_test": "core/risk: the classifier is INERT by default \u2014 with no policy declared CanaryPinned is always false and the branch is a no-op (classifier.go:69); TestFailClosedDefault_EmptyMatch covers the absent-declaration path"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-001-R3",
+      "title": "Dispositions are made classifier-visible (canary-pin style) rather than hidden",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-011"
+      ],
+      "acceptance": {
+        "go_test": "core/risk: policy_test.go \u2014 a declared disposition reaches the classifier through the same visible Input field the canary pin uses, so no disposition changes a band invisibly"
+      },
+      "budget": {
+        "max_loc_delta": 1,
+        "max_wall_clock_minutes": 1
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-001-12",
+      "title": "Safety patterns validated against REAL estate identifiers and the LIVE op-class registry",
+      "files_owned": [
+        "core/safety/safety_registry_test.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-012"
+      ],
+      "acceptance": {
+        "go_test": "core/safety: TestEveryLifecycleOpClassIsRecognisedAsRestartClass, TestStatefulDenyMatchesThisEstatesHostnames, TestDestructiveBackstopCatchesUnadornedDeletes",
+        "mutation_control": "EXECUTED RED 2026-07-28: (1) restoring the leading \\b (the shipped-inert state) -> IsStatefulWorkload(\"dc1cl01mariadb01\")=false; (2) dropping start-guest from restartClassRE -> 'op-class start-guest (family guest-lifecycle) is a lifecycle verb but IsRestartClass says NO'; (3) making the stateful pattern blanket-match -> IsStatefulWorkload(\"dc1mealie01\")=true, proving it still discriminates rather than clamping everything. DESTRUCTIVE BACKSTOP, EXECUTED RED 2026-07-28: (4) reverting to `rm -rf` only (the shipped state) -> IsDestructiveOp(\"rm /var/log/big.log\")=false and unlink=false; (5) dropping the leading \\b so it over-matches -> IsDestructiveOp(\"confirm the change\")=true and \"transform data\"=true, proving the boundary still discriminates."
+      },
+      "budget": {
+        "max_loc_delta": 200,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-001-13",
+      "status": "completed",
+      "title": "An ungraduated op-class must be POLLED, so the approval the policy engine demands can actually be given",
+      "files_owned": [
+        "core/risk/ungraduated_test.go"
+      ],
+      "deps": [
+        "T-001-12"
+      ],
+      "req_ids": [
+        "REQ-013"
+      ],
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 120
+      },
+      "acceptance": {
+        "go_test": "core/risk: TestAnUngraduatedClassIsPolledSoItsApprovalCanBeGiven, TestAGraduatedClassIsNotPolledByThisRule, TestTheUngraduatedRuleOnlyRAISESReview, TestAnEmptyOpClassIsNotTreatedAsUngraduated, TestThePollReasonIsAuditable",
+        "mutation_control": "EXECUTED RED 2026-07-28, four controls. (A) remove the rule \u2014 restores the live dead end -> 'an ungraduated op-class banded AUTO ... with no poll there is nobody to give it'. (B) blank the poll reason -> the audit row cannot tell an operator why they were asked. (C) invert the predicate -> graduated classes get polled, so earning auto buys nothing. (D) make the unwired resolver return true -> an unconfigured deployment polls EVERYTHING, which is a behaviour change rather than a safety gain. THE ORACLE CAUGHT A REAL BUG IN MY OWN CHANGE: my first cut placed the rule ABOVE the safety rules, so it MASKED them \u2014 TestTheUngraduatedRuleOnlyRAISESReview reported poll_reason demoted to 'op-class-not-graduated' for a suspicious actor. The band was correct and the recorded REASON was a misreport, which on the security path is the worse failure. Moved below every attribution/safety reason. One further oracle correction was MINE not the code's: the stateful rule is deliberately exempt for a fully-reversible op, so that fixture had to mutate for the rule to be the stronger one.",
+        "notes": "Same shape as the existing CanaryPinned input \u2014 a review-RAISING flag set by the activity, inert when unconfigured. The resolver reads the SAME ladder the policy engine reads (bLadder captured with its concrete type, since bGraduation is narrowed to the write-path recorder interface and cannot answer 'has this class earned auto?')."
+      }
+    },
+    {
+      "id": "T-001-14",
+      "status": "completed",
+      "title": "A novelty poll records the signature it consulted and the count it read",
+      "files_owned": [
+        "core/risk/novelty_evidence_test.go"
+      ],
+      "deps": [
+        "T-001-2"
+      ],
+      "req_ids": [
+        "REQ-014"
+      ],
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 120
+      },
+      "acceptance": {
+        "go_test": "core/risk: TestANoveltyPollRecordsWhatItRead, TestTheRecordedCountIsTheOneThatDecided, TestEvidenceIsRecordedOnlyForTheNoveltyRule, TestANonNovelDecisionCarriesNoNoveltyEvidence, TestAnEmptyKeyIsOmittedRatherThanRecordedBlank; temporal/runner: TestNovelIncidentReturnsTheDecidingKey",
+        "mutation_control": "EXECUTED RED 2026-07-28, five controls. (A) never record the key -> 'WHICH key had no precedent'. (B) write the count under a key nobody reads, still compiling -> 'the count IS the finding'. (C) attach the evidence at the TOP of Classify so every decision carries it -> 'must identify decisions the NOVELTY rule actually drove'. (D) record a blank key instead of omitting it -> 'recorded as a blank value'. (E) activity returns an empty key instead of the deciding one -> 'the deciding signature is the FIRST'. Three of the five initially failed as CONTROLS rather than finding bugs, and each failure was instructive: (B) first removed the line, which made strconv unused and broke the BUILD (not a behavioural RED); (C) first inserted the mutation at the novelty step, which the earlier security rule returns before, so it was unreachable; (E) first mutated temporal/runner/activities.go while running the core/risk package, which cannot fail by construction \u2014 the control must run the package that guards the mutated code."
+      }
+    },
+    {
+      "id": "T-001-15",
+      "status": "completed",
+      "title": "Prior-verdict band: a recent same-rule-family deviation on the target polls at CLASSIFICATION, not only at graduation",
+      "files_owned": [
+        "core/db/prior_verdict_read.go",
+        "temporal/runner/prior_verdict_test.go"
+      ],
+      "deps": [
+        "T-001-2",
+        "T-001-14"
+      ],
+      "req_ids": [
+        "REQ-015"
+      ],
+      "budget": {
+        "max_loc_delta": 450,
+        "max_wall_clock_minutes": 180
+      },
+      "acceptance": {
+        "feature": "risk-classification.feature",
+        "scenarios": [
+          "A target carrying a recent same-family deviation verdict is forced to POLL_PAUSE",
+          "An absent prior verdict leaves the classification exactly as it was",
+          "A clean prior verdict does not tighten the band"
+        ],
+        "go_test": "temporal/runner: TestClassifyActivityRecentDeviationForcesPoll, TestClassifyActivityAbsentVerdictLeavesTheBandUnchanged, TestClassifyActivityVerdictReadErrorLeavesTheBandUnchangedAndIsLogged, TestClassifyActivityNonAdverseVerdictsDoNotTightenTheBand, TestClassifyActivityVerdictIsScopedToTheRuleFamily, TestClassifyActivityTheNewestRelevantVerdictDecides, TestClassifyActivityAnInvalidLedgerVerdictIsTreatedAsADeviation, TestClassifyActivityAnEmptyAlertRuleDoesNotFireTheVerdictRule, TestClassifyActivityConsultsBothHostExpressions",
+        "mutation_control": "EXECUTED RED 2026-07-31, four controls, ALL through the real ClassifyActivity path (the godog scenarios drive the DECISION half only and were deliberately NOT used as the controls -- a decision-only oracle passes whether or not anything populates the input, which is precisely how HasVerdict/Verdict stayed unreachable for the classifier's whole life). (A) restore the SHIPPED pre-TG-223 state -- build GatedInput with HasVerdict:false -> 5 RED: RecentDeviationForcesPoll, VerdictIsScopedToTheRuleFamily, TheNewestRelevantVerdictDecides, AnInvalidLedgerVerdictIsTreatedAsADeviation, ConsultsBothHostExpressions. (B) drop the rule-FAMILY fold and match the raw rule string -> 2 RED: the family-sibling spelling (Device-Down-SNMP-unreachable vs HostDown) stops tightening the band, the exact two-vocabulary drift that made the recovery belt answer 'not recovered' forever. (C) fail the read CLOSED (a read error returns deviation) -> 1 RED: VerdictReadErrorLeavesTheBandUnchangedAndIsLogged -- a DB hiccup would poll the whole fleet. (D) drop the evidence-key signal from core/risk/classifier.go -> 1 RED: RecentDeviationForcesPoll, the audit row records the ruling without the reading and the fold is unreconstructible afterwards.",
+        "notes": "The wiring, not the branch, is the feature: classifier.go:111 already consumed HasVerdict/Verdict and NOTHING set it. Sourced from the durable ACTUATION ledger only (action_execution + executed-only action_verdict via the documented interceptor_gate_verdict anti-join); prediction_verdict is deliberately EXCLUDED -- migration 0042 documents that the propose-path population grades world-model accuracy about an estate TG never touched (23 of 24 deviations at the split), and banding on it would park most hosts on POLL_PAUSE for a reason that names no mis-actuation. Rule-family folding happens in Go (core/knowledge.CanonicalRule), never in SQL, for the same reason IncidentHistoryStore folds in its caller."
+      }
+    },
+    {
+      "id": "T-001-16",
+      "status": "completed",
+      "title": "Server-derived destructiveness learns the network-catastrophic and code-deploy/repo-write verbs BEFORE the first such op-class is registered",
+      "files_owned": [
+        "core/safety/destructive_test.go",
+        "core/policy/destructive_family_floor_test.go"
+      ],
+      "deps": [
+        "T-001-12"
+      ],
+      "req_ids": [
+        "REQ-016"
+      ],
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 120
+      },
+      "acceptance": {
+        "go_test": "core/safety: TestIsDestructiveOpNetworkCatastrophic, TestIsDestructiveOpCodeDeployAndRepoWrite, TestNeverAutoFloorCoversNetworkAndRepoWriteSlugs; core/policy: TestNoRegisteredClassInADestructiveFamilyIsAutoEligible, TestADestructiveVerbNeedsAnExplicitFloorDecisionToBeRefused, TestAnUnregisteredDestructiveVerbIsNeverPermitted",
+        "mutation_control": "EXECUTED RED 2026-07-31, four controls. (A) restore the SHIPPED pre-TG-224 state by deleting the five network-catastrophic alternation branches -> TestIsDestructiveOpNetworkCatastrophic RED on 20 named verbs (write erase / erase startup-config / no ip routing / default interface / clear configure all / no ip route / no access-list / no spanning-tree / no switchport trunk / ip link delete / brctl del* / ovs-vsctl del-* / nft flush ruleset / iptables -F|-X). (B) delete the code-deploy/repo-write branches -> TestIsDestructiveOpCodeDeployAndRepoWrite RED on 26 named verbs. (C) delete the write-erase and force-push floor SLUG lines -> RED in BOTH packages: core/safety TestNeverAutoFloorCoversNetworkAndRepoWriteSlugs and core/policy TestADestructiveVerbNeedsAnExplicitFloorDecisionToBeRefused, proving the slug route is asserted through the real mechanism and not only in its own package. (D) unwire the DECISION-point tier floor (autoEligibleOpClass ignores opschema.AutoEligible) -> TestADestructiveVerbNeedsAnExplicitFloorDecisionToBeRefused RED alongside the pre-existing TestTierFloorIsWiredIntoTheDecisionPath. ONE ORACLE CORRECTED THE CODE: `git clean -fdx` failed on the first cut because the branch ended mid-flag (-f followed by 'd'), so the wrapper's trailing \\b rejected the whole alternation -- the identical anchor defect REQ-012 records for statefulDenyRE, caught here by a named case instead of shipping inert.",
+        "notes": "NO behavior change today by construction: actuation is registry-only argv (INV-02/INV-08), so an unregistered op-class has no builder and no template and cannot reach an argv vector. The core/policy arm is deliberately TWO-SIDED -- it first shows a network-teardown class with an auto-eligible tier DOES graduate, because a one-sided test would hide that the explicit tier is the only thing between a registered write-erase and autonomy. The live-registry arm logs 0 of 7 matches rather than passing silently on an empty walk."
+      }
+    },
+    {
+      "id": "T-001-17",
+      "status": "completed",
+      "title": "The stated rationale is cross-checked against the sealed argv, and a disagreement escalates the band rather than refusing",
+      "files_owned": [
+        "core/rationale/consistency.go",
+        "core/rationale/consistency_test.go",
+        "core/risk/rationale_mismatch_test.go"
+      ],
+      "deps": [
+        "T-001-12"
+      ],
+      "req_ids": [
+        "REQ-017"
+      ],
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 120
+      },
+      "acceptance": {
+        "go_test": "core/rationale: TestTheThreeOutcomes, TestNamingTheTargetAmongOthersAgrees, TestFirstLabelComparisonSurvivesFQDNs, TestNumbersAndUnitNamesAreNotHosts, TestEmptyTargetAbstainsRatherThanDisagreeing, TestReasonNamesBothSides; core/risk: TestRationaleNamingADifferentHostEscalatesToPoll, TestRationaleNamingTheSameHostDoesNotEscalate, TestRationaleNamingNoHostAbstainsRatherThanEscalating, TestTheDisagreementReachesThePollNotice, TestTheMismatchPollsRatherThanRefusing",
+        "killing_mutation": "Executed 2026-08-05, three of them. (1) Remove the RationaleHostMismatch branch from core/risk/classifier.go \u2014 TestRationaleNamingADifferentHostEscalatesToPoll and TestTheMismatchPollsRatherThanRefusing go RED: a proposal whose prose names a different machine than it touches reaches a band that needs no human. (2) Drop the Signals[\"rationale_mismatch\"] assignment \u2014 TestTheDisagreementReachesThePollNotice goes RED: the poll becomes unadjudicatable and gets approved on reflex. (3) Make the abstain case return Disagrees:true \u2014 TestTheThreeOutcomes goes RED: silence read as evidence polls every honest action whose prose omits a host."
+      }
+    }
+  ]
+}

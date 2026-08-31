@@ -1,0 +1,61 @@
+{
+  "runs": 3,
+  "overall_baseline": 3.077,
+  "overall_candidate": 4.09,
+  "overall_delta": 1.01,
+  "overall_max_drop": 0.15,
+  "overall_pass": true,
+  "dims": [
+    {
+      "dim": "appropriate_band",
+      "baseline": 4.233,
+      "candidate": 4.95,
+      "delta": 0.72,
+      "max_drop": 0.1,
+      "pass": true
+    },
+    {
+      "dim": "correct_diagnosis",
+      "baseline": 3.267,
+      "candidate": 4.82,
+      "delta": 1.55,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "evidence_grounded",
+      "baseline": 3.217,
+      "candidate": 4.75,
+      "delta": 1.53,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "falsifiable_prediction",
+      "baseline": 1.483,
+      "candidate": 1,
+      "delta": -0.48,
+      "max_drop": 0.3,
+      "pass": false
+    },
+    {
+      "dim": "sensible_proposal",
+      "baseline": 3.183,
+      "candidate": 4.93,
+      "delta": 1.75,
+      "max_drop": 0.3,
+      "pass": true
+    }
+  ],
+  "rates": null,
+  "control_n": 5,
+  "control_violations": null,
+  "control_pass": true,
+  "pass": false,
+  "reasons": [
+    "dim falsifiable_prediction Δ -0.48 \u003c -0.30"
+  ],
+  "warnings": [
+    "PROPOSAL CAPABILITY UNMEASURED: all 18 expected-propose incidents were stale vs the live estate (stand-down on them is correct) — this run proves nothing about propose behavior in either direction; refresh the corpus with live action-warranted incidents (Tier-1 injection)"
+  ]
+}

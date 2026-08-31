@@ -1,0 +1,2 @@
+views.manifest = mfView;
+VIEW_META.manifest = ["World model", "the auto-drafted estate manifest — discovery proposes, you adopt; an adopted entry becomes an allowlist source (spec/027 · TG-229)"];

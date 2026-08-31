@@ -1,0 +1,15 @@
+{
+ "nav": {
+  "group": "OBSERVE",
+  "label": "Gate margins",
+  "view_key": "gatemargins",
+  "badge": "gatemargins",
+  "icon_svg_inner": "<path d=\"M8 2v12\"/><path d=\"M2.5 5.5h2.6M2.5 10.5h2.6M10.9 5.5h2.6M10.9 10.5h2.6\"/><circle cx=\"6.4\" cy=\"8\" r=\"1.3\"/><circle cx=\"9.7\" cy=\"8\" r=\"1.3\"/>"
+ },
+ "view_meta": [
+  "Gate margins",
+  "The gate-decision boundary-case queue — every interceptor gate that passed or refused within ε of its numeric threshold, the reviewable set the skill-store flywheel prefers (TG-178, GET /v1/gates/within-epsilon)."
+ ],
+ "purpose": "Render the within-ε gate boundary-case queue (TG-178): a read-only, authenticated surface over GET /v1/gates/within-epsilon?eps=E. The server returns GateBoundaryPage {epsilon, cases[]} where each case is GateBoundaryCase {action_id, external_ref, ordinal, gate, verdict, reason, margin} (core/httpapi/gate_margins.go, key set pinned by gate_margins_contract_test.go). The view reads THOSE EXACT JSON keys, renders the cases as a table sorted by |margin| (closest to the threshold first), colours the signed margin by side (negative = sat on the refusing side, positive = cleared, zero = exactly at the threshold and shown as a real value, never blank), and echoes the ε the set was selected on so the reader never assumes the default.",
+ "notes": "HONESTY CONTRACT, and it is the whole point of this module. The console once shipped a view whose e2e agreed with it on an IMAGINED DTO while the server sent different names, so the surface silently fell back to a fixture on every load and the e2e stayed green (see deploy/console/v2/e2e/reasoning.mjs's header + core/httpapi/session_detail_contract_test.go). This module refuses that shape: (1) the fixture in fixtures.txt uses the REAL DTO field names verbatim, and (2) the e2e (e2e/gate-margins.mjs) serves a payload COPIED from the real GateBoundaryPage shape, so a rename on the Go side breaks the contract test rather than silently reverting this surface. FIXTURE ONLY ON THE DESIGN PREVIEW: an unauthenticated shell renders the representative fixture behind fixtureChip(), framed by the rail's DESIGN PREVIEW flag. On a LIVE (authenticated) shell the view NEVER falls back to a fixture — the live layer (modules/_live/js.txt) fetches /v1/gates/within-epsilon into liveState.gateMargins and overrides the view: real cases render tagged LIVE; a 503 / failed read renders an honest 'could not be read' state (NOT an empty queue, NOT a quiet estate); a genuinely empty case set renders an honest 'no gate decided within ε' state. No boundary case is ever fabricated. The rail badge is set from the REAL live case count only, and stays em-dash otherwise — a fixture count must never sit on the rail looking like telemetry. The read is elevated to AuthTraceRead on the server (the same governance data as the decision-tracer walk), so a plain operator may see a 503-shaped answer; the honest unavailable state covers that without implying the queue is empty."
+}

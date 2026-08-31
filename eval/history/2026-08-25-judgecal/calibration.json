@@ -1,0 +1,55 @@
+{
+  "generated_at": "2026-08-25T19:52:17Z",
+  "dimension": "correct_diagnosis",
+  "positive_cut": 4,
+  "bar": 0.7,
+  "sole_session_faults": 699,
+  "confusion": {
+    "fn": 17,
+    "fp": 110,
+    "tn": 7,
+    "tp": 485
+  },
+  "tpr": {
+    "NoInterval": false,
+    "Value": 0.9661354581673307,
+    "Lo": 0.9464401661399381,
+    "Hi": 0.9787509027990992,
+    "N": 502,
+    "Defined": true
+  },
+  "tnr": {
+    "NoInterval": false,
+    "Value": 0.05982905982905983,
+    "Lo": 0.029280474751382173,
+    "Hi": 0.11836304920811816,
+    "N": 117,
+    "Defined": true
+  },
+  "precision": {
+    "NoInterval": false,
+    "Value": 0.8151260504201681,
+    "Lo": 0.7819473760550913,
+    "Hi": 0.8442617724205205,
+    "N": 595,
+    "Defined": true
+  },
+  "accuracy": {
+    "NoInterval": false,
+    "Value": 0.7948303715670436,
+    "Lo": 0.761245725336246,
+    "Hi": 0.8247782055226621,
+    "N": 619,
+    "Defined": true
+  },
+  "kappa": {
+    "NoInterval": true,
+    "Value": 0.03734861565213101,
+    "Lo": 0,
+    "Hi": 0,
+    "N": 619,
+    "Defined": true
+  },
+  "meets_bar": false,
+  "bar_reason": "TNR lower bound is below the threshold — not demonstrated at this sample size"
+}
