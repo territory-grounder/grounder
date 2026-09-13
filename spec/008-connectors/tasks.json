@@ -1,0 +1,901 @@
+{
+  "spec": "008-connectors",
+  "tasks": [
+    {
+      "id": "T-008-0",
+      "title": "Module framework: the seven adapter-surface interfaces + capability-scoped registry (INV-17/18)",
+      "files_owned": [
+        "modules/registry.go",
+        "adapters/ingest/ingest.go",
+        "adapters/tracker/tracker.go",
+        "adapters/notifier/notifier.go",
+        "adapters/cmdb/cmdb.go",
+        "adapters/observability/observability.go",
+        "adapters/model/provider.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-821"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "An unregistered or disabled module has no execution path",
+          "Each surface admits exactly one registered implementation per source type"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-1",
+      "title": "modules/ingest/librenms: loadable LibreNMS ingest module (NL + GR config rows behind one impl)",
+      "files_owned": [
+        "modules/ingest/librenms/librenms.go",
+        "modules/ingest/librenms/normalize.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-801"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The LibreNMS ingest module loads and normalizes a device-down alert"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-2",
+      "title": "modules/ingest/prometheus-alertmanager: loadable Prometheus/Alertmanager ingest module",
+      "files_owned": [
+        "modules/ingest/prometheus-alertmanager/alertmanager.go",
+        "modules/ingest/prometheus-alertmanager/correlate.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-802"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The Prometheus Alertmanager ingest module loads and correlates a firing-then-resolved alert"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-3",
+      "title": "modules/ingest/crowdsec: loadable CrowdSec ingest module",
+      "files_owned": [
+        "modules/ingest/crowdsec/crowdsec.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-803"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The CrowdSec ingest module loads and normalizes a decision event"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 350,
+        "max_wall_clock_minutes": 75
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-4",
+      "title": "modules/tracker/youtrack: loadable YouTrack tracker module (trigger + audit sink)",
+      "files_owned": [
+        "modules/tracker/youtrack/youtrack.go",
+        "modules/tracker/youtrack/state.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-804"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The YouTrack tracker module loads and drives the trigger and audit sink"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-5",
+      "title": "modules/tracker/jira: reference Jira tracker module behind the tracker interface",
+      "files_owned": [
+        "modules/tracker/jira/jira.go"
+      ],
+      "deps": [
+        "T-008-4"
+      ],
+      "req_ids": [
+        "REQ-805"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The Jira tracker module loads behind the tracker interface"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-6",
+      "title": "modules/tracker/github-issues: reference GitHub Issues tracker module",
+      "files_owned": [
+        "modules/tracker/github-issues/github_issues.go"
+      ],
+      "deps": [
+        "T-008-4"
+      ],
+      "req_ids": [
+        "REQ-805"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The GitHub Issues tracker module loads behind the tracker interface"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-7",
+      "title": "modules/tracker/servicenow: reference ServiceNow tracker module",
+      "files_owned": [
+        "modules/tracker/servicenow/servicenow.go"
+      ],
+      "deps": [
+        "T-008-4"
+      ],
+      "req_ids": [
+        "REQ-805"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The ServiceNow tracker module loads behind the tracker interface"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-8",
+      "title": "modules/notifier/matrix: loadable Matrix notifier+approval module + shared notifier obligations",
+      "files_owned": [
+        "modules/notifier/matrix/matrix.go",
+        "modules/notifier/matrix/approval.go",
+        "adapters/notifier/redact.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-806"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The Matrix notifier module loads and binds an approval vote to its decision"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-9",
+      "title": "modules/notifier/twilio-sms: loadable Twilio SMS notifier module",
+      "files_owned": [
+        "modules/notifier/twilio-sms/twilio_sms.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-807"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The Twilio SMS notifier module loads and delivers a deduplicated page"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-10",
+      "title": "modules/notifier/mattermost: loadable Mattermost notifier+approval module",
+      "files_owned": [
+        "modules/notifier/mattermost/mattermost.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-808"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The Mattermost notifier module loads and binds a response to its decision"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 350,
+        "max_wall_clock_minutes": 75
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-11",
+      "title": "modules/notifier/slack: reference Slack notifier+approval module",
+      "files_owned": [
+        "modules/notifier/slack/slack.go"
+      ],
+      "deps": [
+        "T-008-8"
+      ],
+      "req_ids": [
+        "REQ-809"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The Slack notifier module loads behind the notifier interface"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-12",
+      "title": "modules/notifier/teams: reference Microsoft Teams notifier+approval module",
+      "files_owned": [
+        "modules/notifier/teams/teams.go"
+      ],
+      "deps": [
+        "T-008-8"
+      ],
+      "req_ids": [
+        "REQ-809"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The Microsoft Teams notifier module loads behind the notifier interface"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-13",
+      "title": "modules/notifier/email: reference SMTP email notifier module",
+      "files_owned": [
+        "modules/notifier/email/email.go"
+      ],
+      "deps": [
+        "T-008-8"
+      ],
+      "req_ids": [
+        "REQ-809"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The SMTP email notifier module loads behind the notifier interface"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-14",
+      "title": "modules/cmdb/netbox: loadable NetBox CMDB module (authoritative entity resolution)",
+      "files_owned": [
+        "modules/cmdb/netbox/netbox.go",
+        "modules/cmdb/netbox/resolve.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-810"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The NetBox CMDB module loads and re-reads an entity by id"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-15",
+      "title": "modules/actuation/ssh: loadable SSH actuation module (fixed argv, no shell)",
+      "files_owned": [
+        "modules/actuation/ssh/ssh.go",
+        "modules/actuation/ssh/rollback.go",
+        "core/sshhost/sshhost.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-811",
+        "REQ-828"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The SSH actuation module loads and refuses an interactive shell"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-16",
+      "title": "modules/actuation/kubernetes: loadable Kubernetes actuation module (delete/drain clamped)",
+      "files_owned": [
+        "modules/actuation/kubernetes/kubernetes.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-812"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The Kubernetes actuation module loads and clamps delete to the never-auto floor"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-17",
+      "title": "modules/actuation/proxmox: loadable Proxmox actuation module (lifecycle enable-gated)",
+      "files_owned": [
+        "modules/actuation/proxmox/proxmox.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-813"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The Proxmox actuation module loads and gates a lifecycle operation behind the enable flag"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-18",
+      "title": "modules/actuation/mcp: loadable MCP tool actuation surface (unregistered tool has no path)",
+      "files_owned": [
+        "modules/actuation/mcp/mcp.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-814"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The MCP tool actuation surface loads and denies an unregistered tool"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-19",
+      "title": "modules/model/litellm: bundled LiteLLM model-gateway module (one OpenAI-compatible endpoint)",
+      "files_owned": [
+        "modules/model/litellm/gateway.go",
+        "modules/model/litellm/routing.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-815"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The LiteLLM model-gateway module loads and exposes one OpenAI-compatible endpoint"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-20",
+      "title": "modules/model/zai: z.ai provider backend behind the model-gateway",
+      "files_owned": [
+        "modules/model/zai/zai.go"
+      ],
+      "deps": [
+        "T-008-19"
+      ],
+      "req_ids": [
+        "REQ-815"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The z.ai provider backend resolves through the model-gateway"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 200,
+        "max_wall_clock_minutes": 45
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-21",
+      "title": "modules/model/deepseek: DeepSeek provider backend behind the model-gateway",
+      "files_owned": [
+        "modules/model/deepseek/deepseek.go"
+      ],
+      "deps": [
+        "T-008-19"
+      ],
+      "req_ids": [
+        "REQ-815"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The DeepSeek provider backend resolves through the model-gateway"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 200,
+        "max_wall_clock_minutes": 45
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-22",
+      "title": "modules/model/mistral: Mistral provider backend behind the model-gateway",
+      "files_owned": [
+        "modules/model/mistral/mistral.go"
+      ],
+      "deps": [
+        "T-008-19"
+      ],
+      "req_ids": [
+        "REQ-815"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The Mistral provider backend resolves through the model-gateway"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 200,
+        "max_wall_clock_minutes": 45
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-23",
+      "title": "modules/model/ollama: Ollama local provider backend behind the model-gateway",
+      "files_owned": [
+        "modules/model/ollama/ollama.go"
+      ],
+      "deps": [
+        "T-008-19"
+      ],
+      "req_ids": [
+        "REQ-815"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The Ollama provider backend resolves through the model-gateway"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 200,
+        "max_wall_clock_minutes": 45
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-24",
+      "title": "modules/model/anthropic: Anthropic provider backend behind the model-gateway",
+      "files_owned": [
+        "modules/model/anthropic/anthropic.go"
+      ],
+      "deps": [
+        "T-008-19"
+      ],
+      "req_ids": [
+        "REQ-815"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The Anthropic provider backend resolves through the model-gateway"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 200,
+        "max_wall_clock_minutes": 45
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-25",
+      "title": "modules/model/openai: OpenAI provider backend behind the model-gateway",
+      "files_owned": [
+        "modules/model/openai/openai.go"
+      ],
+      "deps": [
+        "T-008-19"
+      ],
+      "req_ids": [
+        "REQ-815"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The OpenAI provider backend resolves through the model-gateway"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 200,
+        "max_wall_clock_minutes": 45
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-35",
+      "title": "adapters/model: arm the PRODUCTION model-path circuit breaker (per-tier, persisted, observable) with a declared degraded-mode direction",
+      "files_owned": [
+        "adapters/model/breaker.go",
+        "adapters/model/model.go"
+      ],
+      "deps": [
+        "T-008-19"
+      ],
+      "req_ids": [
+        "REQ-826",
+        "REQ-827"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "A persistently failing model tier trips its named breaker and the next call makes no round trip",
+          "An open model circuit admits one half-open probe after its cooldown",
+          "An open model circuit returns a typed error and never an empty result",
+          "A model breaker whose state store is unreadable admits the call and reports the degradation"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 420,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-26",
+      "title": "modules/observability/prometheus: loadable Prometheus metrics-exposition module",
+      "files_owned": [
+        "modules/observability/prometheus/prometheus.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-816"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The Prometheus observability module exposes stamped metrics for scrape"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 350,
+        "max_wall_clock_minutes": 75
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-27",
+      "title": "modules/observability/grafana: loadable Grafana dashboard-provisioning module",
+      "files_owned": [
+        "modules/observability/grafana/grafana.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-817"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The Grafana observability module provisions dashboards from version control"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-28",
+      "title": "modules/observability/openobserve: loadable OpenObserve OTLP export module",
+      "files_owned": [
+        "modules/observability/openobserve/openobserve.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-818"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The OpenObserve observability module exports session traces default-on"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-29",
+      "title": "modules/observability/langfuse: loadable Langfuse per-session trace module",
+      "files_owned": [
+        "modules/observability/langfuse/langfuse.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-819"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The Langfuse observability module records a per-session trace"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-30",
+      "title": "modules/observability/healthchecks: loadable Healthchecks.io dead-man ping module",
+      "files_owned": [
+        "modules/observability/healthchecks/healthchecks.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-820"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The Healthchecks.io observability module pings a dead-man check on heartbeat"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-31",
+      "title": "modules/actuation/ssh: gated argv-only mutating path + reversible-op allowlist (mutation stays off, task #21)",
+      "files_owned": [
+        "modules/actuation/ssh/mutate.go"
+      ],
+      "deps": [
+        "T-008-15"
+      ],
+      "req_ids": [
+        "REQ-822"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The SSH actuation module keeps its gated mutating path inert while mutation is off"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-32",
+      "title": "modules/observability/syslogng: read-only syslog-ng investigation connector (get-host-logs + search-host-logs, argv-only over SSH)",
+      "files_owned": [
+        "modules/observability/syslogng/syslogng.go",
+        "modules/observability/syslogng/tools.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-823",
+        "REQ-828"
+      ],
+      "acceptance": {
+        "feature": "connectors.feature",
+        "scenarios": [
+          "The syslog-ng investigation connector returns a host's recent logs over a fixed argv SSH read",
+          "The syslog-ng investigation connector refuses a path-traversal host and never reads a file"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 500,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-008-33",
+      "status": "completed",
+      "title": "Registry-driven argv classification — migrate the four ssh verbs to templates and delete the hand-maintained if-chain",
+      "files_owned": [
+        "modules/actuation/ssh/classify_registry_test.go"
+      ],
+      "deps": [
+        "T-008-32"
+      ],
+      "req_ids": [
+        "REQ-824"
+      ],
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 150
+      },
+      "acceptance": {
+        "go_test": "modules/actuation/ssh: TestEveryTemplatedClassRoundTrips, TestNoTwoClassesClaimTheSameArgv, TestAmbiguousClassificationRefusesBOTH, TestAnAllLiteralTemplateIsNeverClassified, TestClassifyRefusesNearMisses, TestTheFourMigratedVerbsClassifyExactlyAsBefore",
+        "mutation_control": "EXECUTED RED 2026-07-28, five controls. (A) length equality -> prefix match: an argv with EXTRA arguments classifies. (B) literal equality -> case-insensitive: 'Systemctl restart nginx' classifies. (C) drop the empty-slot check: 'systemctl restart \"\"' classifies with an empty value. (D2) `slots != 1` -> `slots > 1`: a zero-slot template classifies, and a COMPILED class (empty template) matches an EMPTY argv — an empty template becomes a wildcard. (E2) ambiguity `return` -> `break`: two classes building the same argv resolve to the first. TWO OF THESE DID NOT FIRE ON THE FIRST ATTEMPT, and both times the ORACLE was at fault, not the mutation. (D) the original clause `len(ArgvTemplate)==0` is REDUNDANT with the length check, so no mutation of it is observable — the real guard is `slots != 1`, and the test was rewritten to drive an empty argv against every compiled class. (E) the live registry is injective, so the double-match branch is UNREACHABLE from any registry-driven test; a `classifyAgainst(specs, argv)` seam was added so an ambiguous pair can be constructed. A branch no test can reach is a branch no control can falsify.",
+        "notes": "The four ssh verbs (restart-service, reload-service, start-service, restart-container) moved from compiled Go builders to argv templates carried as registry data; their compiled builders are DELETED. The equivalence test written in T-013-25 compared the template against the live builder — which became a TAUTOLOGY the moment the verbs migrated, since Lookup then returns the template and it compared the template to itself. It is replaced by hardcoded goldens transcribed from the deleted builders, because an oracle whose subject becomes its own reference has stopped being an oracle. The schema-builder lockstep test now asserts builder XOR template."
+      }
+    },
+    {
+      "id": "T-008-34",
+      "status": "completed",
+      "title": "A new verb is registry DATA: derived resolvable set, family-keyed vocabulary, declared rollback",
+      "files_owned": [
+        "modules/actuation/ssh/reachability_test.go"
+      ],
+      "deps": [
+        "T-008-33"
+      ],
+      "req_ids": [
+        "REQ-825"
+      ],
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 150
+      },
+      "acceptance": {
+        "go_test": "modules/actuation/ssh: TestEveryRegisteredSSHClassIsReachableOrDeclared, TestAStartVerbRollsBackToItsInverseNotToItself, TestAFamilyTheLeafDoesNotUnderstandNeverResolves",
+        "mutation_control": "EXECUTED RED 2026-07-28, six controls, each verified to apply. (A) drop container-lifecycle from the derived set -> 'start-container is a registered ssh-argv class in a known family but does NOT resolve at the leaf'. (B2) WithMutation back to a literal map -> same. (C) rollback becomes a re-run of the forward -> \"a start's compensating action must be 'stop', never another start\". (D) RollbackTemplate ignored entirely -> same. (E3) the unknown-family default falls through to the unit vocabulary -> 'refused with: target unit is not a valid systemd unit token, want ErrNoExecutionPath'. THREE OF THESE NEEDED THE ORACLE FIXED, NOT THE MUTATION, and each failure was the SAME shape one level up from the bug being fixed: (B) the first test built the Module by STRUCT LITERAL with reversible already seeded, so it proved reversibleFromRegistry() was correct while proving nothing about whether the wired constructor calls it — rebuilt through the real New()+WithMutation. (E) the resolvable-set gate masks the family switch, so the durable state is SEEDED past the first guard, the same technique the tier floor needed. (E2) even seeded, a probe class in an unknown family fails a param lookup either way, so the oracle now asserts the SPECIFIC error: ErrNoExecutionPath ('this leaf does not do that') vs anything else ('the leaf tried and failed incidentally').",
+        "notes": "COST MEASUREMENT, which is the point of the task. Adding start-container as a new verb after this change: ONE JSON block in opschema.json (15 lines), ONE line in the fault injector's Provokes(), and a named constant used only so tests can refer to it. No compiled builder, no case in resolveOp, no entry in a reversible map. Before the T1 work the measured cost was ~120 lines across 8 files per verb."
+      }
+    },
+    {
+      "id": "T-008-36",
+      "status": "completed",
+      "title": "Cisco interactive-SSH transport (TG-85 slice 1): a read-only PTY send/expect leaf whose command-admission guard structurally refuses everything but a show/diagnostic read — no pipe-to-write, no mode change; ships dark/unwired at never-auto",
+      "files_owned": [
+        "modules/actuation/cisco/cisco.go",
+        "modules/actuation/cisco/interactive.go",
+        "modules/actuation/cisco/expect.go"
+      ],
+      "deps": [
+        "T-008-28"
+      ],
+      "req_ids": [
+        "REQ-829"
+      ],
+      "budget": {
+        "max_loc_delta": 700,
+        "max_wall_clock_minutes": 300
+      },
+      "acceptance": {
+        "go_test": "modules/actuation/cisco: TestExecRefusesEverythingButReadOnly (the read-only admission guard — pipe-to-redirect/tee/append + every mutating verb refused before the runner) / TestExecAdmitsReadOnlyAndRunsIt / TestModuleActuatorContract (ReadOnly unconditional) / TestRunShowEndToEndAgainstFakeCisco (pty+shell+pager-off+show over an in-process fake device) / TestRunShowFailsClosedWithoutKnownHosts / TestRunShowRefusesUnknownHostKey / TestRunShowCtxDeadlineAborts",
+        "notes": "TG-85 write slice 2 (2026-08-22) refactored interactive.go WITHOUT changing the read behavior: the connect / host-key / watchdog / PTY / pager-off setup was extracted into a private dialSession() helper so the separately-gated WRITE lane (configsession.go's config-mode transport) shares exactly ONE verified transport path with RunShow. RunShow is behavior-identical — the TestRunShow* end-to-end + fail-closed tests above prove it — so this task stays completed and read-only; the write lane is a distinct gated type (writer.go), never a flag flip on this one (ADR-0012). TG-85 component 3 (2026-08-23) adds the READ-ONLY SHOW CATALOG beside this task's verb guard, and with it a CREDENTIAL FLOOR on cisco.go's Exec. The slice-1 guard admits any first-token `show` carrying no mutating word — but `show` is a family, and running-config/startup-config carry IPsec pre-shared keys, SNMP communities and password hashes, while `show crypto ikev1 pre-shared-key` prints them outright. Reading a secret is not a mutation, so the mutating-verb guard never refused them. The floor is SCOPE-AWARE: an unscoped config dump and the secret sections (crypto, tunnel-group, aaa-server, snmp-server, all) are refused, while `show running-config interface <if>` stays admitted exactly as TestExecAdmitsReadOnlyAndRunsIt pins it. A Catalog (WithCatalog, optional) further NARROWS admission to a named diagnostic set; with none wired the module is byte-identical to this task's behaviour. The agent-facing read TOOL is deliberately NOT here: registering a tool renders into the model preamble, an eval-visible surface. TG-85 component 2 (2026-08-23) adds JUMP-HOST reachability to interactive.go: a Device may declare a bastion (Device.Jump), and dialSession then dials the bastion, verifies ITS host key against ITS own known_hosts, opens a direct-tcpip channel onward, and runs the DEVICE handshake over that tunnel — so the device key is still verified end-to-end and a compromised bastion can drop the session but never impersonate the device. Written by hand rather than `ssh -J` (no shell, INV-02). A PARTIALLY declared hop refuses the connection and never falls back to a direct dial. The zero value is a direct dial, so this task's existing behaviour is unchanged for a device with no hop. TG-85 component 4 (2026-08-23) adds the REVERSIBLE-OP REGISTRY: a NAMED change carrying its own declared undo, executed by name (WriteModule.ExecOp) rather than as text. It is NARROWER than the prefix path, not wider — the free-form guard is untouched, and a leading `no` becomes expressible only as the declared inverse of a registered op. Four registration rules, each mutation-verified: no op without an undo; the inverse may not equal the forward (the 'start rolls back to start' trap); an op_class on core/safety's non-configurable never-auto floor (interface-shutdown, no-interface, acl-delete, route-delete, erase-startup-config...) cannot register AT ALL, the same clamp the kubernetes leaf applies to delete/drain; and the platform is part of the op identity so an IOS registry never yields ASA's verb (`no shutdown` vs `no shut`), which would leave a change applied and un-revertable. The op SET is empty by default — which changes are safe on this estate is operator policy (config-not-code), not a judgement this package ships."
+      }
+    },
+    {
+      "id": "T-008-37",
+      "status": "completed",
+      "title": "Cisco agent-facing read tool (TG-85 slices 2–4 reconciliation): `cisco-show` surfaces the closed show catalog to the model over operator-declared devices — device+command as closed enums, one allowlisted arg token, argv re-admitted through Catalog.Admits (credential floor included); env-gated registration, DARK by default",
+      "files_owned": [
+        "modules/actuation/cisco/showtool.go",
+        "modules/actuation/cisco/showtool_test.go",
+        "cmd/worker/worker_cisco_read.go",
+        "cmd/worker/worker_cisco_read_test.go"
+      ],
+      "deps": [
+        "T-008-36"
+      ],
+      "req_ids": [
+        "REQ-829"
+      ],
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 180
+      },
+      "acceptance": {
+        "go_test": "modules/actuation/cisco: TestShowToolRunsACataloguedCommandExactly / TestShowToolRefusesEveryImprovisation / TestShowToolZeroDevicesRefusesConstruction / TestShowToolDeviceFailureIsAnObservationNotACrash; cmd/worker: TestParseCiscoReadDevicesDarkDefaultIsNothing / TestParseCiscoReadDevicesFailClosed / TestParseCiscoReadDevicesGoodEntry",
+        "notes": "Merged !1663 (2026-08-25); boot line attests DARK (no TG_CISCO_READ_DEVICES) vs registered-over-N-devices. Registration renders into the model preamble, so the slice was change-gated (eval/history/2026-08-25-change-08352bf... on !1662's skill, and the tool ships dark so its own arms were byte-identical by construction). The COMPANION halves delivered the same week are deliberately NOT owned here because no spec governs their trees: the cisco-triage SKILL (agent/skills/seeds/cisco-triage.md, registry v1.1.0, merged !1662 with a full-rigor change-gate PASS) and the first content PACK (core/pack/catalog.go Pack{ID:\"cisco\"}@1.0.0 + the worker's pack boot attestation, merged !1665, full-rigor GATE PASS overall Δ+0.07) are tracked on TG-85 — this note cures the lattice's under-reporting (TG-85 audit item 7) without inventing ownership; if a pack/skill spec is ever authored, these move there."
+      }
+    }
+  ]
+}

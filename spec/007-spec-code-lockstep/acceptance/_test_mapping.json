@@ -1,0 +1,13 @@
+{
+  "feature": "spec-code-lockstep.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes; pending = specified behavior whose driving step is not yet bound to the real code path; retrospective_gap = shipped without a driving test (must be zero for governed behavior). REQ-703 is BOUND (core/governance.AuthorizeRestamp, driven by TestSpecCodeLockstepAcceptance). REQ-701/702/704 are implemented in tools/specvalidate but remain pending until that hash mechanism is exposed as an importable surface a godog step can drive.",
+  "scenarios": [
+    { "name": "A governed safety-critical file is recorded with a content hash in the lockstep manifest", "req": "REQ-701", "status": "present", "test": "TestSpecCodeLockstepAcceptance" },
+    { "name": "A governed file changed without its owning spec fails the lockstep check",                 "req": "REQ-702", "status": "present", "test": "TestSpecCodeLockstepAcceptance" },
+    { "name": "The lockstep manifest excludes no governed safety-critical file",                          "req": "REQ-702", "status": "present", "test": "TestSpecCodeLockstepAcceptance" },
+    { "name": "A cosmetic comment edit alone does not register as spec drift",                            "req": "REQ-704", "status": "present", "test": "TestSpecCodeLockstepAcceptance" },
+    { "name": "A semantic code change registers as spec drift",                                           "req": "REQ-704", "status": "present", "test": "TestSpecCodeLockstepAcceptance" },
+    { "name": "A re-stamp is accepted only via an authorized audited approval",                           "req": "REQ-703", "status": "present", "test": "TestSpecCodeLockstepAcceptance" },
+    { "name": "An unauthorized re-stamp attempt is rejected",                                             "req": "REQ-703", "status": "present", "test": "TestSpecCodeLockstepAcceptance" }
+  ]
+}

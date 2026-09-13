@@ -1,0 +1,68 @@
+{
+  "spec": "003-auto-resolve",
+  "tasks": [
+    {
+      "id": "T-003-1",
+      "title": "core/reconcile.Reconciler band-aware close-out: confirmed-clear close, Done vs To Verify, resolution_type, per-incident best-outcome rollup",
+      "files_owned": [
+        "core/reconcile/reconciler.go",
+        "core/reconcile/closeout.go",
+        "core/reconcile/outcome.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-201",
+        "REQ-202",
+        "REQ-203",
+        "REQ-204",
+        "REQ-205"
+      ],
+      "acceptance": {
+        "feature": "auto-resolve.feature",
+        "scenarios": [
+          "An incident closes only after the alert condition is confirmed cleared",
+          "A band-AUTO recovered host transitions its ticket to Done",
+          "Every close-out records a resolution_type",
+          "A session with no terminal result leaves the incident open",
+          "Outcomes are recorded as per-incident best-outcome rows"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 420,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-003-2",
+      "title": "core/escalation.Queue requeue lane: schedule delayed re-check, re-escalate-or-defer via authenticated Temporal signal, stand down at the cap",
+      "files_owned": [
+        "core/escalation/queue.go",
+        "core/escalation/requeue.go",
+        "core/escalation/standdown.go"
+      ],
+      "deps": [
+        "T-003-1"
+      ],
+      "req_ids": [
+        "REQ-206",
+        "REQ-207",
+        "REQ-208"
+      ],
+      "acceptance": {
+        "feature": "auto-resolve.feature",
+        "scenarios": [
+          "An unanswered poll schedules a delayed re-check in the escalation queue",
+          "A re-check with a still-active condition re-escalates and pages the approver graph",
+          "A re-check with a recovered condition defers closure to the autocloser",
+          "Reaching the unanswered-poll cap stands down to a human"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 360,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed"
+    }
+  ]
+}

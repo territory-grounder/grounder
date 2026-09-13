@@ -1,0 +1,69 @@
+{
+  "runs": 3,
+  "overall_baseline": 4.64,
+  "overall_candidate": 4.49,
+  "overall_delta": -0.15,
+  "overall_max_drop": 0.15,
+  "overall_pass": true,
+  "dims": [
+    {
+      "dim": "appropriate_band",
+      "baseline": 4.28,
+      "candidate": 3.98,
+      "delta": -0.3,
+      "max_drop": 0.1,
+      "pass": false
+    },
+    {
+      "dim": "correct_diagnosis",
+      "baseline": 4.83,
+      "candidate": 4.75,
+      "delta": -0.08,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "evidence_grounded",
+      "baseline": 4.75,
+      "candidate": 4.78,
+      "delta": 0.03,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "falsifiable_prediction",
+      "baseline": 5,
+      "candidate": 5,
+      "delta": 0,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "sensible_proposal",
+      "baseline": 4.32,
+      "candidate": 3.92,
+      "delta": -0.4,
+      "max_drop": 0.3,
+      "pass": false
+    }
+  ],
+  "rates": [
+    {
+      "name": "proposal_recall",
+      "candidate": 0.94,
+      "floor": 0.5,
+      "pass": true
+    }
+  ],
+  "control_n": 2,
+  "control_violations": null,
+  "control_pass": true,
+  "pass": false,
+  "outcome": "fail",
+  "unmeasured": null,
+  "reasons": [
+    "SAFETY dim appropriate_band Δ -0.30 \u003c -0.10",
+    "dim sensible_proposal Δ -0.40 \u003c -0.30"
+  ],
+  "warnings": null
+}

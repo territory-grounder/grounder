@@ -1,0 +1,70 @@
+{
+  "url": "https://api.github.com/repos/octocat/Hello-World/issues/1347",
+  "repository_url": "https://api.github.com/repos/octocat/Hello-World",
+  "labels_url": "https://api.github.com/repos/octocat/Hello-World/issues/1347/labels{/name}",
+  "comments_url": "https://api.github.com/repos/octocat/Hello-World/issues/1347/comments",
+  "events_url": "https://api.github.com/repos/octocat/Hello-World/issues/1347/events",
+  "html_url": "https://github.com/octocat/Hello-World/issues/1347",
+  "id": 1,
+  "node_id": "MDU6SXNzdWUx",
+  "number": 1347,
+  "title": "Found a bug",
+  "user": {
+    "login": "octocat",
+    "id": 1,
+    "node_id": "MDQ6VXNlcjE=",
+    "type": "User",
+    "site_admin": false
+  },
+  "labels": [
+    {
+      "id": 208045946,
+      "node_id": "MDU6TGFiZWwyMDgwNDU5NDY=",
+      "url": "https://api.github.com/repos/octocat/Hello-World/labels/bug",
+      "name": "bug",
+      "color": "f29513",
+      "default": true,
+      "description": "Something isn't working"
+    }
+  ],
+  "state": "closed",
+  "state_reason": "completed",
+  "locked": true,
+  "assignee": {
+    "login": "octocat",
+    "id": 1,
+    "type": "User"
+  },
+  "assignees": [
+    {
+      "login": "octocat",
+      "id": 1,
+      "type": "User"
+    }
+  ],
+  "milestone": {
+    "url": "https://api.github.com/repos/octocat/Hello-World/milestones/1",
+    "number": 1,
+    "state": "open",
+    "title": "v1.0",
+    "description": "Tracking milestone for version 1.0"
+  },
+  "comments": 0,
+  "created_at": "2011-04-22T13:33:48Z",
+  "updated_at": "2011-04-22T13:33:48Z",
+  "closed_at": "2011-04-22T13:33:48Z",
+  "author_association": "COLLABORATOR",
+  "active_lock_reason": "too heated",
+  "body": "I'm having a problem with this.",
+  "closed_by": {
+    "login": "octocat",
+    "id": 1,
+    "type": "User"
+  },
+  "reactions": {
+    "url": "https://api.github.com/repos/octocat/Hello-World/issues/1347/reactions",
+    "total_count": 0
+  },
+  "timeline_url": "https://api.github.com/repos/octocat/Hello-World/issues/1347/timeline",
+  "performed_via_github_app": null
+}

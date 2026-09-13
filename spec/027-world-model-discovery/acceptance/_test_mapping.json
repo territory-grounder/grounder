@@ -1,0 +1,66 @@
+{
+  "feature": "world-model-discovery.feature",
+  "note": "Three scenarios now EXECUTE against the real worldmodel path (T-027-10, 2026-08-07); the remaining seven are still pending — specified and designed, not yet implemented (INV-22). The three are grounded in a live adopt performed through the console API on dc1tg01 (governance_ledger seq 9761), so the ordering and rationale properties they assert were observed in production before being pinned here.",
+  "scenarios": [
+    {
+      "name": "Discovery drafts entries with source provenance and table confidence",
+      "req": "REQ-2701",
+      "status": "present",
+      "test": "modules/discovery/systemd/systemd_test.go::TestDiscoveryDraftsEntriesWithSourceProvenanceAndTableConfidence + modules/discovery/docker/docker_test.go::TestContainersAreDiscoveredWithProvenanceAndFixedConfidence + core/db/world_discovery_e2e_test.go::TestWorldDiscoveryDraftsThroughTheRealStoreAndIsReadableBack (the draft rows through the REAL store)"
+    },
+    {
+      "name": "An unknown entity type from a corrupted source is loud-rejected",
+      "req": "REQ-2701",
+      "status": "present",
+      "test": "core/worldmodel/manifest_test.go::TestUnknownEntityTypeIsLoudRejected (rejects AND writes nothing) + modules/discovery/docker/docker_test.go::TestAnUnknownEntityTypeFromACorruptedSourceIsLoudRejected"
+    },
+    {
+      "name": "Adopting an entry appends the ledger row before the row update",
+      "req": "REQ-2702",
+      "status": "present",
+      "test": "spec/027-world-model-discovery/acceptance/steps_test.go::ledgerPrecedesRow (godog, drives worldmodel.Transition; RED control: write the row before the ledger)"
+    },
+    {
+      "name": "Reject without a rationale is refused",
+      "req": "REQ-2703",
+      "status": "present",
+      "test": "spec/027-world-model-discovery/acceptance/steps_test.go::refusedAndUnchanged (godog, drives worldmodel.Transition; RED control: delete the ErrRationaleRequired branch)"
+    },
+    {
+      "name": "The manifest view renders diffs and honors server-computed caller permissions",
+      "req": "REQ-2703",
+      "status": "present",
+      "test": "deploy/console/v2/e2e/manifest-review.mjs (Playwright, against the SERVED console): the granted->proposed diff panel must render (assertion: /granted\\s*→\\s*proposed/i), and with the server answering caller_can_act=false EVERY [data-act] control must be .disabled — disabled rather than hidden, since hiding leaves a read-only operator wondering where the queue went. Also pins the two failure modes either half could hide: a 503 renders an honest unavailable state, and no fabricated row may appear (a fake row on this surface is a fake ACTUATION TARGET one adopt click from being granted). NOTE ON EXECUTION: the console-e2e CI job is changes-gated on deploy/console/v2/**, so this runs on console-touching pipelines, not on every backend change."
+    },
+    {
+      "name": "A non-adopted unit is refused at the leaf and the same effect passes after adopt",
+      "req": "REQ-2704",
+      "status": "present",
+      "test": "spec/027-world-model-discovery/acceptance/steps_test.go::leafRefusesThenPasses (godog, drives worldmodel.NewAllowlistProvider on ONE instance across the adopt; RED control: replace env instead of union)"
+    },
+    {
+      "name": "Drift marks disappeared entries stale and drafts new entries without auto-retiring",
+      "req": "REQ-2705",
+      "status": "present",
+      "test": "core/worldmodel/manifest_test.go::TestDriftCanNeverRetireAnApprovedEntry (approved->stale, the withheld manifest:drift ledger decision, and no path draft->retired) + core/db/world_discovery_e2e_test.go::TestWorldDiscoveryDraftsThroughTheRealStoreAndIsReadableBack (re-discovery lands NEW entries as drafts through the real store, and a draft is absent from ApprovedEntries)"
+    },
+    {
+      "name": "A failing source contributes nothing and is reported loudly",
+      "req": "REQ-2705",
+      "status": "present",
+      "test": "modules/discovery/systemd/systemd_test.go::TestAFailingHostIsReportedLoudlyAndTheOthersStillContribute + modules/discovery/docker/docker_test.go::TestAFailingDockerHostIsReportedAndOthersProceed"
+    },
+    {
+      "name": "Adoption never lowers confidence and learned contributions stay capped",
+      "req": "REQ-2706",
+      "status": "present",
+      "test": "core/worldmodel/manifest_test.go::TestAdoptionNeverLowersConfidence (the MAX ratchet AND the learned cap below the 0.80 cutoff)"
+    },
+    {
+      "name": "A ratified class without adopted targets polls but cannot touch the host",
+      "req": "REQ-2707",
+      "status": "present",
+      "test": "core/worldmodel/two_grants_test.go::TestRatifiedClassWithoutAnAdoptedTargetCannotTouchTheHost + core/worldmodel/two_grants_test.go::TestAdoptingATargetConfersNoClassGrant (the intersection from both sides)"
+    }
+  ]
+}

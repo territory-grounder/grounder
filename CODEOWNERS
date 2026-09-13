@@ -1,0 +1,45 @@
+# Territory Grounder — code ownership of the "law" surfaces.
+#
+# These files are the guardrails an autonomous coding agent operates UNDER; per SDD best practice
+# (ADR-0009, finding (ii): "if it must happen, it belongs in a gate the agent cannot bypass"), changes
+# to them require an explicit human code-owner review rather than being silently rewritten by an agent.
+#
+# ENFORCEMENT (TG-185). This file used to say "until then this file is advisory", and that sentence
+# outlived the condition it described: the `protected-paths` CI job now runs scripts/lint-protected-paths.sh
+# on every merge request, it carries no allow_failure, and it REFUSES the merge when a path listed below
+# changes without a `Law-Change-Approved-By: @<codeowners-handle>` trailer naming an owner from THIS file.
+# The gate has its own oracle (scripts/lint-protected-paths_test.sh) running in the same job, so a gate
+# that stopped examining anything fails rather than passing quietly.
+#
+# Two things that sentence still gets right, kept because they are the remaining gap and not a
+# formality: this is a REPO-side gate, so it binds anything that goes through CI and does not bind a
+# direct push by someone who can bypass CI. Enabling "Require approval from Code Owners" on the
+# protected `main` branch is what closes that last hole, and it is a GitLab setting rather than
+# something this file can assert.
+#
+# The distinction matters more here than in most repositories: these are the guardrails an autonomous
+# agent operates under, and the agent can read this file. A control that describes itself as advisory
+# invites being treated as advisory.
+
+* @ncpjfuzl
+
+# The inviolable law and its mechanical core.
+/docs/CONSTITUTION.md            @ncpjfuzl
+/core/safety/                    @ncpjfuzl
+
+# Architecture decisions are immutable once Accepted (a reversal is a new ADR).
+/docs/adr/                       @ncpjfuzl
+
+# The executable spec lattice and its gate.
+/spec/                           @ncpjfuzl
+/tools/specvalidate/             @ncpjfuzl
+/docs/SDD-WORKFLOW.md            @ncpjfuzl
+/docs/GOVERNED-BEHAVIORS.md      @ncpjfuzl
+
+# The security gates and agent orientation.
+/.gitlab-ci.yml                  @ncpjfuzl
+/scripts/lint-forbidden.sh       @ncpjfuzl
+/.gitleaks.toml                  @ncpjfuzl
+/AGENTS.md                       @ncpjfuzl
+/CLAUDE.md                       @ncpjfuzl
+/CODEOWNERS                      @ncpjfuzl

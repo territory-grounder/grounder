@@ -1,0 +1,2 @@
+views.grounding = grndView;
+VIEW_META.grounding = ["Grounding", "The verifier's report card — match-rate, the falsifiability signal, blast-radius accuracy & the never-auto floor (REQ-517)"];

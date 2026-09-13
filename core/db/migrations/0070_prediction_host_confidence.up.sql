@@ -1,0 +1,21 @@
+-- TG-189: carry the ESTATE GRAPH's per-host path-product confidence onto the committed prediction.
+--
+-- WHY IT IS A COLUMN AND NOT A RESHAPE OF predicted_hosts. `predicted_hosts` is a jsonb ARRAY that every
+-- existing reader treats as a SET (core/db/falsify.go rebuilds it with keysToSet, the verifier does
+-- membership tests, the control scorer compares cardinalities). Turning it into an object would change the
+-- meaning of a column that four consumers already depend on, to add a field none of them read. This is
+-- additive and NULLABLE instead: pre-TG-189 rows stay exactly as they are and read back as "unscored".
+--
+-- WHAT IT BUYS. estate.BlastRadius decays confidence multiplicatively along the dependency walk, so a host
+-- two hops out is genuinely less certain than one hop out. core/predict flattened that away, so
+-- verify/falsify could only ever ask "did the named hosts alert?" — never "were the confidences we
+-- attached honest?". A model claiming 0.95 over 44 hosts and one claiming 0.12 over the same 44 are
+-- identical under the set and wildly different as forecasts. This column is what makes the Brier score in
+-- core/verify computable at scoring time, which is hours after the prediction was made and long after the
+-- in-memory graph state is gone.
+--
+-- NULL vs '{}': NULL means the row predates this column; '{}' means the model genuinely carried no
+-- confidence (a flat DependencyGraph). Both are "unscored" to Brier(), and neither is 0.0 — a zero here
+-- would read as "we were certain nothing would happen", which is a claim no model made.
+ALTER TABLE infragraph_prediction
+    ADD COLUMN predicted_host_confidence jsonb;

@@ -1,0 +1,42 @@
+/* MANIFEST module (mf-) — the world-model REVIEW surface (spec/027 REQ-2703, epic TG-227 plane 2).
+   Reuses tokens, chips, tbl, wrapcard, sec, empty verbatim — no new palette. The only visual weight added
+   is the one distinction that carries meaning here: what is GRANTED versus what is merely PROPOSED. */
+.mf-intro{font-size:11.5px;line-height:1.55;color:var(--ink3);max-width:80ch;margin:0 2px 16px;}
+.mf-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.mf-scroll table{min-width:860px;}
+/* status pills. draft = proposed, grants nothing (neutral); approved = granted (ok); stale = still granted
+   but unseen (warn); rejected/retired = terminal (muted). The colour IS the meaning: an operator scanning
+   this table must be able to see what TG can currently touch without reading a word. */
+.mf-st{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:2px 7px;
+  border-radius:4px;white-space:nowrap;border:1px solid var(--line2);color:var(--ink3);}
+.mf-st.draft{color:var(--map);border-color:color-mix(in srgb,var(--map) 45%,transparent);
+  background:color-mix(in srgb,var(--map) 9%,transparent);}
+.mf-st.approved{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent);
+  background:color-mix(in srgb,var(--ok) 10%,transparent);}
+.mf-st.stale{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent);
+  background:color-mix(in srgb,var(--warn) 10%,transparent);}
+/* provenance + confidence: where a fact came from and how strongly it is held. */
+.mf-src{font-family:var(--mono);font-size:10px;color:var(--ink3);white-space:nowrap;}
+.mf-conf{font-family:var(--mono);font-size:10.5px;color:var(--ink2);}
+/* the materialization chip — the honest answer to "does adopting this actually grant anything?". */
+.mf-mat{font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;padding:2px 6px;
+  border-radius:4px;white-space:nowrap;color:var(--ink3);border:1px dashed var(--line2);}
+.mf-mat.none{opacity:.62;}
+/* review controls. Disabled is a REAL state here: the server said this caller cannot act, and hiding the
+   control entirely would leave a read-only operator wondering where the queue went. */
+.mf-act{display:flex;gap:6px;white-space:nowrap;}
+.mf-btn{font-family:var(--mono);font-size:10px;letter-spacing:.04em;padding:3px 9px;border-radius:5px;
+  cursor:pointer;background:transparent;color:var(--ink2);border:1px solid var(--line2);}
+.mf-btn:hover:not(:disabled){color:var(--ink);border-color:var(--ink3);}
+.mf-btn.adopt:hover:not(:disabled){color:var(--ok);border-color:color-mix(in srgb,var(--ok) 55%,transparent);}
+.mf-btn.reject:hover:not(:disabled),.mf-btn.retire:hover:not(:disabled){color:var(--bad);
+  border-color:color-mix(in srgb,var(--bad) 55%,transparent);}
+.mf-btn:disabled{opacity:.4;cursor:not-allowed;}
+.mf-btn:focus-visible{outline:2px solid var(--map);outline-offset:2px;}
+/* the diff panel: what discovery proposes (drafts) against what is already granted. */
+.mf-diff{display:flex;flex-direction:column;gap:6px;padding:10px 12px;}
+.mf-dln{display:flex;gap:8px;font-family:var(--mono);font-size:11px;line-height:1.5;}
+.mf-dln .gut{width:12px;flex:none;color:var(--ink3);}
+.mf-dln.add{color:var(--ok);} .mf-dln.same{color:var(--ink3);}
+.mf-note{font-size:11px;color:var(--ink3);margin:6px 2px 0;}
+.mf-err{font-size:11px;color:var(--bad);margin:6px 2px 0;}

@@ -1,0 +1,106 @@
+{{/* grounder control-plane Deployment (spec/009 REQ-903, REQ-906, REQ-910). */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "grounder.componentName" (dict "root" . "component" "grounder") }}
+  labels:
+    {{- include "grounder.labels" . | nindent 4 }}
+    {{- include "grounder.selectorLabels" (dict "root" . "component" "grounder") | nindent 4 }}
+spec:
+  replicas: {{ .Values.grounder.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "grounder.selectorLabels" (dict "root" . "component" "grounder") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "grounder.labels" . | nindent 8 }}
+        {{- include "grounder.selectorLabels" (dict "root" . "component" "grounder") | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.grounder.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: {{ .Values.grounder.securityContext.runAsNonRoot }}
+        seccompProfile:
+          {{- toYaml .Values.grounder.securityContext.seccompProfile | nindent 10 }}
+      # Ordering parity with compose `depends_on: postgres: service_healthy` (spec/009 REQ-910):
+      # block the control-plane until the application Postgres answers before it accepts traffic.
+      initContainers:
+        - name: wait-for-postgres
+          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+          command:
+            - sh
+            - -c
+            - >-
+              until pg_isready -h {{ include "grounder.componentName" (dict "root" . "component" "postgres") }}
+              -p {{ .Values.postgres.port }} -U {{ .Values.postgres.superuser }};
+              do echo "waiting for postgres"; sleep 2; done
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: {{ .Values.grounder.securityContext.runAsUser }}
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: grounder
+          image: {{ include "grounder.image" . | quote }}
+          imagePullPolicy: {{ .Values.grounder.image.pullPolicy }}
+          securityContext:
+            runAsNonRoot: {{ .Values.grounder.securityContext.runAsNonRoot }}
+            runAsUser: {{ .Values.grounder.securityContext.runAsUser }}
+            runAsGroup: {{ .Values.grounder.securityContext.runAsGroup }}
+            readOnlyRootFilesystem: {{ .Values.grounder.securityContext.readOnlyRootFilesystem }}
+            allowPrivilegeEscalation: {{ .Values.grounder.securityContext.allowPrivilegeEscalation }}
+            capabilities:
+              {{- toYaml .Values.grounder.securityContext.capabilities | nindent 14 }}
+            seccompProfile:
+              {{- toYaml .Values.grounder.securityContext.seccompProfile | nindent 14 }}
+          ports:
+            - name: public
+              containerPort: {{ .Values.grounder.publicPort }}
+            - name: admin
+              containerPort: {{ .Values.grounder.adminPort }}
+          env:
+            # Phase 0/1 read-only foundation: actuation OFF by construction (spec/009 REQ-906 / INV-09). The
+            # grounder is read-only by construction (it holds no mode authority — a read-only chokepoint); the
+            # retired TG_MUTATION_ENABLED knob is absorbed into the worker's mode chokepoint (spec/015 REQ-1520).
+            {{- range $k, $v := .Values.grounder.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+            # credentials by reference, never literals (spec/009 REQ-904 / INV-13)
+            {{- include "grounder.secretEnv" (dict "root" . "name" "TG_RUNTIME_DSN" "key" .Values.secrets.keys.runtimeDSN) | nindent 12 }}
+            {{- include "grounder.secretEnv" (dict "root" . "name" "TG_MIGRATION_DSN" "key" .Values.secrets.keys.migrationDSN) | nindent 12 }}
+            {{- include "grounder.secretEnv" (dict "root" . "name" "LITELLM_MASTER_KEY" "key" .Values.secrets.keys.litellmMasterKey) | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.grounder.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.grounder.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.grounder.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        # writable scratch so the read-only root filesystem (REQ-903) stays enforced
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

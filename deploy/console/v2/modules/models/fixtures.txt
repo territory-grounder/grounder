@@ -1,0 +1,108 @@
+/* ---------------- MODELS (mdl-) fixtures — representative, not live ---------------- */
+const MDL_GATEWAY = { id:"litellm-gw01", url:"http://litellm.tg.svc:4000", ver:"litellm 1.61.3", state:"healthy", uptime:"41d" };
+
+const MDL_ROUTING = [
+  { role:"triage",         desc:"first-pass alert relevance, dedup, flap detection",      model:"claude-haiku-4-5", provider:"anthropic", fallbacks:["claude-sonnet-5"],                temp:0.0, p95:"0.9s" },
+  { role:"classify",       desc:"band assignment, risk features, blast-radius inputs",    model:"claude-sonnet-5",  provider:"anthropic", fallbacks:["claude-opus-4-8","gpt-5"],        temp:0.0, p95:"1.9s" },
+  { role:"agent-loop",     desc:"investigation loop — tool calls over the estate graph",  model:"claude-opus-4-8",  provider:"anthropic", fallbacks:["claude-sonnet-5","gpt-5"],        temp:0.2, p95:"6.8s" },
+  { role:"judge-liveness", desc:"governance judge — proves the loop is alive and sane",   model:"claude-sonnet-5",  provider:"anthropic", fallbacks:["claude-opus-4-8"],                temp:0.0, p95:"2.2s" },
+];
+
+const MDL_MODELS = [
+  { id:"claude-opus-4-8",  provider:"anthropic", ctx:"200k", roles:["agent-loop"],
+    temperature:0.2, max_tokens:8192, timeout_s:120, retries:2, backoff:"expo 2s–30s",
+    fallback:["claude-sonnet-5","gpt-5"], keyRef:"env:ANTHROPIC_API_KEY" },
+  { id:"claude-sonnet-5",  provider:"anthropic", ctx:"200k", roles:["classify","judge-liveness"],
+    temperature:0.0, max_tokens:4096, timeout_s:60, retries:2, backoff:"expo 1s–15s",
+    fallback:["claude-opus-4-8"], keyRef:"env:ANTHROPIC_API_KEY" },
+  { id:"claude-haiku-4-5", provider:"anthropic", ctx:"200k", roles:["triage"],
+    temperature:0.0, max_tokens:1024, timeout_s:20, retries:3, backoff:"expo 1s–8s",
+    fallback:["claude-sonnet-5"], keyRef:"env:ANTHROPIC_API_KEY" },
+  { id:"gpt-5",            provider:"openai",    ctx:"272k", roles:["fallback-only"],
+    temperature:0.0, max_tokens:4096, timeout_s:60, retries:1, backoff:"expo 2s–10s",
+    fallback:[], keyRef:"file:/run/secrets/openai_api_key" },
+];
+
+/* epistemic-family ramp for model spend (indigo = anthropic primaries; the
+   openai fallback is deliberately outside the ramp and shape-coded in legends) */
+const MDL_COLOR = {
+  "claude-opus-4-8":"var(--map)",
+  "claude-sonnet-5":"color-mix(in srgb, var(--map) 55%, var(--territory))",
+  "claude-haiku-4-5":"var(--territory)",
+  "gpt-5":"var(--ink4)",
+};
+
+const MDL_USAGE = {
+  "24h": {
+    label:"last 24 h", tokIn:14200000, tokOut:1860000, cost:31.42, budget:48.00, reqs:4917,
+    p50:"1.24s", p95:"6.81s", fallbackEvents:2,
+    roleReqs:{ "triage":1912, "classify":1406, "agent-loop":1455, "judge-liveness":144 },
+    roleFb:{ "triage":0, "classify":0, "agent-loop":2, "judge-liveness":0 },
+    costByModel:[
+      { id:"claude-opus-4-8", cost:19.84 }, { id:"claude-sonnet-5", cost:8.90 },
+      { id:"claude-haiku-4-5", cost:1.62 }, { id:"gpt-5", cost:1.06, fallbackOnly:true },
+    ],
+    tokensByRole:[
+      { role:"agent-loop", tin:9600000, tout:1210000 }, { role:"classify", tin:2400000, tout:310000 },
+      { role:"triage", tin:1700000, tout:220000 },      { role:"judge-liveness", tin:500000, tout:120000 },
+    ],
+    series:{
+      bucket:"hr", note:"529 burst → gpt-5 ×2",
+      obs:  [176,168,158,149,142,138,151,183,224,312,268,247,239,251,244,232,241,228,214,205,198,189,182,178],
+      envLo:[120,116,110,106,102,100,108,132,168,180,182,178,174,178,176,170,172,166,158,152,148,142,138,134],
+      envHi:[232,226,216,208,200,196,212,258,296,308,310,304,298,304,300,292,294,286,274,264,258,248,242,236],
+      xlabels:[[0,"-24h"],[6,"-18h"],[12,"-12h"],[18,"-6h"],[23,"now"]],
+    },
+  },
+  "7d": {
+    label:"last 7 days", tokIn:96800000, tokOut:12400000, cost:214.90, budget:336.00, reqs:33384,
+    p50:"1.21s", p95:"7.4s", fallbackEvents:9,
+    roleReqs:{ "triage":12990, "classify":9556, "agent-loop":9830, "judge-liveness":1008 },
+    roleFb:{ "triage":1, "classify":2, "agent-loop":6, "judge-liveness":0 },
+    costByModel:[
+      { id:"claude-opus-4-8", cost:133.20 }, { id:"claude-sonnet-5", cost:61.10 },
+      { id:"claude-haiku-4-5", cost:11.90 }, { id:"gpt-5", cost:8.70, fallbackOnly:true },
+    ],
+    tokensByRole:[
+      { role:"agent-loop", tin:65400000, tout:8100000 }, { role:"classify", tin:16400000, tout:2100000 },
+      { role:"triage", tin:11600000, tout:1400000 },     { role:"judge-liveness", tin:3400000, tout:800000 },
+    ],
+    series:{
+      bucket:"day", note:"Tue burst → fallback ×3",
+      obs:  [4638,5104,4779,4402,4688,4856,4917],
+      envLo:[4200,4300,4250,4100,4200,4250,4300],
+      envHi:[5000,5050,5100,4950,5050,5100,5150],
+      xlabels:[[0,"-6d"],[2,"-4d"],[4,"-2d"],[6,"now"]],
+    },
+  },
+  "30d": {
+    label:"last 30 days", tokIn:402000000, tokOut:51200000, cost:903.11, budget:1440.00, reqs:141110,
+    p50:"1.19s", p95:"7.9s", fallbackEvents:31,
+    roleReqs:{ "triage":55480, "classify":40610, "agent-loop":40700, "judge-liveness":4320 },
+    roleFb:{ "triage":4, "classify":7, "agent-loop":19, "judge-liveness":1 },
+    costByModel:[
+      { id:"claude-opus-4-8", cost:561.40 }, { id:"claude-sonnet-5", cost:255.61 },
+      { id:"claude-haiku-4-5", cost:49.10 }, { id:"gpt-5", cost:37.00, fallbackOnly:true },
+    ],
+    tokensByRole:[
+      { role:"agent-loop", tin:272000000, tout:33600000 }, { role:"classify", tin:68000000, tout:8800000 },
+      { role:"triage", tin:48000000, tout:5600000 },       { role:"judge-liveness", tin:14000000, tout:3200000 },
+    ],
+    series:{
+      bucket:"day", note:"2 bursts over envelope",
+      obs:  [4390,4512,4488,4620,4711,4590,4655,4720,4838,4902,5121,4791,4688,4570,4632,4544,4611,4702,4788,4850,4917,5204,4899,4760,4681,4590,4633,4705,4779,4917],
+      envLo:[4150,4160,4170,4180,4190,4200,4200,4210,4220,4230,4240,4240,4230,4220,4210,4200,4200,4210,4220,4230,4240,4250,4250,4240,4230,4220,4220,4230,4240,4250],
+      envHi:[4950,4960,4970,4980,4990,5000,5000,5010,5020,5030,5040,5040,5030,5020,5010,5000,5000,5010,5020,5030,5040,5050,5050,5040,5030,5020,5020,5030,5040,5050],
+      xlabels:[[0,"-30d"],[9,"-21d"],[19,"-11d"],[29,"now"]],
+    },
+  },
+};
+
+const MDL_JUDGE = {
+  route:{ model:"claude-sonnet-5", fallbacks:["claude-opus-4-8"] },
+  schedule:"*/10 * * * *", cadence:"every 10 min",
+  lastBeatS:134, staleAfter:"25m", state:"healthy",
+  beats:[1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],   /* 1=on time, 2=late */
+  lastVerdict:"14:29:12  judge  verdict=alive  drift=none  loop_heartbeat=fresh  ledger_seq=1428  conf=0.97",
+  escalation:"estate-wide POLL_PAUSE + page on-call · never auto-resumes",
+};

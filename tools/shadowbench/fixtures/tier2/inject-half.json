@@ -1,0 +1,5 @@
+{
+  "_comment": "tier2 --dry-run FIXTURE (TG-72), TIER2_DRY_FIXTURE=half: only ONE of the two faults landed. A half-injection is NOT tier 2 — there is no ambiguity to resolve — so the harness must REFUSE TO SCORE with its distinct exit code (6), restoring whatever landed. This fixture is the CI proof of that refusal path.",
+  "service_down": { "landed": true, "detail": "systemctl stop fakeapp; is-active=inactive" },
+  "log_fill": { "landed": false, "pre_effect": true, "detail": "already at/above target percent - refused before any allocation (nothing to undo)" }
+}

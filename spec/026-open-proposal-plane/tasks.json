@@ -1,0 +1,226 @@
+{
+  "spec": "026-open-proposal-plane",
+  "tasks": [
+    {
+      "id": "T-026-1",
+      "title": "Skill v1.3.0 free-form propose duty + empty-catalog preamble (eval-gated reasoning surface)",
+      "files_owned": [
+        "agent/skills/skills.go",
+        "agent/loop.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-2601",
+        "REQ-2609"
+      ],
+      "acceptance": {
+        "feature": "open-proposal-plane.feature",
+        "scenarios": [
+          "An action-warranted fault with an empty catalog yields a free-form proposal, not a stand-down",
+          "Actor evidence never suppresses the proposal itself"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 220,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed",
+      "description": "[Cross-spec ownership note: agent/loop.go previously delivered under spec/011 T-011-1 (completed); this task is the sole pending owner.]"
+    },
+    {
+      "id": "T-026-2",
+      "title": "Grammar: additive undo_sketch + structured actor_evidence on the proposal record (spec/002 prose amendment + lockstep restamp same MR)",
+      "files_owned": [
+        "core/proposal/parse.go",
+        "core/proposal/proposal.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-2602",
+        "REQ-2606",
+        "REQ-2610"
+      ],
+      "acceptance": {
+        "feature": "open-proposal-plane.feature",
+        "scenarios": [
+          "The one grammar accepts a free-form op_class and an optional undo sketch",
+          "Actor evidence is captured as a structured field and screened"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 160,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed",
+      "description": "[Cross-spec ownership note: core/proposal/parse.go + proposal.go previously delivered under spec/002 T-002-4 (completed); paired spec/002 prose + lockstep restamp land in the same MR.]"
+    },
+    {
+      "id": "T-026-3",
+      "title": "Shadow divert branch before the approval lane (GetVersion-guarded) + occurrence Deps seam",
+      "files_owned": [
+        "temporal/runner/workflow.go",
+        "temporal/runner/activities.go"
+      ],
+      "deps": [
+        "T-026-2"
+      ],
+      "req_ids": [
+        "REQ-2603",
+        "REQ-2605",
+        "REQ-2606"
+      ],
+      "acceptance": {
+        "feature": "open-proposal-plane.feature",
+        "scenarios": [
+          "An unregistered op_class diverts to shadow before notify, projection, and vote",
+          "A registered op_class does not divert",
+          "Every shadow proposal appends exactly one withheld propose:open ledger row"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 320,
+        "max_wall_clock_minutes": 180
+      },
+      "status": "completed",
+      "description": "[Cross-spec ownership note: temporal/runner/workflow.go + activities.go previously delivered under spec/012 T-012-1 (completed); this task is the sole pending owner of the divert branch. The spec/028 T-028-6 resolver wiring also touches activities.go — sequence 026 before 028 Stage-4 wiring.]"
+    },
+    {
+      "id": "T-026-4",
+      "title": "Migration 0046: undo_sketch + outcome proposed:shadow (actor-evidence reuses the migration-0035 column) (additive, defaulted)",
+      "files_owned": [
+        "core/db/migrations/0046_shadow_proposal.down.sql",
+        "core/db/migrations/0046_shadow_proposal.up.sql",
+        "core/db/triage_judgment.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-2604",
+        "REQ-2605"
+      ],
+      "acceptance": {
+        "feature": "open-proposal-plane.feature",
+        "scenarios": [
+          "A shadow proposal persists first-wins with its screened fields and shadow outcome"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 120,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed",
+      "description": "[Actor-evidence adds NO column: session_triage.actor_evidence exists since migration 0035 and is reused (REQ-2604/REQ-2610).]"
+    },
+    {
+      "id": "T-026-5",
+      "title": "GET /v1/proposals read handler (AuthReadOnly, nil-reader 503)",
+      "files_owned": [
+        "core/httpapi/proposals.go",
+        "core/httpapi/router.go",
+        "cmd/grounder/proposals_read.go",
+        "cmd/grounder/proposals_read_test.go"
+      ],
+      "deps": [
+        "T-026-4"
+      ],
+      "req_ids": [
+        "REQ-2607"
+      ],
+      "acceptance": {
+        "feature": "open-proposal-plane.feature",
+        "scenarios": [
+          "The proposals read surface fails closed with a nil reader"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 140,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed",
+      "description": "[Cross-spec ownership note: core/httpapi/router.go previously delivered under spec/006 T-006-1 (completed); this task adds one route entry.]",
+      "notes": " COMPOSITION FIX (2026-07-31, review wf_0d0e4c92): Deps.Proposals wired at cmd/grounder (new proposals_read.go adapter owned here; the one-line deps.go/main.go touches coordinated with pending spec/024 T-024-2 via its note). Unwiring now breaks the build (compile-time aliveness)."
+    },
+    {
+      "id": "T-026-6",
+      "title": "Console proposals view (nine-touchpoint recipe; live-only; no actuation controls)",
+      "files_owned": [
+        "deploy/console/v2/modules/proposals/css.txt",
+        "deploy/console/v2/modules/proposals/js.txt",
+        "deploy/console/v2/modules/proposals/wiring.txt",
+        "deploy/console/v2/assemble.py",
+        "deploy/console/v2/console.html",
+        "deploy/console/v2/e2e/proposals-honesty.mjs",
+        "deploy/console/v2/modules/proposals/fixtures.txt",
+        "deploy/console/v2/modules/proposals/meta.json"
+      ],
+      "deps": [
+        "T-026-5"
+      ],
+      "req_ids": [
+        "REQ-2607"
+      ],
+      "acceptance": {
+        "feature": "open-proposal-plane.feature",
+        "scenarios": [
+          "The proposals view renders live states honestly and offers no mutating control"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 420,
+        "max_wall_clock_minutes": 180
+      },
+      "status": "completed",
+      "description": "[fixtures.txt carries the live-only HONESTY CONTRACT note per the policy-module precedent; meta.json completes the five-file module convention.]"
+    },
+    {
+      "id": "T-026-7",
+      "title": "Acceptance oracles + RED mutation controls (godog + defense-in-depth chain citation)",
+      "files_owned": [
+        "spec/026-open-proposal-plane/acceptance/acceptance_test.go",
+        "spec/026-open-proposal-plane/acceptance/stage1_steps_test.go"
+      ],
+      "deps": [
+        "T-026-3",
+        "T-026-4"
+      ],
+      "req_ids": [
+        "REQ-2608"
+      ],
+      "acceptance": {
+        "feature": "open-proposal-plane.feature",
+        "scenarios": [
+          "A force-routed free-form action is refused at the empty-argv leaf and the refusal is ledgered"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 500,
+        "max_wall_clock_minutes": 240
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-026-8",
+      "title": "Actor-evidence class table + band-floor resolution (safe-direction-only composition)",
+      "files_owned": [
+        "core/proposal/evidence.go"
+      ],
+      "deps": [
+        "T-026-2"
+      ],
+      "req_ids": [
+        "REQ-2611"
+      ],
+      "acceptance": {
+        "feature": "open-proposal-plane.feature",
+        "scenarios": [
+          "Authored-action evidence raises the band to a POLL_PAUSE floor and never lowers a computed band"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 150,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed",
+      "description": "[Composition seam DEFERRED: the core/risk GatedInput floor field + classifier safe-direction clamp are delivered by spec/028 T-028-4 (TRAILER + lockstep restamp there); this task ships only the evidence-class table + evidence-class→floor mapping that seam consumes (REQ-2611). Floor vocabulary: POLL_PAUSE (constitutional band names only).] [DEFERRED SEAM NOW DELIVERED by spec/028 T-028-4: core/risk GatedInput's BandFloor/BandFloorApplies/BandFloorReason plus Classify's safe-direction-only clamp. The clamp is applied as a WRAPPER over the whole decision procedure so no early-return path escapes it, and AFTER classification so a mechanical poll_reason outranks a declared floor. REQ-2611's POLL_PAUSE floor and REQ-2809's AUTO_NOTICE floor share the ONE field on purpose: a second place bands can be adjusted is a second place they can be adjusted DOWNWARD. BandFloorApplies is required because safety.Band's zero value is the strictest band, so an unset field would floor the entire estate. Prose: spec/001 design.md 'The declared band floor'. Oracles: core/risk/band_floor_test.go.]"
+    }
+  ]
+}

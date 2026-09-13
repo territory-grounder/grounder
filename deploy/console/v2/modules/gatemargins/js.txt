@@ -1,0 +1,146 @@
+/* ================= gate-margins module (gm-) — the within-ε boundary-case queue (TG-178) =================
+   Reads GET /v1/gates/within-epsilon (core/httpapi/gate_margins.go). The page is GateBoundaryPage
+   {epsilon, cases[]}; each case is GateBoundaryCase {action_id, external_ref, ordinal, gate, verdict,
+   reason, margin}. This view reads THOSE EXACT JSON KEYS — the contract test gate_margins_contract_test.go
+   pins them, so a rename breaks the build rather than silently reverting this surface to a fixture.
+
+   gmRender(page, live) is the single render for every state, so the live override in modules/_live/js.txt
+   can reuse it (mirrors grndRender): a live shell passes the live page, the design preview passes the
+   fixture. It NEVER invents a case — an unreadable or empty queue renders an honest state, not a fixture. */
+
+/* action_id is a long content hash; the queue shows the first 8, full value on hover. */
+function gmShortId(id){ return id ? String(id).slice(0, 8) : "—"; }
+
+/* which side of the threshold the signed margin sits on — the whole point of the queue. */
+function gmMarginSide(m){
+  if(typeof m !== "number" || isNaN(m)) return "unknown";
+  return m < 0 ? "neg" : m > 0 ? "pos" : "zero";
+}
+
+/* the signed distance-to-threshold, formatted. 0 is a REAL at-threshold value and is shown as such,
+   never blank; a non-number (which the server never sends — margin is required non-nil) is the only "—". */
+function gmFmtMargin(m){
+  if(typeof m !== "number" || isNaN(m)) return "—";
+  if(m === 0) return "0.000";
+  return (m > 0 ? "+" : "−") + Math.abs(m).toFixed(3);
+}
+
+/* the ε the set was selected on, trimmed of trailing zeros so 0.05 reads as "0.05", not "0.050000". */
+function gmFmtEps(e){
+  if(typeof e !== "number" || isNaN(e)) return "—";
+  let s = e.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
+  return s === "" ? "0" : s;
+}
+
+function gmVerdictKey(v){
+  const s = String(v || "").toLowerCase();
+  if(s.startsWith("pass") || s === "allow" || s === "ok") return "pass";
+  if(s.startsWith("refus") || s.startsWith("fail") || s.startsWith("deny") || s.startsWith("block")) return "refuse";
+  return "other";
+}
+function gmVerdictChip(v){
+  return h("span", { class: "gm-v gm-v-" + gmVerdictKey(v) }, String(v || "—").toUpperCase());
+}
+
+/* closest to the threshold first — the reviewable order. |margin| ascending; a non-number sorts last so
+   a malformed row can never jump the queue. Ties keep the server's order (stable sort). */
+function gmSort(cases){
+  cases.sort((a, b) => {
+    const am = (typeof a.margin === "number" && !isNaN(a.margin)) ? Math.abs(a.margin) : Infinity;
+    const bm = (typeof b.margin === "number" && !isNaN(b.margin)) ? Math.abs(b.margin) : Infinity;
+    return am - bm;
+  });
+  return cases;
+}
+
+function gmEmpty(big, desc){
+  return h("div", { class: "empty gm-empty" },
+    h("div", { class: "big" }, big),
+    h("div", { class: "desc" }, desc));
+}
+
+/* gmRender(page, live):
+     page === undefined -> the live read has not landed yet (loading)
+     page === null      -> the live read failed / 503 (honest "could not read", NOT an empty queue)
+     page.cases === []  -> a genuinely empty queue (honest "no gate within ε")
+     page.cases  [...]  -> the boundary-case table, sorted by distance to threshold
+   `live` decides the header tag (LIVE vs the design preview + fixtureChip). */
+function gmRender(page, live){
+  const wrap = h("div");
+  const hasPage = page && typeof page === "object";
+  const cases = (hasPage && Array.isArray(page.cases)) ? page.cases.slice() : null;
+  const eps = (hasPage && typeof page.epsilon === "number") ? page.epsilon : null;
+
+  wrap.append(h("div", { class: "sec" },
+    h("span", { class: "lbl", style: "color:var(--" + (live ? "match" : "map") + ")" },
+      live ? "LIVE · gate boundary queue" : "GATE BOUNDARY QUEUE"),
+    h("h3", {}, "Decisions within ε of their threshold"),
+    h("span", { class: "rule" }),
+    (eps != null)
+      ? h("span", { class: "lbl gm-eps" },
+          "ε = " + gmFmtEps(eps)
+          + (cases ? (" · " + cases.length + " case" + (cases.length === 1 ? "" : "s")) : "")
+          + " · sorted by distance to threshold")
+      : null,
+    live ? null : (typeof fixtureChip === "function" ? fixtureChip() : null)));
+
+  wrap.append(h("p", { class: "desc gm-intro" },
+    "Every interceptor gate that passed or refused within ε of its numeric threshold. Margin is a "
+    + "signed distance: negative sat on the refusing side by that much, positive cleared by it, 0 is exactly "
+    + "at the threshold. A gate with no numeric threshold (a binary match or floor) carries no margin and "
+    + "never appears here."));
+
+  if(cases === null){
+    if(page === null){
+      wrap.append(gmEmpty("This queue could not be read",
+        "The gate-margins reader answered fail-closed (503) or is not wired — this read is elevated to the "
+        + "trace-read role. Nothing is shown rather than a fabricated boundary case: an empty list here is "
+        + "NOT a claim that no decision landed near a threshold."));
+    } else {
+      wrap.append(gmEmpty("Reading the boundary-case queue…",
+        "Fetching the gate-verdict trail for decisions within ε of their threshold."));
+    }
+    return wrap;
+  }
+
+  if(!cases.length){
+    wrap.append(gmEmpty("No gate decided within ε",
+      "Every recorded gate decision cleared or refused by more than ε" + (eps != null ? (" (" + gmFmtEps(eps) + ")") : "")
+      + ". That is a real, honest state — nothing is invented to fill the queue. Widen ε to review more."));
+    return wrap;
+  }
+
+  gmSort(cases);
+  const card = h("div", { class: "wrapcard" });
+  const scroll = h("div", { class: "gm-scroll" });
+  const t = h("table", { class: "tbl gm-tbl" });
+  t.append(h("thead", {}, h("tr", {},
+    h("th", {}, "Gate"),
+    h("th", { class: "gm-num" }, "#"),
+    h("th", {}, "Action"),
+    h("th", {}, "Verdict"),
+    h("th", { class: "gm-num" }, "Margin"),
+    h("th", {}, "Reason"))));
+  const tb = h("tbody");
+  cases.forEach(c => {
+    tb.append(h("tr", { "data-side": gmMarginSide(c.margin) },
+      h("td", { class: "m gm-gate" }, c.gate || "—"),
+      h("td", { class: "gm-num gm-ord" }, (c.ordinal != null ? String(c.ordinal) : "—")),
+      h("td", { class: "m gm-act", title: (c.action_id || "") + (c.external_ref ? (" · " + c.external_ref) : "") },
+        gmShortId(c.action_id)),
+      h("td", {}, gmVerdictChip(c.verdict)),
+      h("td", { class: "m gm-num gm-margin gm-" + gmMarginSide(c.margin) }, gmFmtMargin(c.margin)),
+      h("td", { class: "gm-reason", title: c.reason || "" }, c.reason || "—")));
+  });
+  t.append(tb);
+  scroll.append(t);
+  card.append(scroll);
+  wrap.append(card);
+  return wrap;
+}
+
+/* The design-preview entry point: the representative fixture, behind fixtureChip(). The live layer
+   reassigns views.gatemargins to a live-aware override (modules/_live/js.txt). */
+function gmView(){
+  return gmRender(typeof GM_FIXTURE !== "undefined" ? GM_FIXTURE : { epsilon: 0.05, cases: [] }, false);
+}

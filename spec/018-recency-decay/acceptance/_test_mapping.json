@@ -1,0 +1,36 @@
+{
+  "feature": "recency-decay.feature",
+  "note": "Honest coverage frontier. status: present = a runnable godog step drives real code and passes (must name a test); pending = specified behavior whose implementation does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior, INV-22). Every scenario here is present — the recency/decay discipline and the discovery-corpus flush are implemented and bound.",
+  "scenarios": [
+    {
+      "name": "A lesson carries provenance and an aged lesson is down-weighted and pruned",
+      "req": "REQ-1801",
+      "status": "present",
+      "test": "spec/018-recency-decay/acceptance/acceptance_test.go:TestRecencyDecayAcceptance"
+    },
+    {
+      "name": "A learned co-occurrence count halves over a half-life and a faded pair ages out",
+      "req": "REQ-1802",
+      "status": "present",
+      "test": "spec/018-recency-decay/acceptance/acceptance_test.go:TestRecencyDecayAcceptance"
+    },
+    {
+      "name": "An estate learned edge a fresh observation contradicts decays and ages out",
+      "req": "REQ-1803",
+      "status": "present",
+      "test": "spec/018-recency-decay/acceptance/acceptance_test.go:TestRecencyDecayAcceptance"
+    },
+    {
+      "name": "Decay ages learned state only and never touches ground truth or the estate",
+      "req": "REQ-1804",
+      "status": "present",
+      "test": "spec/018-recency-decay/acceptance/acceptance_test.go:TestRecencyDecayAcceptance"
+    },
+    {
+      "name": "The discovery-corpus flush drains captured deviations to the durable corpus file",
+      "req": "REQ-1805",
+      "status": "present",
+      "test": "spec/018-recency-decay/acceptance/acceptance_test.go:TestRecencyDecayAcceptance"
+    }
+  ]
+}

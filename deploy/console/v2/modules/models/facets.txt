@@ -1,0 +1,9 @@
+FACETS.models = [["24h","24h"],["7d","7 d"],["30d","30 d"]];
+facetState.models = "24h";
+/* Filter logic: the facet is the usage WINDOW, not a subset filter.
+   mdlModelsView() reads facetState.models and re-derives everything from
+   MDL_USAGE[win]: the six tiles, cost donut, tokens-by-role hbar, the
+   requests-vs-envelope chart (per-window series + x labels), and the
+   routing table's "reqs · <win>" and "fb events" columns. The shell's
+   facet buttons already call facetState[view]=k; route(view) — no extra
+   handler code is needed. */
