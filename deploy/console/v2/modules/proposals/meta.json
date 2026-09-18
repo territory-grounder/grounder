@@ -1,0 +1,16 @@
+{
+ "nav": {
+  "group": "RECORD",
+  "label": "Proposals",
+  "view_key": "proposals",
+  "badge": "proposals",
+  "icon_svg_inner": "<path d=\"M8 2.2v3.1M8 2.2l-2 2M8 2.2l2 2\"/><rect x=\"2.5\" y=\"6.5\" width=\"11\" height=\"7\" rx=\"1\"/><path d=\"M5 9.5h6M5 11.5h3.5\"/>"
+ },
+ "view_meta": [
+  "Proposals",
+  "shadow proposals — free-form fixes the agent named with no registered op-class; recorded and screened, structurally unexecutable (spec/026 · TG-228)."
+ ],
+ "purpose": "PROPOSALS surface (record domain, epic TG-227/TG-228, spec/026 REQ-2607): the operator window onto the open proposal plane — every free-form remediation the agent proposed where NO registered op-class existed. One honest live table from the read-only GET /v1/proposals (AuthReadOnly, nil-reader 503): external ref, host, alert rule, the proposed op + free-form op_class slug, the screened rationale, the undo sketch, confidence, actor attribution, age, and (TG-307) the derived diagnosis SIGNAL — whether the agent bound a typed claim, whether it cited GROUNDED evidence AGAINST its own root cause (the recorded A2 failure), and how many assertions it could not ground. The signal only; the claim TEXT stays behind the elevated AuthTraceRead gate on /v1/sessions/{ref}/diagnosis, which the row deep-links to. These rows are the RAW MATERIAL of the earned catalog (spec/028 candidate dossiers cluster them); the view renders NO actuation control of any kind — a shadow proposal cannot execute by construction (nil argv, every effect leaf refuses, never-auto floor; REQ-2608), and the surface never pretends otherwise.",
+ "notes": "Honesty contract: NO fixture — every value is fetched live at view render via the guarded liveGet contract. Unauthenticated shows only the auth gate; a 503 (nil reader / spine unwired) renders an honest unavailable state and an empty spine an honest empty state, never a fabricated row (INV-15). All rendered text is persisted, screen.Scrub-screened data (REQ-2606); no argv, no secret, no key material appears (INV-13). The rail badge shows the REAL total from the API response and stays em-dash until a real count exists — it never invents a number. TG-307: the diagnosis signal is the SERVER's grounded-contradiction answer (core/db.shadowDiagnosisSignal off the same session_triage.diagnosis column the judge scores), never recomputed in JS; a session with no recorded claim renders an honest em-dash, never a fabricated all-clear. No mutating control exists on this surface: no ratify, no dismiss, no execute (the diagnosis cell's deep-link is a plain anchor to a read surface, not a control) — those belong to spec/028's gated write lane, and rendering them disabled here would still be a lie about this plane's capabilities.",
+ "verified": "assemble.py rebuild byte-clean; node --check on the extracted bundle passes; hash-route #proposals registers; loading/unavailable/empty/populated states exercised against a stubbed API via Playwright (e2e/proposals-honesty.mjs) incl. the no-mutating-control assertion; the TG-307 diagnosis signal (contradicted → 'evidence against its own root cause'; recorded-clean and not-recorded → no false alarm) exercised via e2e/proposals-diagnosis.mjs, confirmed RED with the render removed."
+}

@@ -1,0 +1,358 @@
+{
+ "spec": "028-earned-op-class-catalog",
+ "tasks": [
+  {
+   "id": "T-028-1",
+   "title": "Migrations 0048/0049/0050: candidate + occurrence journal, registry overlay, ladder widening + credit",
+   "files_owned": [
+    "core/db/migrations/0048_opclass_candidate.down.sql",
+        "core/db/migrations/0048_opclass_candidate.up.sql",
+    "core/db/migrations/0049_opclass_ratified.down.sql",
+        "core/db/migrations/0049_opclass_ratified.up.sql",
+    "core/db/migrations/0050_ladder_auto_notice.down.sql",
+        "core/db/migrations/0050_ladder_auto_notice.up.sql",
+    "core/db/opclass_ratified_migration_test.go"
+   ],
+   "deps": [],
+   "req_ids": [
+    "REQ-2801",
+    "REQ-2802",
+    "REQ-2803",
+    "REQ-2804"
+   ],
+   "acceptance": {
+    "feature": "earned-op-class-catalog.feature",
+    "scenarios": [
+     "The same incident re-proposed five times counts once"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 300,
+    "max_wall_clock_minutes": 150
+   },
+   "status": "completed",
+   "notes": " STAGE-4 (2026-08-01): migrations 0049 (registry overlay, REQ-2803) and 0050 (ladder widening + graduation_credit, REQ-2804) DELIVERED alongside the Stage-2 0048. Repo convention is .up.sql/.down.sql pairs, so each listed logical migration is a pair on disk. Structural DDL guards live in core/db/opclass_ratified_migration_test.go (CI has no Postgres \u2014 the migrations_test.go precedent)."
+  },
+  {
+   "id": "T-028-2",
+   "title": "Candidate lifecycle Transition chokepoint + clustering singleton cron (finalizer shape, dead-man)",
+   "files_owned": [
+    "core/opclasscat/candidate.go",
+    "core/opclasscat/candidate_test.go",
+    "temporal/opclasscluster/cron.go",
+    "temporal/opclasscluster/cron_test.go",
+    "core/db/opclass_candidate.go",
+    "cmd/worker/opclass_occurrence_test.go"
+   ],
+   "deps": [
+    "T-028-1"
+   ],
+   "req_ids": [
+    "REQ-2811",
+    "REQ-2812"
+   ],
+   "acceptance": {
+    "feature": "earned-op-class-catalog.feature",
+    "scenarios": [
+     "Three distinct incidents across two hosts advance a key to candidate",
+     "Threshold-minus-one stays observing",
+     "The cron refuses its pass when occurrence intake is stale while sessions flow"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 600,
+    "max_wall_clock_minutes": 300
+   },
+   "status": "completed",
+   "notes": " DELIVERED 2026-08-01 (Stage 2). Adds the pgx store (core/db/opclass_candidate.go) and the composition-aliveness oracle (cmd/worker/opclass_occurrence_test.go) to files_owned \u2014 the Stage-1 review's dead-endpoint lesson. The one-line evidence-seam + cron wiring in cmd/worker/main.go is coordinated with pending spec/027 T-027-6 via notes on BOTH tasks (the deps.go precedent). ratify_ready advancement is fail-closed until Stage 3 supplies the estate blast-radius walk (nil ReadyResolver => 0% coverage)."
+  },
+  {
+   "id": "T-028-3",
+   "title": "Ladder widening: LevelAutoNotice + notice_run_count + threshold resolver + tierForbidsAuto extension (TRAILER + spec/015 amendment + restamp)",
+   "files_owned": [
+    "core/policy/graduation.go",
+    "core/policy/graduation_test.go"
+   ],
+   "deps": [
+    "T-028-1"
+   ],
+   "req_ids": [
+    "REQ-2806",
+    "REQ-2807",
+    "REQ-2808",
+    "REQ-2810"
+   ],
+   "acceptance": {
+    "feature": "earned-op-class-catalog.feature",
+    "scenarios": [
+     "Promotion requires the full threshold and persists durably or refuses",
+     "A deviation at auto notice drops the class to approve and resets streaks",
+     "An overlay-only class caps at auto notice"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 450,
+    "max_wall_clock_minutes": 240
+   },
+   "status": "completed",
+   "description": "[BLOCKED: core/policy/graduation.go is co-owned by PENDING spec/015 T-015-8 \u2014 the only pending-vs-pending file collision in the lattice. Complete or close/fold T-015-8 first so no two pending tasks own the file (SDD-WORKFLOW \u00a74 parallel-dispatch rule); review wf_495c3a80-aa8 F8. TRAILER + spec/015 amendment + lockstep restamp at implementation.]",
+   "notes": "UNBLOCKED 2026-07-31: spec/015 T-015-8 (the co-owner of core/policy/graduation.go) is now completed \u2014 its last gap, REQ-1515's verify-on-auto oracle, is delivered. No pending-vs-pending collision remains on that file.",
+   "note": "No lockstep restamp: core/policy is deliberately OUTSIDE the lock's scope (ADR-0013 narrowing), so graduation.go moved without a hash to move. The Law-Change-Approved-By trailer IS required, because /spec/ is a CODEOWNERS-protected path and this lands the spec/015 design amendment. SCOPE NOTE: the AUTO ceiling incidentally TIGHTENED unregistered slugs. Previously an unregistered op-class could accumulate a durable `auto` row (tierForbidsAuto returns false for a slug with no tier); it now caps at auto_notice, since it is not embedded. That surfaced as TestCompose_NeverAutoFloorClampsUnderForce losing its precondition on the unregistered slug \"reboot\" \u2014 the oracle now overrides the isEmbeddedClass seam so the INV-09 floor is still proven clamping a class at the TOP rung rather than quietly testing one stuck below it."
+  },
+  {
+   "id": "T-028-4",
+   "title": "Band bridge: NoticeFloor on GatedInput, safe-direction-only clamp (TRAILER + lockstep restamp)",
+   "files_owned": [
+    "core/risk/input.go",
+    "core/risk/classifier.go",
+    "core/risk/band_floor_test.go"
+   ],
+   "deps": [],
+   "req_ids": [
+    "REQ-2809"
+   ],
+   "acceptance": {
+    "feature": "earned-op-class-catalog.feature",
+    "scenarios": [
+     "The per-rung band truth table holds on the real path"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 220,
+    "max_wall_clock_minutes": 150
+   },
+   "status": "completed",
+   "description": "[Cross-spec ownership note: core/risk/input.go + classifier.go previously delivered under spec/001 T-001-2 (completed); this task adds the NoticeFloor field + safe-direction clamp \u2014 which ALSO composes spec/026 REQ-2611 evidence floors (POLL_PAUSE) from the T-026-8 mapping table. TRAILER + lockstep restamp.]",
+   "note": "Delivered as a GENERAL band-floor seam rather than a NoticeFloor bool, so it serves both REQ-2809 (ladder AUTO_NOTICE floor) and spec/026 REQ-2611's deferred composition seam (authored-action POLL_PAUSE floor) \u2014 noted on T-026-8. Applied as a wrapper over Classify so no early-return path escapes it, and AFTER classification so a mechanical poll_reason outranks a declared floor."
+  },
+  {
+   "id": "T-028-5",
+   "title": "opschema ValidateSpec error-returning refactor + OverlayProvider composition with hash re-verification (TRAILER + spec/013 amendment + restamp)",
+   "files_owned": [
+    "core/actuate/opschema/opschema.go",
+    "core/actuate/opschema/overlay.go",
+    "core/actuate/opschema/overlay_test.go"
+   ],
+   "deps": [
+    "T-028-1"
+   ],
+   "req_ids": [
+    "REQ-2814",
+    "REQ-2815",
+    "REQ-2805"
+   ],
+   "acceptance": {
+    "feature": "earned-op-class-catalog.feature",
+    "scenarios": [
+     "Admission refuses a slotted argv0 an unknown family and an embedded-slug collision",
+     "A tampered overlay row is dropped loudly at refresh",
+     "A revoked class exits the composed registry within one refresh"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 550,
+    "max_wall_clock_minutes": 300
+   },
+   "status": "completed",
+   "note": "The lock now GOVERNS core/actuate/opschema/overlay.go (spec 013): the file is the runtime capability-admission gate, so leaving it undeclared would have put the weaker tamper domain's own guard outside the hash binding that protects the stronger one. lockstep --restamp only rehashes files already listed, so the entry was added by hand in the same diff as the spec/013 prose amendment that authorizes it. SCOPE CORRECTION found by a RED control that did NOT fire: inverting Lookup's embedded-first branch left the composition oracle green, because SetOverlay's admission check had already dropped the shadowing row so the ordering was never exercised. The assertion was unreachable, not correct. It is now driven by TestLookupItselfDefendsEmbeddedAgainstAPlantedSnapshot, which plants a shadowing snapshot directly into overlayPtr \u2014 and that oracle in turn exposed a real production gap: Specs() appended the overlay unconditionally, so a shadowing row would have reached the agent prompt Catalog even while Lookup correctly refused to resolve it. overlaySpecs() now applies the same embedded-first filter at the enumeration seam."
+  },
+  {
+   "id": "T-028-6",
+   "title": "Level-aware resolver wiring (GraduatedForAuto closure to per-rung truth table)",
+   "files_owned": [
+    "cmd/worker/main.go",
+    "cmd/worker/ladder_rung_wiring_test.go"
+   ],
+   "deps": [
+    "T-028-3",
+    "T-028-4"
+   ],
+   "req_ids": [
+    "REQ-2809",
+    "REQ-2806"
+   ],
+   "acceptance": {
+    "feature": "earned-op-class-catalog.feature",
+    "scenarios": [
+     "The per-rung band truth table holds on the real path"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 260,
+    "max_wall_clock_minutes": 180
+   },
+   "status": "completed",
+   "description": "[Wiring sites edited under this task (deliberately NOT added to files_owned to avoid pending-vs-pending collisions with spec/027 T-027-6 and spec/026 T-026-3): cmd/worker/main.go:2700-2705 \u2014 the inline GraduatedForAuto closure in the Deps literal is replaced by the level-aware resolver; temporal/runner/activities.go:913-922 \u2014 the func-typed Deps field becomes level-aware and its consumption site updates. Sequence AFTER T-026-3 and T-027-6 complete; re-verify line numbers then.]",
+   "note": "Truth table extracted to the named cmd/worker ladderRungFor so the aliveness oracle drives the SAME code main() wires rather than a re-typed copy. runner.Ungraduated/NoticeFloor exported for the same reason. No lockstep restamp: neither cmd/ nor temporal/ is governed (ADR-0013 narrowing); the trailer is still required because /spec/ is CODEOWNERS-protected and this amends spec/028's design with the as-built band bridge."
+  },
+  {
+   "id": "T-028-7",
+   "title": "Candidates read API + closed-verb write lane (ratify/dismiss/demote/revoke/export-embed) + policy vocabulary",
+   "files_owned": [
+    "core/httpapi/opclass_candidates.go",
+    "core/httpapi/policy.go",
+    "core/db/opclass_ratified.go",
+    "core/db/opclass_ratified_store_test.go",
+    "temporal/opclassratify/opclassratify.go",
+    "cmd/grounder/opclass_write.go",
+    "cmd/grounder/opclass_ratify_test.go",
+    "cmd/worker/opclass_ratify_wiring.go"
+   ],
+   "deps": [
+    "T-028-2",
+    "T-028-5"
+   ],
+   "req_ids": [
+    "REQ-2813",
+    "REQ-2817"
+   ],
+   "acceptance": {
+    "feature": "earned-op-class-catalog.feature",
+    "scenarios": [
+     "Ratify demands a rationale and every transition lands on the one chain"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 1100,
+    "max_wall_clock_minutes": 200
+   },
+   "status": "completed",
+   "note": "SPEC-VS-REALITY GAP recorded rather than improvised over (the Stage-1 proposals_read.go precedent). Three files the ratify lane cannot exist without were owned by NO task in spec/028: (1) core/db/opclass_ratified.go \u2014 migration 0049 created the overlay table but nothing in Go could read or write it, so the grant path had no persistence; (2) the temporal/opclassratify lane + its cmd/grounder client \u2014 the ledger has a single writer (the worker), so an httpapi handler cannot append a GovDecision directly, exactly as spec/027's manifest lane established; (3) core/opclasscat/candidate.go, co-owned with COMPLETED T-028-2. Stage 2 deliberately left StatusRatifyReady terminal so the clustering cron could never grant \u2014 correct then, and the edge ratify_ready->ratified had to be opened HERE, by the operator lane. The property Stage 2 protected with that unreachable edge is preserved as a SOURCE-LEVEL oracle (TestTheClusteringCronNeverNamesAGrantingTarget): once the edge exists, only the absence of the grant verbs from the cron's source proves the mechanical pass still cannot take it. Co-ownership is with a completed task, which is the accepted pattern; only pending-vs-pending is the hazard. core/opclasscat/candidate.go is NOT added to files_owned: specvalidate enforces one-file-one-owner unconditionally, so the co-edit is recorded here in prose instead (the cross-spec-ownership-note precedent used by T-028-9 and the risk/input.go entry). BUDGET RAISED 400 -> 1100 and flagged for review rather than silently overrun: the original figure costed an httpapi handler over an existing store and an existing write lane, and neither existed. ALSO co-edited under prose note (owned elsewhere, one-file-one-owner enforced): core/db/opclass_candidate.go (+CandidateByKey, completed T-028-2); core/httpapi/router.go and cmd/grounder/{deps,main}.go + cmd/worker/main.go (the coordinated shared composition files \u2014 two Deps fields, two read routes, two write routes, one activity registration); cmd/grounder/manifest_write_test.go + manifest_read_test.go + deps_test.go (call-site arity only). tools/embedexport SPLIT: the render functions moved to tools/embedexport/render so the console's export-embed verb and the CLI produce the IDENTICAL artifact rather than two implementations that can drift; the T-028-9 oracles moved with them. SPEC DEVIATION FLAGGED: REQ-2814 prose lists 'the verbs' among the laundering tripwire's model text. The bare op verb is EXCLUDED \u2014 opschema compares whole elements for exact equality, so including 'reload' would refuse every argv template that reloads anything and make the entire service-lifecycle family unratifiable. Rationale and undo-sketch prose are still compared.",
+   "notes": " Status corrected 2026-07-31 after the Stage-4 merge (!794): the code shipped but the flipping commit was stranded on a branch deleted at merge. Verified by artifact inspection on main before flipping."
+  },
+  {
+   "id": "T-028-8",
+   "title": "Console: candidates module (dossier, empty ratify form) + graduation ladder captions extension",
+   "files_owned": [
+    "deploy/console/v2/modules/candidates/css.txt",
+    "deploy/console/v2/modules/candidates/js.txt",
+    "deploy/console/v2/modules/candidates/wiring.txt",
+    "deploy/console/v2/modules/policy/js.txt",
+    "deploy/console/v2/e2e/candidates-ratify.mjs",
+    "deploy/console/v2/modules/candidates/fixtures.txt",
+    "deploy/console/v2/modules/candidates/meta.json"
+   ],
+   "deps": [
+    "T-028-7"
+   ],
+   "req_ids": [
+    "REQ-2816",
+    "REQ-2813",
+    "REQ-2817"
+   ],
+   "acceptance": {
+    "feature": "earned-op-class-catalog.feature",
+    "scenarios": [
+     "The ratify form renders empty beside screened model exhibits"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 600,
+    "max_wall_clock_minutes": 300
+   },
+   "status": "completed",
+   "description": "[fixtures.txt carries the live-only HONESTY CONTRACT; meta.json completes the five-file module convention. The assemble.py list entries and the console.html rail anchor for the candidates module are edited under THIS task.]"
+  },
+  {
+   "id": "T-028-9",
+   "title": "Embed-export generator: opschema.json snippet + spec/013 restamp checklist as an MR artifact",
+   "files_owned": [
+    "tools/embedexport/main.go",
+    "tools/embedexport/render/render.go",
+    "tools/embedexport/render/render_test.go"
+   ],
+   "deps": [
+    "T-028-5"
+   ],
+   "req_ids": [
+    "REQ-2808",
+    "REQ-2818"
+   ],
+   "acceptance": {
+    "feature": "earned-op-class-catalog.feature",
+    "scenarios": [
+     "An overlay-only class caps at auto notice"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 300,
+    "max_wall_clock_minutes": 150
+   },
+   "status": "completed",
+   "note": " T-028-7 split the pure render functions into tools/embedexport/render so the console's export-embed verb runs the SAME code as the CLI; main.go is now a thin flag parser and the four oracles moved to render_test.go unchanged."
+  },
+  {
+   "id": "T-028-10",
+   "title": "Acceptance oracles + RED mutation controls + opcover exemption declarations",
+   "files_owned": [
+    "spec/028-earned-op-class-catalog/acceptance/acceptance_test.go",
+    "spec/028-earned-op-class-catalog/acceptance/steps_test.go",
+    "spec/opcover-exemptions.json"
+   ],
+   "deps": [
+    "T-028-2",
+    "T-028-3",
+    "T-028-5",
+    "T-028-6"
+   ],
+   "req_ids": [
+    "REQ-2805",
+    "REQ-2810",
+    "REQ-2818"
+   ],
+   "acceptance": {
+    "feature": "earned-op-class-catalog.feature",
+    "scenarios": [
+     "A forecast-lane verdict never feeds graduation",
+     "An absent class seals to nothing executable"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 700,
+    "max_wall_clock_minutes": 360
+   },
+   "status": "completed",
+   "description": "[Cross-spec ownership note: spec/opcover-exemptions.json previously delivered under spec/013 T-013-23 (completed); this task adds the overlay exemption declarations.]",
+   "notes": "Remains PENDING deliberately: REQ-2818's overlay half is a declared open gap (opcover reads opschema.Specs() in the specvalidate process, where no overlay is loaded, so a per-slug exemption would report as stale every run), and 17 mapping rows are still uncovered. The delivered oracles are real; the task is not finished."
+  },
+  {
+   "id": "T-028-11",
+   "title": "TG-227 delivery: ReadyResolver + overlay refresh + per-class threshold + barred/tier coupling (the four operational blockers)",
+   "files_owned": [
+    "core/opclasscat/assign.go",
+    "temporal/opclasscluster/ready.go",
+    "temporal/opclasscluster/ready_test.go",
+    "cmd/worker/opclass_overlay_refresh.go",
+    "cmd/worker/opclass_overlay_refresh_test.go",
+    "cmd/worker/opclass_overlay_wiring_test.go",
+    "temporal/opclassratify/refreshed_test.go"
+   ],
+   "deps": [
+    "T-028-2",
+    "T-028-6",
+    "T-028-10"
+   ],
+   "req_ids": [
+    "REQ-2803",
+    "REQ-2807",
+    "REQ-2811",
+    "REQ-2812",
+    "REQ-2815"
+   ],
+   "acceptance": {
+    "feature": "earned-op-class-catalog.feature",
+    "scenarios": [
+     "A tampered overlay row is dropped loudly at refresh",
+     "Promotion requires the full threshold and persists durably or refuses",
+     "A revoked class exits the composed registry within one refresh"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 900,
+    "max_wall_clock_minutes": 480
+   },
+   "status": "completed",
+   "notes": "Added 2026-08-03 under TG-227 because the verified map found NO task owned building the ReadyResolver \u2014 'it can be finished by nobody'. Delivered in !887 (overlay load + 60s refresh + ratify/revoke kick + WithPerClassThreshold chained at the ONE ladder construction, closing TG-248) and !888 (ReadyResolver: observed-behaviour never-auto screen, mechanical family/tier failing closed on ambiguity, estate blast-radius coverage failing closed; below-gate stamp; ErrAutoBarredTier at the single ratify writer; the ratify_ready->expired edge closing the latent every-pass expiry wedge). Live-verified on dc1tg01: loader logs honest zeros at boot + 60s tick; /v1/opclass/candidates renders the real candidate; the cluster pass currently refuses itself on the stale-intake dead-man (correct, loud). Known gap filed as TG-266: graduation_credit (REQ-2804) still has no consumer."
+  }
+ ]
+}

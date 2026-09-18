@@ -1,0 +1,2 @@
+views.objectgroups = ogView;
+VIEW_META.objectgroups = ["Object groups", "the shared object-group editor — named host-glob sets the policy and credential engines both union into a target's group membership (spec/016, TG-481)"];

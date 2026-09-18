@@ -1,0 +1,13 @@
+-- 0083 down: INTENTIONAL NO-OP — canonicalizing the site vocabulary is IRREVERSIBLE (TG-458).
+--
+-- The up migration folds several legacy spellings of ONE site to a single canonical token: 'NL', 'nl',
+-- 'dc1' and 'dc1' all become 'dc1'; 'GR', 'gr', 'dc2' and 'dc2' all become 'dc2'. That
+-- fold is MANY-TO-ONE and lossy by design. Once a row reads 'dc1' the original spelling it was written
+-- with is unrecoverable — and it carried NO information beyond "this row is the dc1 site": the spelling
+-- was an accident of which source template emitted it (a LibreNMS 'NL', a Prometheus 'nl', a NetBox
+-- 'dc1'), never a fact about the estate. There is therefore nothing a reverse migration could restore
+-- that any reader would want, and re-scattering the vocabulary would only reopen the cross-site-mismatch
+-- defect the up migration closed (a same-site host read as cross-site noise). The statement below is a
+-- deliberate no-op so this migration is a present, applyable-and-harmless down pair. The up definition
+-- lives in git if the fold ever needs to be re-derived.
+SELECT 1;

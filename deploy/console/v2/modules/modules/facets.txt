@@ -1,0 +1,7 @@
+FACETS.modules = [["all","All"],["live","Live"],["idle","Idle"],["dark","Dark"],["mutate","Mutate-scope"],["off","Disabled"]];
+/* filter logic (inside viewModules):
+   "all"    -> every module
+   "mutate" -> m.scope === "MUTATE"                (the gated actuation surface)
+   "off"    -> !m.enabled                          (no execution path)
+   "live"/"idle"/"dark" -> m.enabled && m.health === facet
+   Family groups with zero matches are hidden; rollup tiles always show the whole fleet. */

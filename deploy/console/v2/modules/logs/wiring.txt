@@ -1,0 +1,6 @@
+views.logs = logsView;
+VIEW_META.logs = ["Logs", "Streaming evidence — the governance ledger and accepted alerts, merged on one clock (agent steps, gate verdicts and executor events live in the tracer)"];
+// nav badge (line counter, refresh wherever badges are synced):
+// $$('[data-badge="logs"]').forEach(n => n.textContent = String(LOG_LINES.length + LOG_STATE.extra.length - LOG_STATE.drop));
+// no shell-level live-sim hook needed: logsView owns its own 1.8s deterministic tail interval,
+// which self-clears when the view is detached (body.isConnected check) and starts paused under reduceMotion.

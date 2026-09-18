@@ -1,0 +1,79 @@
+{
+  "outcome": "collapsed",
+  "arms": [
+    {
+      "name": "ARM-CONTROL",
+      "investigate_tier": "fast",
+      "decide_tier": "primary",
+      "served_signature": "claude-opus-5",
+      "telemetry": {
+        "calls": 2,
+        "mean_call_ms": 2280.5,
+        "total_call_ms": 4561,
+        "cost_usd": 0.002,
+        "served_models": [
+          "claude-opus-5"
+        ]
+      },
+      "correct_diagnosis": 0,
+      "diagnosis_grounded": 0,
+      "overall": 0,
+      "decision_steps_a6a": 0,
+      "n": 0
+    },
+    {
+      "name": "ARM-STRONG",
+      "investigate_tier": "primary",
+      "decide_tier": "primary",
+      "served_signature": "claude-opus-5",
+      "telemetry": {
+        "calls": 1,
+        "mean_call_ms": 1618,
+        "total_call_ms": 1618,
+        "cost_usd": 0.0012,
+        "served_models": [
+          "claude-opus-5"
+        ]
+      },
+      "correct_diagnosis": 0,
+      "diagnosis_grounded": 0,
+      "overall": 0,
+      "decision_steps_a6a": 0,
+      "n": 0
+    },
+    {
+      "name": "ARM-CHEAP",
+      "investigate_tier": "fast",
+      "decide_tier": "fast",
+      "served_signature": "claude-opus-5",
+      "telemetry": {
+        "calls": 1,
+        "mean_call_ms": 1793,
+        "total_call_ms": 1793,
+        "cost_usd": 0.0009,
+        "served_models": [
+          "claude-opus-5"
+        ]
+      },
+      "correct_diagnosis": 0,
+      "diagnosis_grounded": 0,
+      "overall": 0,
+      "decision_steps_a6a": 0,
+      "n": 0
+    }
+  ],
+  "deltas": null,
+  "collapsed_groups": [
+    [
+      "ARM-CONTROL",
+      "ARM-STRONG",
+      "ARM-CHEAP"
+    ]
+  ],
+  "unknown_arms": null,
+  "unattributed_calls": 0,
+  "reasons": [
+    "arms [ARM-CONTROL ARM-STRONG ARM-CHEAP] were all served by claude-opus-5 — this is ONE ARM measured 3 times, so their Δ is judge noise, not a tier effect; publishing it would license 'the expensive tier buys nothing' from a measurement that never varied the tier"
+  ],
+  "preflight": true
+}

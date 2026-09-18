@@ -1,0 +1,446 @@
+/* ============================================================================
+   AXES module (ax-) — the live benchmark-axis scoreboard (TG-480, epic TG-187).
+   Renders GET /v1/axes: the serialized core/axis.Scorecard — the SAME artifact
+   `axisscore -json` emits and the CLI's Text() renders. This view mirrors the
+   CLI's HONESTY, not its layout: every rate beside its denominator; a zero
+   numerator carries its rule-of-three bound (REQ-2502), never a bare 0%; an
+   axis whose enabling event never occurred renders its missing-input sentence
+   from axes_not_live_measurable, never a fabricated 0; G5 excludes no-claim
+   windows from its pass rate and names what the naive rate would have read;
+   G6 and A8 are SHALL-be-0 counts and go red when violated.
+   G5/G6 sub-objects carry Go field names (Windows/Claimed/…, Executed/…) —
+   db.Falsifiability and db.LoopBypass have no JSON tags; read them verbatim.
+   ============================================================================ */
+
+/* ---- honest formatters: a missing/non-finite value renders an em-dash, never text-"undefined"/NaN --- */
+function axIsNum(v){ return typeof v === "number" && isFinite(v); }
+function axN(v){ return axIsNum(v) ? v : 0; }                      /* arithmetic only — display via the fmts */
+function axPct(v){ return axIsNum(v) ? (v * 100).toFixed(1) + "%" : "—"; }
+function axInt(v){ return axIsNum(v) ? String(Math.round(v)) : "—"; }
+function axFix(v, d){ return axIsNum(v) ? v.toFixed(d == null ? 2 : d) : "—"; }
+function axStr(v){ return (typeof v === "string" && v) ? v : "—"; }
+function axSinceUTC(iso){
+  if(!iso) return "—";
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return "—";
+  return d.toISOString().slice(0, 16).replace("T", " ") + "Z";
+}
+/* the rule of three, mirroring core/axis.ZeroNumeratorBound: the 95% upper bound on an event observed
+   0 times in n trials is ~3/n. n<=0 is "no sample", never a confident-looking bound. */
+function axRuleOfThree(n){
+  if(!axIsNum(n) || n <= 0) return "no sample — not measured";
+  return "<=" + (300 / n).toFixed(1) + "% at 95% confidence (rule of three: 3/" + Math.round(n) + ")";
+}
+function axJoin(list, empty){
+  const a = Array.isArray(list) ? list.filter(x => x != null && x !== "") : [];
+  return a.length ? a.join(" · ") : (empty || "none");
+}
+
+/* ---- layout atoms (reusing the console design system: sec/lbl/rule/wrapcard/tbl/empty) ------------- */
+function axCard(lblSuffix, name, ...kids){
+  return h("div", { class: "wrapcard ax-card" },
+    h("div", { class: "sec" },
+      h("span", { class: "lbl", style: "color:var(--match)" }, "LIVE · " + lblSuffix),
+      h("h3", {}, name),
+      h("span", { class: "rule" })),
+    ...kids);
+}
+/* the publish-the-denominator row: value and its denominator share one line, always. */
+function axRow(label, value, denom, note, tint){
+  return h("div", { class: "ax-kv" },
+    h("span", { class: "ax-kv-l" }, label),
+    h("span", { class: "ax-kv-v m", style: tint ? ("color:" + tint) : "" }, value),
+    h("span", { class: "ax-kv-d m" }, denom || ""),
+    note ? h("div", { class: "ax-kv-n" }, note) : null);
+}
+function axNote(...kids){ return h("p", { class: "ax-note" }, ...kids); }
+function axGapLine(axis, name, missing){
+  return h("div", { class: "ax-gap" },
+    h("b", {}, axis + " " + name + " — not live-measurable this window."),
+    " Needs " + missing + ". Reported as a named coverage gap, never as a 0.");
+}
+function axTable(heads, rows){
+  const t = h("table", { class: "tbl ax-tbl" });
+  t.append(h("thead", {}, h("tr", {}, ...heads.map(x => h("th", {}, x)))));
+  const tb = h("tbody");
+  rows.forEach(r => tb.append(h("tr", {}, ...r.map(c => h("td", { class: "m" }, c)))));
+  t.append(tb);
+  return h("div", { class: "ax-scroll" }, t);
+}
+function axEmpty(big, desc){
+  return h("div", { class: "empty", style: "padding:34px 20px" },
+    h("div", { class: "big" }, big), h("div", { class: "desc" }, desc));
+}
+
+/* ---- the scorecard render -------------------------------------------------------------------------- */
+function axRender(sc){
+  const wrap = h("div");
+  const gaps = Array.isArray(sc.axes_not_live_measurable) ? sc.axes_not_live_measurable : [];
+  const gapFor = code => gaps.find(g => g && g.axis === code) || null;
+
+  /* header: window + since (REQ: both rendered), then the population every rate below divides by. */
+  const incidents = axN(sc.incidents), judged = axN(sc.judged);
+  const proposals = axN(sc.a4_proposals);
+  const predictions = Math.round(axN(sc.prediction_rate) * incidents);
+  wrap.append(h("div", { class: "ax-hero" },
+    h("div", { class: "lbl", style: "color:var(--match)" }, "LIVE · benchmark-axis scoreboard"),
+    h("h2", { class: "ax-hero-title" }, "The same scorecard axisscore prints — from the durable tables, denominators attached"),
+    h("div", { class: "ax-hero-win m" },
+      "window: last " + axStr(sc.window) + " · since " + axSinceUTC(sc.since)),
+    h("div", { class: "ax-hero-figs" },
+      h("span", { class: "ax-fig" }, h("b", {}, axInt(sc.incidents)), " incidents triaged"),
+      h("span", { class: "ax-fig" }, h("b", {}, axInt(sc.judged)),
+        " judged" + (incidents > 0 ? " (" + axPct(judged / incidents) + ")" : "")),
+      h("span", { class: "ax-fig" }, h("b", {}, axInt(sc.a4_proposals)),
+        " proposals (" + axPct(sc.proposal_rate) + " of incidents)"),
+      h("span", { class: "ax-fig" }, h("b", {}, String(predictions)),
+        " falsifiable predictions (" + axPct(sc.prediction_rate) + " of incidents)")),
+    axNote("Every rate on this page renders beside its denominator; an axis whose enabling event never ",
+      "occurred renders its missing-input sentence, never a fabricated 0.")));
+
+  /* ---- A1 · detection ---- */
+  const a1gap = gapFor("A1");
+  const a1 = axCard("axis A1", "Detection — recall, per fault class, latency by source");
+  if(a1gap || axN(sc.a1_injected) <= 0){
+    a1.append(a1gap
+      ? axGapLine(a1gap.axis, a1gap.name, a1gap.missing_input)
+      : axGapLine("A1", "detection recall", "injected faults recorded via the faultledger tool (the injected_fault ledger is empty this window)"));
+  } else {
+    a1.append(axRow("recall — injected faults TG detected", axPct(sc.a1_detection_recall),
+      "(" + axInt(sc.a1_detected) + "/" + axInt(sc.a1_injected) + " injected, ground-truth ledger)",
+      "Rule-class matched: an alert only counts when its RULE matches the injected fault class — an unrelated alert on the same host does not credit a detection."));
+    const lat = Array.isArray(sc.a1_detection_latency_by_source) ? sc.a1_detection_latency_by_source : [];
+    if(lat.length){
+      a1.append(h("div", { class: "ax-sub" }, "detection latency by source (first-to-report)"));
+      a1.append(axTable(["source", "first detections", "median", "p95"],
+        lat.map(l => [axStr(l.source), axInt(l.first_detections), axInt(l.median_sec) + "s", axInt(l.p95_sec) + "s"])));
+      a1.append(axNote("Recall alone cannot separate a 39-second detector from an 11-minute one — both answer ",
+        "“detected”. Who was FIRST, and how long it took, is where a fast detector becomes visible."));
+    }
+    const byc = Array.isArray(sc.a1_by_class) ? sc.a1_by_class : [];
+    if(byc.length){
+      a1.append(h("div", { class: "ax-sub" }, "per fault class"));
+      a1.append(axTable(["class", "recall", "detected / injected", ""],
+        byc.map(c => {
+          const inj = axN(c.injected), det = axN(c.detected);
+          const r = inj > 0 ? det / inj : null;
+          const low = inj >= 5 && r != null && r < 0.5;
+          return [axStr(c.class), r == null ? "—" : axPct(r), det + "/" + inj,
+            low ? h("span", { class: "ax-low" }, "LOW — check whether the monitoring rule covers these hosts before reading this as a TG miss") : ""];
+        })));
+    }
+  }
+  wrap.append(a1);
+
+  /* ---- A2 · diagnosis ---- */
+  const a2 = axCard("axis A2", "Diagnosis correctness — judge dimensions, verified outcome, blast radius");
+  const dims = Array.isArray(sc.a2_dimension_means) ? sc.a2_dimension_means : [];
+  if(dims.length){
+    a2.append(h("div", { class: "ax-sub" }, "judge dimension means (1..5, worst first)"));
+    a2.append(axTable(["dimension", "mean", "n"],
+      dims.map(d => [axStr(d.dimension), axFix(d.mean, 2), axInt(d.n)])));
+    if(axN(sc.a2_overall) > 0)
+      a2.append(axRow("overall (sample-weighted)", axFix(sc.a2_overall, 2), "(across " + dims.length + " dimensions)",
+        "Weighted by per-dimension n, not a mean of means — a thinly-scored dimension cannot swing it."));
+  } else {
+    a2.append(axNote("No judged incidents in window — the judge dimensions make no claim."));
+  }
+  const vn = axN(sc.a2_verified_n);
+  if(vn > 0){
+    const parts = (Array.isArray(sc.a2_verdicts) ? sc.a2_verdicts : [])
+      .map(kv => axStr(kv.key) + "=" + axInt(kv.n)).join("  ");
+    a2.append(axRow("verified outcome (ground truth, action_verdict)", axPct(sc.a2_verified_match_rate),
+      "(match over " + vn + " verdicts: " + (parts || "none") + ")",
+      "The verifier's verdicts, not judge opinion — whether committed predictions were RIGHT, not merely well-formed."));
+  }
+  if(sc.a2_blast_measurable){
+    const lift = (axN(sc.a2_blast_precision) - axN(sc.a2_blast_control_precision)) * 100;
+    a2.append(axRow("blast-radius prediction",
+      axPct(sc.a2_blast_precision) + " hit-rate vs control " + axPct(sc.a2_blast_control_precision)
+      + " (lift " + (lift >= 0 ? "+" : "−") + Math.abs(lift).toFixed(1) + "pp)",
+      "(recall " + axPct(sc.a2_blast_recall) + " · n=" + axInt(sc.a2_blast_scored) + " scored)",
+      "A superset forecast — the matched-control hit-rate is the fair yardstick, so the LIFT is the signal, not the raw precision."));
+  } else {
+    a2.append(axRow("blast-radius prediction", "UNDEFINED, not zero",
+      "(no positive prediction in window — tp+fp=0, so the hit-rate is 0/0)",
+      "Nothing is printed rather than a fabricated 0.0%: with no host named, the ratio does not exist.", "var(--ink3)"));
+  }
+  wrap.append(a2);
+
+  /* ---- A3 · heal success ---- */
+  const a3gap = gapFor("A3");
+  const a3 = axCard("axis A3", "Heal success — original fault confirmed-clear after an actuated mutation");
+  if(a3gap || axN(sc.a3_mutated) <= 0){
+    a3.append(a3gap
+      ? axGapLine(a3gap.axis, a3gap.name, a3gap.missing_input)
+      : axGapLine("A3", "heal success rate", "an ACTUATED mutation to confirm-clear (no mutated incidents this window)"));
+  } else {
+    a3.append(axRow("confirmed-clear rate (a FLOOR)", axPct(sc.a3_heal_success_rate),
+      "(" + axInt(sc.a3_confirmed_clear) + "/" + axInt(sc.a3_mutated) + " actuated heals confirmed clear)",
+      "Confirmed-clear is fail-closed, so this is a LOWER bound: a slow recovery reads as unconfirmed, never as a failed heal."));
+  }
+  wrap.append(a3);
+
+  /* ---- A4 · autonomy ---- */
+  const a4 = axCard("axis A4", "Autonomy rate — read with all three denominators");
+  if(incidents > 0){
+    a4.append(axRow("actuation autonomy (raw)", axPct(sc.a4_autonomy_rate),
+      "(AUTO+AUTO_NOTICE / all " + incidents + " incidents)",
+      "The raw denominator includes no-proposal stops — the agent autonomously deciding nothing needs doing — which deflates it."));
+  } else {
+    a4.append(axRow("actuation autonomy (raw)", "—", "(no incidents in window — no denominator)", null, "var(--ink3)"));
+  }
+  if(proposals > 0){
+    a4.append(axRow("among ACTIONABLE", axPct(sc.a4_autonomy_among_actionable),
+      "(AUTO+AUTO_NOTICE / " + proposals + " proposals)",
+      "The honest actuation-autonomy rate: divided only by incidents that produced a real actuation decision."));
+  } else {
+    a4.append(axRow("among ACTIONABLE", "not defined",
+      "(0 proposals in window — a rate over an empty denominator would be vacuous)", null, "var(--ink3)"));
+  }
+  if(incidents > 0){
+    a4.append(axRow("handled without a human", axPct(sc.a4_handled_without_human),
+      "((AUTO+AUTO_NOTICE + " + axInt(sc.a4_autonomous_stops) + " autonomous no-proposal stops) / " + incidents + " incidents)",
+      "Credits the autonomous stand-downs too — disposed without a human, whether by actuating or by correctly stopping."));
+  }
+  const bands = Array.isArray(sc.a4_bands) ? sc.a4_bands : [];
+  if(bands.length)
+    a4.append(h("div", { class: "ax-chips" }, h("span", { class: "ax-sub-inline" }, "bands:"),
+      ...bands.map(kv => h("span", { class: "ax-chip m" }, axStr(kv.key) + "=" + axInt(kv.n)))));
+  const polls = Array.isArray(sc.a4_poll_reasons) ? sc.a4_poll_reasons : [];
+  if(polls.length){
+    a4.append(h("div", { class: "ax-sub" }, "what the human was asked (POLL_PAUSE composition — A4 cannot be read, or improved, without it)"));
+    a4.append(axTable(["poll reason", "n"], polls.map(kv => [axStr(kv.key), axInt(kv.n)])));
+  }
+  const aeTot = axN(sc.a4_attrib_escal_total), aeInj = axN(sc.a4_attrib_escal_on_injected);
+  if(aeTot > 0){
+    a4.append(h("div", { class: "ax-flag" },
+      h("b", {}, "HARNESS ARTEFACT — reported, never subtracted. "),
+      aeInj + " of " + aeTot + " attribution escalations (" + axPct(aeInj / aeTot) + ") were raised on a host carrying an ",
+      h("b", {}, "INJECTED"), " fault. The share alone is not evidence (most incidents occur on injected hosts) — the elevated ",
+      "escalation RATE on injected hosts is, and it DEPRESSES A4 on this estate relative to one with only organic incidents. ",
+      "Excluding it would flatter the axis; teaching attribution to recognise the injector would be worse still — TG would ",
+      "auto-heal BECAUSE a fault is synthetic."));
+  }
+  wrap.append(a4);
+
+  /* ---- A5 · breadth ---- */
+  const a5 = axCard("axis A5", "Fault-class breadth — exercised vs capability, and the silent split");
+  a5.append(axRow("exercised this window", axInt(sc.a5_fault_class_breadth),
+    "distinct op_class: " + axJoin(sc.a5_op_classes, "none this window")));
+  if(!axN(sc.a5_fault_class_breadth) && Array.isArray(sc.a5_raw_ops) && sc.a5_raw_ops.length){
+    a5.append(axNote("op_class populates forward from migration 0036; legacy raw ‘op’ this window: ",
+      String(sc.a5_raw_ops.length), " distinct (ambiguous; context only)."));
+  }
+  a5.append(axRow("auto-capable (graduated)", axInt(sc.a5_graduated_breadth),
+    "distinct op_class: " + axJoin(sc.a5_graduated_op_classes, "none graduated"),
+    "The CAPABILITY breadth — what TG can auto-heal now, independent of what a quiet window happened to exercise."));
+  const grad = axN(sc.a5_graduated_breadth), noticeN = axN(sc.a5_notice_breadth);
+  a5.append(axRow("of which auto_notice (acts AND pages)", axInt(sc.a5_notice_breadth),
+    axJoin(sc.a5_notice_op_classes, "none")));
+  a5.append(axRow("of which silent auto (acts, nobody hears)", String(grad - noticeN), "(derived: graduated − notice, so the two lines always sum)",
+    "Printed even at zero — a reader must be able to tell “none of it is silent yet” from “nobody computed the split”. “TG can heal N classes” and “TG heals N classes without telling anyone” are different claims; autonomy review turns on the second."));
+  a5.append(axRow("fault types triaged (context)", axInt(sc.fault_types), "distinct alert rules — context, not a scored axis"));
+  wrap.append(a5);
+
+  /* ---- A6a / A6b ---- */
+  const a6 = axCard("axis A6", "Efficiency — steps (gated) and time (reported); the two time legs are NEVER pooled");
+  if(axN(sc.a6a_n) > 0){
+    a6.append(axRow("A6a · mean investigation steps/triage", axFix(sc.a6a_mean_decision_steps, 1) + " steps",
+      "(n=" + axInt(sc.a6a_n) + " triages that ran the loop; lower is better)",
+      "Steps are the merge gate — wall-clock is gateway-dominated and noisy, so time is reported, never gated."));
+  } else {
+    a6.append(axRow("A6a · mean investigation steps/triage", "—",
+      "(step_count populates forward from migration 0037 — no looped triages in window yet)", null, "var(--ink3)"));
+  }
+  const a6bGap = gapFor("A6b");
+  if(axN(sc.a6b_time_to_decision_n) > 0){
+    a6.append(axRow("A6b · time to DECISION (reported, not gated)",
+      "median " + axFix(axN(sc.a6b_time_to_decision_median_ms) / 1000, 1) + "s · p95 " + axFix(axN(sc.a6b_time_to_decision_p95_ms) / 1000, 1) + "s",
+      "(n=" + axInt(sc.a6b_time_to_decision_n) + " timed of " + incidents + " triages; untimed rows EXCLUDED, never counted as an instant decision)",
+      "TG's own reasoning only — it excludes detection latency (published per-source under A1) and the ingest→workflow-start leg, so it is a LOWER bound on alert→decision, never the end-to-end figure."));
+  } else if(a6bGap){
+    a6.append(axGapLine(a6bGap.axis, a6bGap.name, a6bGap.missing_input));
+  } else {
+    a6.append(axRow("A6b · time to DECISION", "—",
+      "(decision_ms populates forward from migration 0058 — no timed triage in window; untimed sessions are EXCLUDED, never counted as instant)", null, "var(--ink3)"));
+  }
+  if(axN(sc.a6b_n) > 0){
+    a6.append(axRow("A6b · time to RECOVERY (reported, not gated)",
+      "median " + axInt(sc.a6b_time_to_recovery_median_sec) + "s · p95 " + axInt(sc.a6b_time_to_recovery_p95_sec) + "s",
+      "(n=" + axInt(sc.a6b_n) + " of " + axInt(sc.a3_mutated) + " mutated incidents with a correlated recovery)",
+      "Correlated by (host, alert_rule) + time order within 6h — a recovery arrives as its OWN alert with its OWN external_ref, so no key links it to the incident it resolved. Incidents with no correlated recovery are EXCLUDED from the denominator, never counted as zero."));
+  } else {
+    a6.append(axRow("A6b · time to RECOVERY", "—",
+      "(no mutated incident in window has a correlated recovery transition yet)", null, "var(--ink3)"));
+  }
+  a6.append(axNote(h("b", {}, "Two legs, never pooled: "),
+    "time-to-decision is TG's agent loop; time-to-recovery is dominated by the monitoring system's recovery ",
+    "poll and the provider, not by TG. Adding them would produce a number that is neither."));
+  wrap.append(a6);
+
+  /* ---- A7 · false actuation ---- */
+  const a7gap = gapFor("A7");
+  const a7 = axCard("axis A7", "False actuation — actuated where the attribution gate should have withheld");
+  if(a7gap || axN(sc.a3_mutated) <= 0){
+    a7.append(a7gap
+      ? axGapLine(a7gap.axis, a7gap.name, a7gap.missing_input)
+      : axGapLine("A7", "false-actuation rate", "an ACTUATED mutation that could mis-fire (no mutated incidents this window)"));
+  } else {
+    const susp = axN(sc.a7_suspicious_actuations), mut = axN(sc.a3_mutated);
+    a7.append(axRow("suspicious-actor actuations", axPct(sc.a7_false_actuation_rate),
+      "(" + susp + " of " + mut + " mutations on an ‘attributed-suspicious’ incident)",
+      null, susp > 0 ? "var(--deviation)" : "var(--match)"));
+    a7.append(axRow("did not confirm-clear (context)", axInt(sc.a7_uncleared_actuations),
+      "(of " + mut + " mutations — ineffective; fail-closed ⇒ an upper bound)"));
+    if(susp === 0){
+      a7.append(h("div", { class: "ax-flag" },
+        h("b", {}, "ZERO OBSERVED IS NOT ZERO RATE: "), axRuleOfThree(mut) + ". ",
+        "A bare 0% would assert the gate CANNOT fail; this sample only shows it did not fail here. ",
+        "~300 clean actuations are needed to claim <1%."));
+    }
+  }
+  wrap.append(a7);
+
+  /* ---- A8 · safety violations ---- */
+  const a8 = axCard("axis A8", "Safety violations — breaches of the append-only ledger SHALL be 0");
+  const breaches = axN(sc.a8_breaches);
+  a8.append(axRow("guardrail breaches (SHALL be 0)", axInt(sc.a8_breaches),
+    "(" + axInt(sc.a8_breaches) + " deleted audit rows of " + axInt(sc.a8_ledger_rows) + " total — a gap-free ledger is tamper-evident)",
+    breaches > 0 ? "A breach means audit rows were DELETED from the hash-chained, DELETE-revoked governance ledger — tamper evidence, not noise." : null,
+    breaches > 0 ? "var(--deviation)" : "var(--match)"));
+  a8.append(axRow("safety-system interventions this window",
+    "breaker-trips=" + axInt(sc.a8_breaker_trips) + " · force-Shadow demotions=" + axInt(sc.a8_force_shadow_demotions),
+    "(the routine actuate:refuse is deliberately excluded — safety events, not governance noise)"));
+  a8.append(axNote("A CENSUS, not a sample: the seq-gap check examines EVERY ledger row, so 0 is a complete ",
+    "count of the population — no rule-of-three bound applies here, unlike A7. Applying an inferential bound ",
+    "to a census would invent uncertainty that does not exist."));
+  wrap.append(a8);
+
+  /* ---- coverage gaps ---- */
+  const cov = axCard("axes A1–A8", "Live-measurability — the honest coverage boundary");
+  if(!gaps.length){
+    cov.append(axNote(h("b", { style: "color:var(--match)" }, "All eight scored axes (A1–A8) are live-measurable this window"),
+      " — no coverage gaps."));
+  } else {
+    gaps.forEach(g => cov.append(axGapLine(axStr(g.axis), axStr(g.name), axStr(g.missing_input))));
+    cov.append(axNote("Named with the concrete missing input, never silently omitted — the coverage boundary stays honest."));
+  }
+  wrap.append(cov);
+
+  /* ---- G5 · falsifiability ---- */
+  const f = (sc.g5_falsifiability && typeof sc.g5_falsifiability === "object") ? sc.g5_falsifiability : {};
+  const g5 = axCard("guardrail G5", "World-model falsifiability — real graph vs its degree-preserving shuffled control");
+  const fw = axN(f.Windows);
+  if(fw <= 0){
+    g5.append(axEmpty("No scored windows in this period",
+      "Absent is not zero: the control scorer has produced no verdict, so this axis makes no claim either way."));
+  } else {
+    const claimed = axN(f.Claimed), passed = axN(f.ClaimedPassed);
+    g5.append(axRow("beat its control WHERE IT MADE A CLAIM",
+      claimed > 0 ? axPct(passed / claimed) : "not defined",
+      "(" + passed + " of " + claimed + " claimed windows; ceiling: control/real <= 0.50)",
+      claimed > 0 ? null : "No claimed windows — a rate over an empty denominator would be vacuous."));
+    g5.append(axRow("real TP vs control TP (claimed windows)", axInt(f.RealTP) + " vs " + axInt(f.ControlTP), ""));
+    g5.append(axRow("NO CLAIM (real_tp = 0 — the model predicted nothing)", axInt(f.NoClaim),
+      "(of " + fw + " scored windows — EXCLUDED from the rate above)",
+      "Counting a no-claim window as a pass (0/1 <= 0.5) is arithmetically true and evidentially empty — the naive rate would read "
+      + (fw > 0 ? axPct(axN(f.Passed) / fw) : "—") + " (" + axInt(f.Passed) + "/" + fw + ") instead. That is how this number gets overstated."));
+    if(axN(f.LosingRatio) > 0){
+      g5.append(axRow("when it claimed and LOST", "shuffle scored " + axFix(f.LosingRatio, 3) + " of the real arm",
+        axN(f.LosingRatio) >= 1 ? "(>= 1.0 — the shuffled control did AS WELL OR BETTER on those windows)" : ""));
+    }
+  }
+  wrap.append(g5);
+
+  /* ---- G6 · loop bypass ---- */
+  const lb = (sc.g6_loop_bypass && typeof sc.g6_loop_bypass === "object") ? sc.g6_loop_bypass : {};
+  const g6 = axCard("guardrail G6", "Loop-bypassing heals — executed without the prediction→verify loop SHALL be 0");
+  const exec6 = axN(lb.Executed), byp = axN(lb.Bypassing);
+  if(exec6 <= 0){
+    g6.append(axEmpty("No executed heals in this period",
+      "Nothing to audit — and absent is not a pass. The guardrail only speaks when a heal executed."));
+  } else {
+    g6.append(axRow("loop-bypassing heals (SHALL be 0)", axInt(lb.Bypassing),
+      "(of " + exec6 + " executed heals in window)", null,
+      byp > 0 ? "var(--deviation)" : "var(--match)"));
+    if(byp > 0){
+      g6.append(h("div", { class: "ax-flag ax-flag-red" },
+        h("b", {}, "GUARDRAIL VIOLATED: "),
+        "acted un-predicted: " + axInt(lb.NoPrediction) + " · executed but ungraded by core/verify: " + axInt(lb.NoVerdict) + ". ",
+        "Each is A5/A3 breadth bought by bypassing the falsifiable core — the drift the mission forbids (TG-191)."));
+    } else {
+      g6.append(axNote("Every executed heal committed a prediction before acting and was graded by core/verify after — ",
+        "the breadth axes above were not bought by skipping the loop."));
+    }
+  }
+  wrap.append(g6);
+
+  /* ---- chaos calibration — derived from the ALREADY-adopted /v1/estate snapshot (no second fetch) ---- */
+  const chaos = axCard("chaos calibration", "Learned edge timings in the adopted estate snapshot");
+  const est = (typeof liveState === "object" && liveState) ? liveState.estate : undefined;
+  if(est === undefined){
+    chaos.append(axEmpty("Estate snapshot not adopted yet",
+      "This section derives from the /v1/estate snapshot the live layer adopts at login — no second fetch is made."));
+  } else if(est === null){
+    chaos.append(axEmpty("The /v1/estate read failed (fail-closed)",
+      "No counts are derivable — nothing is rendered rather than a fabricated calibration."));
+  } else if(!est.available){
+    chaos.append(axEmpty("No estate snapshot published yet",
+      "The worker has not persisted a graph snapshot — there are no edges to count timings on."));
+  } else {
+    const edges = Array.isArray(est.edges) ? est.edges : [];
+    const total = edges.length;
+    const carries = edges.filter(e => e && (axIsNum(e.delay_seconds) || axIsNum(e.recovery_seconds))).length;
+    if(total === 0){
+      chaos.append(axEmpty("The adopted snapshot has no edges", "Nothing to count timings on."));
+    } else if(carries === 0){
+      chaos.append(h("div", { class: "ax-gap" },
+        h("b", {}, "No edge in the adopted snapshot carries a learned-timing field."),
+        " Across " + total + " edges, neither delay_seconds nor recovery_seconds is present. The console estate read ",
+        "(/v1/estate EstateEdge) does not serialize the learned timings today, so a timing learned on the worker's own ",
+        "snapshot would not be visible here — this is “none visible to this surface”, never a measured zero."));
+    } else {
+      const dly = edges.filter(e => e && axIsNum(e.delay_seconds) && e.delay_seconds > 0).length;
+      const rec = edges.filter(e => e && axIsNum(e.recovery_seconds) && e.recovery_seconds > 0).length;
+      chaos.append(axRow("edges with a learned propagation delay (delay_seconds > 0)", String(dly),
+        "(of " + total + " edges in the adopted snapshot)"));
+      chaos.append(axRow("edges with a learned recovery time (recovery_seconds > 0)", String(rec),
+        "(of " + total + " edges in the adopted snapshot)"));
+    }
+    chaos.append(axNote("Documented boundary: measured expected-alerts counts are NOT serialized in the estate ",
+      "snapshot (core/estate Export carries the timing scalars only), so calibration depth beyond these ",
+      "counts cannot be derived from this surface."));
+  }
+  wrap.append(chaos);
+
+  return wrap;
+}
+
+/* ---- the surface: fixture-free, live-only (mirrors the credentials contract) ----------------------- */
+function axesView(){
+  const wrap = h("div");
+  if(typeof liveState === "undefined" || !liveState.on){
+    wrap.append(h("div", { class: "empty", style: "padding:52px 20px" },
+      h("div", { class: "big" }, "Benchmark axes — live only"),
+      h("div", { class: "desc" },
+        "This surface renders the live axis scorecard (GET /v1/axes) — the same A1–A8 + G5/G6 aggregate the "
+        + "axisscore CLI prints. It has no preview data: a fabricated benchmark number here would be the exact "
+        + "overstatement the axis vocabulary exists to prevent. Sign in to adopt it.")));
+    return wrap;
+  }
+  const sc = liveState.axes;
+  if(sc === undefined){
+    wrap.append(axEmpty("Reading the axis scoreboard…",
+      "Fetching /v1/axes — the serialized core/axis.Scorecard over the trailing window."));
+    return wrap;
+  }
+  if(sc === null){
+    wrap.append(axEmpty("The axis scoreboard could not be read",
+      "GET /v1/axes answered fail-closed (503 scoreboard-not-deployed, or the aggregate failed). Nothing is "
+      + "rendered rather than a half-scorecard that reads as a measurement — an unavailable axis is not a zero."));
+    return wrap;
+  }
+  wrap.append(axRender(sc));
+  return wrap;
+}

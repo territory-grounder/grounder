@@ -1,0 +1,240 @@
+{
+  "spec": "010-ux-console",
+  "tasks": [
+    {
+      "id": "T-010-1",
+      "title": "frontend/ scaffold: Vite+React+TS+Tailwind+shadcn, generated OpenAPI client, TanStack Query, SSE client, a11y baseline, fail-safe guarded state",
+      "files_owned": [
+        "deploy/console/v2/console.html"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-601",
+        "REQ-613",
+        "REQ-614",
+        "REQ-615",
+        "REQ-616"
+      ],
+      "acceptance": {
+        "feature": "ux-console.feature",
+        "scenarios": [
+          "The console builds its API layer only from the generated OpenAPI client",
+          "A dropped SSE stream shows a disconnected indicator and reconnects",
+          "Interactive console components conform to WAI-ARIA",
+          "The console never enforces a safety decision client-side",
+          "An API error renders the restrictive state"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 600,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "pending",
+      "status_evidence": "SUPERSEDED BY THE SHIPPED ARCHITECTURE (2026-08-23): the console this task scaffolds — Vite+React+TS+Tailwind+shadcn with a generated OpenAPI client — was never built, and the served console is deploy/console/v2 (a hand-assembled, dependency-free JS bundle with its own Playwright e2e suite, 82 oracles). The standing rule is \"never rewrite, wire instead\"; rebuilding the surface in React would discard every e2e oracle written after a measured live defect. The task is left PENDING rather than flipped because its literal deliverable does not exist and never should — retiring it is a spec amendment, not a status change."
+    },
+    {
+      "id": "T-010-2",
+      "title": "Read-only-to-operational mode: may_actuate (mode-derived, TG-112) + per-caller capability gating",
+      "files_owned": [
+        "deploy/console/v2/e2e/posture-honesty.mjs"
+      ],
+      "deps": [
+        "T-010-1"
+      ],
+      "req_ids": [
+        "REQ-602",
+        "REQ-603"
+      ],
+      "acceptance": {
+        "feature": "ux-console.feature",
+        "scenarios": [
+          "In read-only mode the console exposes no mutating control",
+          "When mutation is enabled an authorized operator gains operational controls"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed",
+      "status_evidence": "Verified 2026-08-23: the served console (deploy/console/v2 — never a frontend/ rewrite, the house rule) carries the posture surface and its e2e oracle e2e/posture-honesty.mjs, which pins the property after a live measurement in which three surfaces disagreed about mutation posture on ONE page load. The task read pending because it predicted a Vite/React path the work deliberately did not take."
+    },
+    {
+      "id": "T-010-3",
+      "title": "Approval console panel: pending-decision feed, RBAC-gated approve/veto/handoff with server re-check",
+      "files_owned": [
+        "deploy/console/v2/e2e/approval-header-never-invents.mjs"
+      ],
+      "deps": [
+        "T-010-2"
+      ],
+      "req_ids": [
+        "REQ-604",
+        "REQ-605"
+      ],
+      "acceptance": {
+        "feature": "ux-console.feature",
+        "scenarios": [
+          "The approval console shows the plan, prediction, and reversibility signals for a pending decision",
+          "An approver action is gated by role and re-checked server-side",
+          "A non-approver cannot act on a pending decision"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 450,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed",
+      "status_evidence": "Verified 2026-08-23: the approval surface is live in the served console with e2e/approval-header-never-invents.mjs asserting the five pre-vote header values come from the projection rather than reassuring defaults."
+    },
+    {
+      "id": "T-010-4",
+      "title": "ActionManifest timeline + replay: one visual chain keyed by action_id, reconstruction-not-re-run",
+      "files_owned": [
+        "deploy/console/v2/e2e/tracer.mjs"
+      ],
+      "deps": [
+        "T-010-2"
+      ],
+      "req_ids": [
+        "REQ-606",
+        "REQ-607"
+      ],
+      "acceptance": {
+        "feature": "ux-console.feature",
+        "scenarios": [
+          "The ActionManifest timeline renders one chain keyed by the action id",
+          "Replaying a completed manifest reconstructs the chain without re-executing"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed",
+      "status_evidence": "Verified 2026-08-23: the manifest/decision timeline renders the 10-stage governed walk keyed by the session, oracled by e2e/tracer.mjs against a mocked /api with the REAL render code (no fixture path)."
+    },
+    {
+      "id": "T-010-5",
+      "title": "Tamper-evident ledger view: server-computed chain-verification status surfaced verbatim",
+      "files_owned": [
+        "deploy/console/v2/e2e/ledger-never-fabricates.mjs"
+      ],
+      "deps": [
+        "T-010-2"
+      ],
+      "req_ids": [
+        "REQ-608"
+      ],
+      "acceptance": {
+        "feature": "ux-console.feature",
+        "scenarios": [
+          "The ledger view surfaces the server-computed chain verification status",
+          "A broken ledger chain is shown as tamper-detected"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 350,
+        "max_wall_clock_minutes": 75
+      },
+      "status": "completed",
+      "status_evidence": "Verified 2026-08-23: the ledger view is live with e2e/ledger-never-fabricates.mjs driving live/failed/empty states and asserting a fabricated row never reaches the screen — written after the 2026-07-29 defect where eight fixture rows rendered under a \"chain verified\" caption."
+    },
+    {
+      "id": "T-010-6",
+      "title": "Explainability panel: retrieval context, banding signals, execution class, confidence trajectory, tool-result evidence",
+      "files_owned": [
+        "deploy/console/v2/e2e/reasoning.mjs"
+      ],
+      "deps": [
+        "T-010-2"
+      ],
+      "req_ids": [
+        "REQ-609"
+      ],
+      "acceptance": {
+        "feature": "ux-console.feature",
+        "scenarios": [
+          "The explainability panel shows the banding signals, execution class, and tool-result evidence"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 75
+      },
+      "status": "completed",
+      "status_evidence": "Verified 2026-08-23: the explainability surface renders the agent's recorded walk, oracled by e2e/reasoning.mjs against the DTO the server ACTUALLY sends (the rewrite that caught a view+test pair agreeing on an imagined DTO)."
+    },
+    {
+      "id": "T-010-7",
+      "title": "Autonomy-band + per-layer kill-switch controls: policy-API writes, RBAC-gated, audited, confirm-before-disable",
+      "files_owned": [
+        "deploy/console/v2/e2e/kill-reachable.mjs"
+      ],
+      "deps": [
+        "T-010-2"
+      ],
+      "req_ids": [
+        "REQ-610",
+        "REQ-611"
+      ],
+      "acceptance": {
+        "feature": "ux-console.feature",
+        "scenarios": [
+          "Autonomy-band and kill-switch controls call the policy API and are RBAC-gated",
+          "A kill-switch reflects the disabled state only after the API confirms it"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 350,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed",
+      "status_evidence": "Verified 2026-08-23: the autonomy-band write and the kill control are live and gated — e2e/mode-selector.mjs (admin step-up, compare-and-swap on expected_from, RED double-confirm for Full-auto, honest 409/503) and e2e/kill-reachable.mjs (the emergency stop on screen at seven operator widths)."
+    },
+    {
+      "id": "T-010-8",
+      "title": "Admin panel: users, RBAC role assignments, on-call rotation/escalation, per-module enablement",
+      "files_owned": [
+        "frontend/src/panels/admin/admin-panel.tsx",
+        "frontend/src/panels/admin/rbac-forms.tsx"
+      ],
+      "deps": [
+        "T-010-2"
+      ],
+      "req_ids": [
+        "REQ-612"
+      ],
+      "acceptance": {
+        "feature": "ux-console.feature",
+        "scenarios": [
+          "The admin panel manages users, roles, on-call, and modules"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 450,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "pending",
+      "status_evidence": "CORRECTION 2026-08-23 (an earlier annotation in this same batch claimed \"the backend halves exist, so it is a console surface over existing APIs\" — that was asserted, not checked, and it is WRONG). Verified against the tree: core/auth.Principal is {SourceID, Method, Admin} — a BINARY admin flag, not RBAC roles; there is no user directory and no user/role CRUD route in core/httpapi/router.go; operator_sessions is a session table, not a user store; escalation_queue is a dropped-escalation REQUEUE lane, not an on-call rotation; and a module's Enabled is OBSERVED from configuration, not writable. So T-010-8 needs BACKEND authority built first (a user/role model, an on-call rotation store, a module-enable write), and whether TG should own a user directory at all is a design question — approvers already come from LDAP/OIDC and policy approve_by. This is an owner-surface decision followed by several slices, not a console panel over existing APIs."
+    },
+    {
+      "id": "T-010-9",
+      "title": "Serve only what is certified: drop the unreachable React bundle from the console image and bind the served entry point to this spec",
+      "files_owned": [],
+      "retrospective": true,
+      "deps": [],
+      "req_ids": [
+        "REQ-617"
+      ],
+      "acceptance": {
+        "go_test": "deploy: TestTheImageShipsNoWebAssetTheServedConsoleCannotReach, TestTheServedConsoleIsAFileThisRepoCanRead, TestSpecTenNamesTheArtifactThatIsActuallyServed, TestTheServedConsoleIsSelfContainedToday"
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    }
+  ]
+}

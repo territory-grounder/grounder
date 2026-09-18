@@ -1,0 +1,265 @@
+{
+  "note": "Governed safety-critical source files hash-bound to their owning spec (BEH-7 / REQ-701..704). SCOPE (narrowed 2026-07-30, ADR-0013): the lock governs the SAFETY SPINE (core/{safety,actuate,risk,predict,verify,audit,screen,proposal,manifest,auth}), the EFFECT CHANNEL (modules/actuation), the MEASUREMENT PLANE (spec/025 surfaces, tools/shadowbench, tools/faultinjector) and the gate itself (tools/specvalidate), plus the two REQ-702-mandated singletons core/suppression/chain.go and core/schema/version.go — files where drift from spec is dangerous AND change is rare. It deliberately does NOT govern orchestration/plumbing (cmd/, temporal/, core/httpapi, core/db, ...): governing the repo's hottest files taxed every routine change with a spec-prose edit plus a full lock rewrite (24.8% of all commits were lock rewrites) while --restamp silently overwrote hashes, protecting nothing. `lockstep --check` recomputes each hash and fails CI on drift; `lockstep --restamp` refuses unless the owning spec changed in the same diff.",
+  "files": [
+    {
+      "path": "core/risk/audit.go",
+      "spec": "001-risk-classification",
+      "sha256": "f0ea34ad66db6aac3cbdf6f628cc7bf9a6fb2776a8bf2774fcf5a9b58c9d5c56"
+    },
+    {
+      "path": "core/risk/classifier.go",
+      "spec": "001-risk-classification",
+      "sha256": "283abe8b3ec7d48784c5f54ed43f08be8b269371fecf832ee6f5d1fa11ca9495"
+    },
+    {
+      "path": "core/risk/evidence.go",
+      "spec": "001-risk-classification",
+      "sha256": "96e519dcb36105694f5734f900b72a2d797f5be43e1caeffb001dd93c838ba90"
+    },
+    {
+      "path": "core/risk/input.go",
+      "spec": "001-risk-classification",
+      "sha256": "816f13cabb7ae886d396e8f64f54ac7a4b7f20d3702b9754243b1d7b02df4014"
+    },
+    {
+      "path": "core/risk/policy.go",
+      "spec": "001-risk-classification",
+      "sha256": "1594988c67a29a33d685a9e4c44758938a43f4fb8c70bc2a78ccbf1bc2a7a4c5"
+    },
+    {
+      "path": "core/safety/safety.go",
+      "spec": "001-risk-classification",
+      "sha256": "4827a0281f8588697b94311f2711ae4af91de20f4f1acf55f071e185c9453abc"
+    },
+    {
+      "path": "core/screen/screen.go",
+      "spec": "001-risk-classification",
+      "sha256": "3024ce473d6f88e0ebc2aa561aac740a25d527baffb3697750e5416f28a2de30"
+    },
+    {
+      "path": "core/manifest/manifest.go",
+      "spec": "002-prediction-gate",
+      "sha256": "e26c1a26b1b82a571844748ba2c1337a9d5adb3d3300b902f06fb71d7e669738"
+    },
+    {
+      "path": "core/predict/gate.go",
+      "spec": "002-prediction-gate",
+      "sha256": "a66193331b3703589b881641235af305183c39363cdc84dabd207c50bf57f701"
+    },
+    {
+      "path": "core/predict/prediction.go",
+      "spec": "002-prediction-gate",
+      "sha256": "b9fc1e3f763c535632bb34b73a3c68a9a04c643f2678d19dcdaa44c38c5c1a4c"
+    },
+    {
+      "path": "core/proposal/parse.go",
+      "spec": "002-prediction-gate",
+      "sha256": "5c7e5ac25b98d33307bb7a7568c48ff9d37b665873c25b2eb51cc730ca29879a"
+    },
+    {
+      "path": "core/proposal/proposal.go",
+      "spec": "002-prediction-gate",
+      "sha256": "0bdc691c03fe6df8b59abe5c0546e931f5238ed871133540aca34221a668e517"
+    },
+    {
+      "path": "core/verify/verdict.go",
+      "spec": "002-prediction-gate",
+      "sha256": "2fce5f6e2488ea0f69dc80afe7accf78fff9d81273679552ec44091353f9ffb1"
+    },
+    {
+      "path": "core/suppression/chain.go",
+      "spec": "005-tier1-suppression",
+      "sha256": "d438ccee6d961dbf2d8c7020e935189e4912305a4d67160490af11a054a2784a"
+    },
+    {
+      "path": "core/audit/ledger.go",
+      "spec": "006-interface-contracts",
+      "sha256": "06fa0a80ea933bdfae75341a70ebba13d074cd2ef0d2a654b9565c33e19dab38"
+    },
+    {
+      "path": "core/audit/risk_audit.go",
+      "spec": "006-interface-contracts",
+      "sha256": "b0331ce57e7fb3a1130750a0dafb5cbcae2c967b3bbbf3f3ef6f594b5dc34d8a"
+    },
+    {
+      "path": "core/auth/admin.go",
+      "spec": "006-interface-contracts",
+      "sha256": "8b346e6dfc70554efedf0c9d0be5de76fb8ff57c8f7d683902e21900031d20ac"
+    },
+    {
+      "path": "core/auth/auth.go",
+      "spec": "006-interface-contracts",
+      "sha256": "bc86c90d836e8db2839269fa955a898e531588ed48bd916ec8fd55b706cb4f87"
+    },
+    {
+      "path": "core/auth/ldap_auth.go",
+      "spec": "006-interface-contracts",
+      "sha256": "5aea95a423ca83f4974b6167081b85caeea12339ff44e919e15f46e2a8209ad2"
+    },
+    {
+      "path": "core/auth/session.go",
+      "spec": "006-interface-contracts",
+      "sha256": "e0c8a7d1a9f7393d9305452aa5191551d9e39c3cb7c5b656e4569fe8465c9a6c"
+    },
+    {
+      "path": "core/schema/version.go",
+      "spec": "006-interface-contracts",
+      "sha256": "2f0ebd71620fac290b7d7e8b90ba897f0e3a3e9da4d017dcd83dd3aab9a791fb"
+    },
+    {
+      "path": "tools/specvalidate/lockstep/lockstep.go",
+      "spec": "007-spec-code-lockstep",
+      "sha256": "ae9fccdbbc9e1573a3404352dff864e4cd322cc1a5d9f7f5e98384c76d6b20ba"
+    },
+    {
+      "path": "tools/specvalidate/main.go",
+      "spec": "007-spec-code-lockstep",
+      "sha256": "66ec4d771c3bd3bba3fc2897b9afd31b1684aa1bfa0f344ac2040c0a3e10ac88"
+    },
+    {
+      "path": "modules/actuation/kubernetes/kubernetes.go",
+      "spec": "008-connectors",
+      "sha256": "bc665492838e45cd94a190e1f8544c88d5f1156b323ea1dc668b4020c9e7026c"
+    },
+    {
+      "path": "modules/actuation/mcp/mcp.go",
+      "spec": "008-connectors",
+      "sha256": "3384c99055f8d65994e69c4001787ea0af13e28a7f51f3fb63ef75b6a143ac05"
+    },
+    {
+      "path": "modules/actuation/proxmox/proxmox.go",
+      "spec": "008-connectors",
+      "sha256": "ab44c317239841fc1917b07b63c0bb66dd098d2acbb4aba5303f66600ce06b7a"
+    },
+    {
+      "path": "modules/actuation/ssh/mutate.go",
+      "spec": "008-connectors",
+      "sha256": "4aa3cfc8bdec3dc732fcc896a6c3c4f7ab13d3d25fed2ca2545d8d7895a361c4"
+    },
+    {
+      "path": "modules/actuation/ssh/native.go",
+      "spec": "008-connectors",
+      "sha256": "540726d9e01c6bde47bd56d4c39a5709218299b7e7dee073f4d00720e711483a"
+    },
+    {
+      "path": "modules/actuation/ssh/rollback.go",
+      "spec": "008-connectors",
+      "sha256": "90ca38d602c1d57931abc9effe9971a7c14c4d8cdce7caf0c44258cb37152872"
+    },
+    {
+      "path": "modules/actuation/ssh/ssh.go",
+      "spec": "008-connectors",
+      "sha256": "d9745e7d6d2a336ec491df350ab54e0bd30772a0bed3a205db50adc89cd958b1"
+    },
+    {
+      "path": "core/actuate/interceptor.go",
+      "spec": "013-actuation-interceptor",
+      "sha256": "2fae7255af8227961975de27369a07f7d8f523768ef63edefcc6ae60fd544db8"
+    },
+    {
+      "path": "core/actuate/mutation.go",
+      "spec": "013-actuation-interceptor",
+      "sha256": "c154c20a8710a6a96b56f980f75fb529b95ce9ec48ff98f04fd716c16c7999cc"
+    },
+    {
+      "path": "core/actuate/opschema/opschema.go",
+      "spec": "013-actuation-interceptor",
+      "sha256": "51e60ad268cf20fbfe37c6118708422cf9ce04ba74ac3663dd8959403bd6f009"
+    },
+    {
+      "path": "core/actuate/opschema/opschema.json",
+      "spec": "013-actuation-interceptor",
+      "sha256": "ec7e5acd1129196f5073e75ae8df54ae4615a1252b99b84472a3e14d405fde2a"
+    },
+    {
+      "path": "core/actuate/opschema/overlay.go",
+      "spec": "013-actuation-interceptor",
+      "sha256": "c922a018d19e2194c64a848924eb46ebd6fe6ea7a211522104cc8e19f47eec62"
+    },
+    {
+      "path": "core/safety/mutation_breaker.go",
+      "spec": "013-actuation-interceptor",
+      "sha256": "274fbfa07d94e6840c2fc9e114f42880c8018bd119280cd59adf82918d0c1bcb"
+    },
+    {
+      "path": "core/safety/mutation_chokepoint.go",
+      "spec": "015-policy-engine",
+      "sha256": "476d12e81f718967a10ad07724eed63db85172b18dbb2131b4dd5aade9c89b71"
+    },
+    {
+      "path": "modules/actuation/awxjob/awxjob.go",
+      "spec": "017-actuation-regime-engine",
+      "sha256": "0df28dc2e92cbfdbba88078779dd43404e4d6f89be7820648fbc0000567ff576"
+    },
+    {
+      "path": "modules/actuation/gitopsmr/gitopsmr.go",
+      "spec": "017-actuation-regime-engine",
+      "sha256": "ab2ebdd11f7121d14787d4c7d9ee4f631a2b72765c58284a233326a731cbb06b"
+    },
+    {
+      "path": "modules/actuation/gitopsmr/derive.go",
+      "spec": "017-actuation-regime-engine",
+      "sha256": "8ba15937d431f87567ad964bd19524d1cbc3ffe43cb43954623ab18c0ee5cba6"
+    },
+    {
+      "path": "modules/actuation/awxjob/client.go",
+      "spec": "017-actuation-regime-engine",
+      "sha256": "b61f3a12981b92a71960461f2e78e1d87da9fb0d9f80e3035dbf173014be1d90"
+    },
+    {
+      "path": "modules/actuation/awxjob/extravars.go",
+      "spec": "017-actuation-regime-engine",
+      "sha256": "fd4b26975c1f49e6fd1a7e58c7d0e9e5c0848d1ecc1e2611a013ba9be1573abb"
+    },
+    {
+      "path": "cmd/axisscore/main.go",
+      "spec": "025-benchmark-harness",
+      "sha256": "df92a2ff9594e8bacb22e61d42d7e598eedd27ceecf6300c7c0afd7866f76325"
+    },
+    {
+      "path": "core/axis/scorecard.go",
+      "spec": "025-benchmark-harness",
+      "sha256": "1f81c229f5bd0935f32c512a45161033166662fcedc7022e163d1e7798351077"
+    },
+    {
+      "path": "core/db/axis_read.go",
+      "spec": "025-benchmark-harness",
+      "sha256": "51de46d74c3669b8ffc686da658af99c234edd9854bd50bb5810a2070822beb1"
+    },
+    {
+      "path": "tools/faultinjector/engine.go",
+      "spec": "025-benchmark-harness",
+      "sha256": "0fb4e748a21e945066a2ace2c9fa66e840af9be0751e7daa564db8900dd59b9a"
+    },
+    {
+      "path": "tools/faultinjector/plan.go",
+      "spec": "025-benchmark-harness",
+      "sha256": "40b02b3f2ed50714becdf48e30fa81adb52748e604e68f519cf37e4eeddcb909"
+    },
+    {
+      "path": "tools/shadowbench/_driver.py",
+      "spec": "025-benchmark-harness",
+      "sha256": "9d86056902dc66d0374ba8dfc59df8bbc00c3057b483906005b8f066a638cb70"
+    },
+    {
+      "path": "tools/shadowbench/judge.py",
+      "spec": "025-benchmark-harness",
+      "sha256": "5cd9b28f0b11dff5a143c3f20f58bb46d8f0becd6ef8e0df654289d0dbdf267a"
+    },
+    {
+      "path": "modules/actuation/cisco/cisco.go",
+      "spec": "008-connectors",
+      "sha256": "7f392732863c978862a6a9315b0d4d13f3a7b57c326b43d1de8c2514d6932ad4"
+    },
+    {
+      "path": "modules/actuation/cisco/interactive.go",
+      "spec": "008-connectors",
+      "sha256": "735f5b07c25855720f6e61dbe834c7a15e79440e150ce2f14bf4772f0ab2a323"
+    },
+    {
+      "path": "modules/actuation/cisco/expect.go",
+      "spec": "008-connectors",
+      "sha256": "5646de03eccbf91c1fda59223b790538f2f315b1e80059903561eb2aa027f281"
+    }
+  ]
+}

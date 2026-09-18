@@ -1,0 +1,293 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "graphTooltip": 0,
+  "title": "Territory Grounder \u2014 Model Gateway Health",
+  "uid": "tg-model-gateway",
+  "tags": [
+    "territory-grounder",
+    "model-gateway"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Completions by tier (total)",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (model) (tg_model_calls_total)",
+          "legendFormat": "{{model}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Non-ok rate (15m) \u2014 alerts >30%",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.3
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(tg_model_calls_total{outcome!~\"ok|empty\"}[15m])) / clamp_min(sum(increase(tg_model_calls_total[15m])), 1)",
+          "legendFormat": "non-ok fraction",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Timeouts (15m) \u2014 alerts >=3",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(tg_model_calls_total{outcome=\"timeout\"}[15m]))",
+          "legendFormat": "timeouts",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Avg latency per tier (s) \u2014 the reasoning-model slowness signal",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (model) (rate(tg_model_call_seconds_total[5m])) / clamp_min(sum by (model) (rate(tg_model_calls_total[5m])), 0.001)",
+          "legendFormat": "{{model}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Completion rate by outcome (/s)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (rate(tg_model_calls_total[5m]))",
+          "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.25
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "id": 6,
+      "title": "Confidence calibration \u2014 Brier (0.25 = always guessing 0.5)",
+      "description": "LOWER IS BETTER. 0.25 is the Brier score of always predicting 0.5, so anything ABOVE the baseline line means the agent's stated confidence carries less information than a coin. Measured live at 0.4633 when this panel was added. Observe-only: the policy min_confidence clamp is OFF and this does not change it.",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "tg_confidence_brier",
+          "legendFormat": "Brier",
+          "refId": "A"
+        },
+        {
+          "expr": "0.25",
+          "legendFormat": "coin-flip baseline",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
+      "id": 7,
+      "title": "Confidence calibration \u2014 ECE / MCE, with sample count",
+      "description": "ECE is the MEAN gap between stated confidence and observed accuracy; MCE is the WORST bin's gap \u2014 an acceptable average can hide a bucket where the agent was most confident and most wrong. N is plotted alongside deliberately: at N=0 the score gauges are WITHHELD, not zeroed, so an unmeasured system cannot render as a flawless one. A flat line at zero with N=0 means NO EVIDENCE, never perfect calibration.",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "tg_confidence_ece",
+          "legendFormat": "ECE (mean gap)",
+          "refId": "A"
+        },
+        {
+          "expr": "tg_confidence_mce",
+          "legendFormat": "MCE (worst bin)",
+          "refId": "B"
+        },
+        {
+          "expr": "tg_confidence_samples",
+          "legendFormat": "N (samples)",
+          "refId": "C"
+        }
+      ]
+    }
+  ]
+}

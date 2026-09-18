@@ -1,0 +1,5 @@
+{
+  "_comment": "tier2 --dry-run FIXTURE (TG-72), TIER2_DRY_FIXTURE=both: the injection stage's outcome when BOTH concurrent faults land — the scoreable case.",
+  "service_down": { "landed": true, "detail": "systemctl stop fakeapp; is-active=inactive (real state transition)" },
+  "log_fill": { "landed": true, "achieved_pct": 91, "alloc_bytes": 734003200, "detail": "fallocate grew /var/log/fakeapp/app.log; storage_perc 91 inside rule window [90,95)" }
+}

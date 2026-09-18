@@ -1,0 +1,88 @@
+TG CHART PRIMITIVES — API
+Load order: tg-charts.css → console globals (h/$/reduceMotion) → tg-charts.js → tg-charts-fixtures.js.
+All functions are window globals, pure (data in → DOM node out), styled through tokens only, fully
+deterministic (mulberry32 is the ONLY randomness source, and only fixtures use it).
+Series type everywhere: number[] or {v,t}[] (only .v is read; x = uniform steps). An empty or
+all-invalid series returns an honest ".tg-empty / awaiting data" placeholder — never a faked line.
+Numbers render in --mono with tabular figures via fmt: integers plain, ≥1000 locale-grouped, else
+1–2 decimals by magnitude. Verified end-to-end in Chromium, light + dark themes.
+
+svgEl(tag, attrs?, ...kids) -> SVGElement
+  Namespace-aware twin of h(). attrs: class → setAttribute; html → innerHTML; on*+function →
+  addEventListener (event name lowercased, so onclick and onClick both work); true → empty attr;
+  null/false skipped; everything else → setAttribute. kids: nodes appended, primitives become text
+  nodes, arrays deep-flattened, null/false skipped.
+
+sparkline(series, opts?) -> SVGElement | .tg-empty
+  opts {w=90, h=22, color='var(--territory)', fill=true, threshold}
+  Inline mini line (1.5px, steel default) + optional 8%-opacity area + emphasized endpoint dot.
+  threshold: dashed --hazard hairline (too small for a label at this size). <title> = last value;
+  role="img" aria-label included.
+
+areaChart(series, opts?) -> SVGElement | .tg-empty
+  opts {w=220, h=64, color='var(--territory)', threshold, grid=true}
+  2px solid line + faint area over a recessive calibration grid (quartile rules at 50% opacity,
+  baseline + quarter ticks in --line2). threshold: --hazard 5%-opacity band above the line +
+  dashed rule + right-aligned "thr N" label when w≥160. Hover: crosshair + dot + mono value
+  readout at nearest sample (pointerleave hides it).
+
+metricPanel(cfg) -> HTMLElement (.tg-metric — the centerpiece)
+  cfg {title, unit, series, threshold, events, predicted, live, w=280, h=96}
+  Header: uppercase mono title (--ink3) + big tabular last-value readout + unit; hovering the plot
+  retargets the readout to the sample under the cursor (dimmed to --ink2), restored on leave.
+  Layers, bottom→top: calibration grid · threshold band/rule/label (label auto-flips below the
+  rule when it hugs the plot top) · MAP ghost (predicted band at --map 8% fill, predicted line
+  --map 1.5px dashed 4-3) · TERRITORY observed (--territory 7% area + 2px solid line) · endpoint
+  dot · event markers · hover crosshair. Map and territory never share a hue.
+  predicted: number[] | {series:number[], band:{lo:number[], hi:number[]}}. It may be LONGER than
+  the observed series — the x-axis extends to the forecast horizon and hovering past the observed
+  end reads the predicted value with an indigo dot (map vs territory in the time domain).
+  events: [{t, type, label}] — thin vertical rule (1px, 55% opacity) + typed glyph in the top
+  strip + tiny mono label in --ink3 (auto right-anchors near the right edge) + <title> tooltip.
+    t: integer (or any value ≥1) = sample index, clamped; a fraction strictly between 0 and 1 =
+       relative position across the full (observed+predicted) x-range.
+    type → color + SHAPE (status never rides on color alone):
+      alert=--deviation triangle-up · predicted/commit=--map diamond · executed=--accent circle ·
+      verified-match=--match square · verified-deviation=--deviation triangle-down ·
+      unknown=--ink3 tick.
+  threshold: number — hazard ceiling; included in the y-domain so it is always visible.
+  live: true adds a scaling pulse ring on the endpoint — suppressed by the reduceMotion global at
+  build time AND by the prefers-reduced-motion media query in CSS (belt and braces).
+  Legend (.tg-legend) renders only at ≥2 encodings: observed(solid steel) + predicted(dashed
+  indigo) and/or threshold(dashed hazard). A lone observed series gets none — the title names it.
+
+smallMultiples(panels, opts?) -> HTMLElement (.tg-smallmult)
+  opts {cols=3}. CSS-grid layout (repeat(cols, minmax(0,1fr)), 10px gap) of already-built
+  metricPanel/areaChart nodes; null entries skipped. Scale consistency is the CALLER's contract:
+  pass the same w/h and, for honest comparison, series sharing a y-domain.
+
+donut(segments, opts?) -> HTMLElement (.tg-donut)
+  segments [{label, value, color}], opts {size=120}
+  Annular sectors starting at 12 o'clock with ≈2px surface gaps between fills (a single segment
+  becomes a full ring); zero/negative/invalid segments dropped; zero total → awaiting-data.
+  Center: mono tabular total + tiny uppercase "total" cap. Side legend (ul.tg-donut-legend):
+  square swatch + sans label + right-aligned mono value. Per-segment <title> = label, value, pct.
+  Pass band/verdict tokens as colors (e.g. var(--auto)); default fill is --territory.
+
+hbar(rows) -> HTMLElement (.tg-hbar)
+  rows [{label, value, max?, color?, detail?}]
+  Grid rows: sans label (ellipsized, title-attr) | track (--g2, hairline --line border,
+  radius-s) with fill rounded on the DATA END only (baseline stays square) | right-aligned mono
+  value. max per-row; omitted → global max across rows (min-clamped, division-safe). value
+  clamped ≥0, width capped at 100%. detail: full-width mono --ink3 sub-line (hosts, timestamps).
+  Track carries role="img" aria-label "label: v of max". Empty rows → awaiting-data.
+
+FIXTURES (separate file; requires tg-charts.js first — it consumes window.mulberry32)
+  mulberry32(seed:int) -> () => float in [0,1)      exported by the core lib; NO Math.random.
+  genSeries(seed, n, base, drift, spike?) -> number[]
+    Seeded walk around `base` (±drift/step); optional `spike` injects an incident at ~55% of the
+    window with exponential decay — an alert-shaped excursion. Clamped ≥0, 2-decimal.
+  genEnvelope(series, spread=5) -> {series, band:{lo,hi}}
+    3-point smoothed ghost + symmetric ±spread band — exactly metricPanel's `predicted` shape.
+  CHART_FIXTURES: cpu (48pt incident spike) · latency (steady p95) · errors (small burst) ·
+    cpuPredicted (envelope from a deliberately different seed, so the map-vs-territory gap shows) ·
+    cpuEvents (alert → commit → executed → verified-match) · bandDonut (AUTO/AUTO_NOTICE/
+    POLL_PAUSE in band tokens) · hostBars (with detail lines).
+  Full centerpiece example:
+    metricPanel({ title:"cpu util — edge-01", unit:"%", series:CHART_FIXTURES.cpu, threshold:80,
+      events:CHART_FIXTURES.cpuEvents, predicted:CHART_FIXTURES.cpuPredicted, live:true })

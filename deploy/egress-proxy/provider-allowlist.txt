@@ -1,0 +1,36 @@
+# TG-420 — the litellm egress proxy's FENCE. Per OWNER RULING TG-488 B11, CORRECTED 2026-08-14 on
+# TG-420 (pending owner veto, TG-488 A1 decide-do-record): B11's three-endpoint set was framed on an
+# api_base-only grep that missed providers on DEFAULT endpoints — DeepSeek is the JUDGE (deliberately
+# independent-vendor, ladder rung 2) and Mistral is the CURRENT primary/fast brain (since the 08-08
+# opus-cc sub-cap; rung 3). An enforce flip on the uncorrected set would have cut the live brain and
+# the judge. The correction is recorded on TG-420; a fresh owner ruling supersedes this file.
+#
+# THE FENCE (one per line, bare host tokens):
+#   sidecar             — the on-box Anthropic lane (compose service; HTTP, so it stays DIRECT, permitted by
+#                         being off the proxy — NO_PROXY, not this filter).
+#   ${TG_OLLAMA_HOST}   — the LAN embed lane. Its real host is an ESTATE coordinate and MUST NOT be committed
+#                         (mirror abort-on-survivor), so it is an env-ref, deploy-substituted from the box
+#                         .env (same host as TG_OLLAMA_BASE). Also HTTP, so it too stays DIRECT.
+#   api.z.ai            — public HTTPS, ruled in B11 (owner funds the account).
+#   api.deepseek.com    — public HTTPS: the JUDGE's endpoint + ladder rung 2 (the correction).
+#   api.mistral.ai      — public HTTPS: the CURRENT primary/fast brain + rung 3 (the correction).
+#
+# CI-CHECKED: deploy/egress_proxy_allowlist_test.go asserts these lines == the ruled set, and SEPARATELY
+# reports (does not fail on) which litellm-config providers fall outside the fence — that delta is the
+# stranger list the observe drill measures. Change the fence ONLY on a new owner ruling; cite it here.
+#
+# NOTE (2026-08-19, non-normative — does not change the ruled fence above): "sidecar" is the on-box
+# Anthropic lane the ruling names, but as of TG-293/TG-511 (2026-08-18) no model_list entry in
+# litellm-config.yaml actually points at it — primary, fast, opus-cc, arm-haiku, arm-opus, and forensic-ir
+# all dial os.environ/TG_LITELLM01_BASE instead (litellm-config.yaml:37,47,59,70,75,126 — the operator's
+# own dc1litellm01 litellm, HTTP, "not TLS-guarded per owner ruling 2026-08-18"). That lane is a THIRD
+# direct/HTTP lane, exempted the same way as sidecar/ollama by deriveProviderDomains' blanket
+# `os.environ/`-prefix rule (egress_proxy_allowlist_test.go:112-134) — TestProxyFenceStrangerReport
+# confirms zero strangers today. No fence change is needed; flagged so the observe drill's "sidecar"
+# mentions aren't mistaken for the active route. The `sidecar` compose service still runs
+# (docker-compose.yml) and stays a valid direct lane if routing reverts.
+sidecar
+${TG_OLLAMA_HOST}
+api.z.ai
+api.deepseek.com
+api.mistral.ai

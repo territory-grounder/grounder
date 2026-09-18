@@ -1,0 +1,168 @@
+{
+ "2026-07-31|pair|IFRNLLEI01PRD-2022|librenms-dc1-183431": {
+  "tg_correct": true,
+  "pred_correct": false,
+  "fault_id": 1333,
+  "injector_class": "service-down",
+  "host": "dc1cloudbeaver01"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2034|librenms-dc1-183433": {
+  "tg_correct": true,
+  "pred_correct": false,
+  "fault_id": 1335,
+  "injector_class": "device-down",
+  "host": "dc1excalidraw01"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2011|librenms-dc1-183441": {
+  "tg_correct": false,
+  "pred_correct": false,
+  "fault_id": 1336,
+  "injector_class": "container-down",
+  "host": "dc1ghostfolio01"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2021|librenms-dc1-183444": {
+  "tg_correct": true,
+  "pred_correct": false,
+  "fault_id": 1337,
+  "injector_class": "service-down",
+  "host": "dc1openwebui01"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2039|librenms-dc1-183448": {
+  "tg_correct": true,
+  "pred_correct": false,
+  "fault_id": 1339,
+  "injector_class": "device-down",
+  "host": "dc1wallos01"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2015|librenms-dc1-183453": {
+  "tg_correct": false,
+  "pred_correct": false,
+  "fault_id": 1340,
+  "injector_class": "container-down",
+  "host": "dc1mealie01"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-1865|tg-liveness-dc1linkwarden02-1785464233": {
+  "tg_correct": true,
+  "pred_correct": false,
+  "fault_id": 1343,
+  "injector_class": "device-down",
+  "host": "dc1linkwarden02"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2022|librenms-dc1-183460": {
+  "tg_correct": true,
+  "pred_correct": true,
+  "fault_id": 1344,
+  "injector_class": "disk-fill",
+  "host": "dc1cloudbeaver01"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2011|librenms-dc1-183470": {
+  "tg_correct": true,
+  "pred_correct": false,
+  "fault_id": 1345,
+  "injector_class": "service-down",
+  "host": "dc1ghostfolio01"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2015|tg-liveness-dc1mealie01-1785466438": {
+  "tg_correct": true,
+  "pred_correct": false,
+  "fault_id": 1351,
+  "injector_class": "device-down",
+  "host": "dc1mealie01"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-1865|librenms-dc1-183497": {
+  "tg_correct": true,
+  "pred_correct": true,
+  "fault_id": 1352,
+  "injector_class": "disk-fill",
+  "host": "dc1linkwarden02"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2006|tg-liveness-dc1reactive01-1785466843": {
+  "tg_correct": true,
+  "pred_correct": false,
+  "fault_id": 1353,
+  "injector_class": "device-down",
+  "host": "dc1reactive01"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2036|librenms-dc1-183508": {
+  "tg_correct": true,
+  "pred_correct": true,
+  "fault_id": 1356,
+  "injector_class": "disk-fill",
+  "host": "dc1actualbudget01"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2022|tg-liveness-dc1cloudbeaver01-1785469093": {
+  "tg_correct": true,
+  "pred_correct": false,
+  "fault_id": 1361,
+  "injector_class": "device-down",
+  "host": "dc1cloudbeaver01"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2036|librenms-dc1-183552": {
+  "tg_correct": false,
+  "pred_correct": false,
+  "fault_id": 1366,
+  "injector_class": "container-down",
+  "host": "dc1actualbudget01"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2015|tg-liveness-dc1mealie01-1785470983": {
+  "tg_correct": true,
+  "pred_correct": false,
+  "fault_id": 1369,
+  "injector_class": "device-down",
+  "host": "dc1mealie01"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2039|librenms-dc1-183509": {
+  "tg_correct": true,
+  "pred_correct": false,
+  "fault_id": 1355,
+  "injector_class": "device-down",
+  "host": "dc1wallos01"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2039|tg-liveness-dc1wallos01-1785472108": {
+  "tg_correct": false,
+  "pred_correct": false,
+  "fault_id": 1373,
+  "injector_class": "device-down",
+  "host": "dc1wallos01"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2006|librenms-dc1-183429": {
+  "tg_correct": true,
+  "pred_correct": true,
+  "fault_id": 1334,
+  "injector_class": "log-fill",
+  "host": "dc1reactive01",
+  "_sensitivity": "stand-down rule, not in registered rubric"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2022|librenms-dc1-183443": {
+  "tg_correct": true,
+  "pred_correct": true,
+  "fault_id": 1338,
+  "injector_class": "log-fill",
+  "host": "dc1cloudbeaver01",
+  "_sensitivity": "stand-down rule, not in registered rubric"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2021|librenms-dc1-183458": {
+  "tg_correct": true,
+  "pred_correct": true,
+  "fault_id": 1342,
+  "injector_class": "log-fill",
+  "host": "dc1openwebui01",
+  "_sensitivity": "stand-down rule, not in registered rubric"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2006|librenms-dc1-183476": {
+  "tg_correct": true,
+  "pred_correct": true,
+  "fault_id": 1346,
+  "injector_class": "log-fill",
+  "host": "dc1reactive01",
+  "_sensitivity": "stand-down rule, not in registered rubric"
+ },
+ "2026-07-31|pair|IFRNLLEI01PRD-2022|librenms-dc1-183580": {
+  "tg_correct": true,
+  "pred_correct": true,
+  "fault_id": 1372,
+  "injector_class": "log-fill",
+  "host": "dc1cloudbeaver01",
+  "_sensitivity": "stand-down rule, not in registered rubric"
+ }
+}

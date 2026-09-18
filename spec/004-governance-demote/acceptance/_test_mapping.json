@@ -1,0 +1,120 @@
+{
+  "feature": "governance-demote.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes; pending = specified behavior whose implementation does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior). Corrected 2026-07-31 (TG-222): this note previously ended 'Every scenario is pending: no Go implementation exists yet' while all eleven entries read present — a stale claim in the very file whose job is honest coverage reporting.",
+  "scenarios": [
+    {
+      "name": "A genuine repeat-offender tuple is auto-demoted to analysis-only",
+      "req": "REQ-301",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A tuple recurring three times in thirty days is classified a demote candidate",
+      "req": "REQ-302",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A tuple recurring twice is not classified a demote candidate",
+      "req": "REQ-302",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "An intentional known-transient tuple is excluded from demotion",
+      "req": "REQ-303",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A demotion auto-expires after thirty days",
+      "req": "REQ-304",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "The judge-liveness monitor computes the judged fraction from judge-independent tables",
+      "req": "REQ-305",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A non-recent session is excluded from the judged fraction",
+      "req": "REQ-305",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A judged fraction below one half over more than three sessions raises a judge-death warning",
+      "req": "REQ-306",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A judged fraction below one half with three or fewer eligible sessions raises no warning",
+      "req": "REQ-306",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A governance demotion decision is appended to the immutable audit spine",
+      "req": "REQ-301",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A raw judged transcript is purgeable while the judged fraction fact is retained",
+      "req": "REQ-305",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "An independent re-judgment confirms judge death when the local judge scored nothing",
+      "req": "REQ-307",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A total local-frontier disagreement over a wide sample raises drift without halting",
+      "req": "REQ-307",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A frontier model that cannot answer never manufactures a judge death",
+      "req": "REQ-307",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "The governance schedules exist after the worker boot wiring runs",
+      "req": "REQ-308",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A monitor whose collaborators are unwired gets no schedule",
+      "req": "REQ-308",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A confirmed judge death halts the graduation pass and leaves every trial unchanged",
+      "req": "REQ-308",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "A judged-accrual halt whose state cannot be read is treated as halted",
+      "req": "REQ-308",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    },
+    {
+      "name": "The absence of the governance schedule wiring is itself detected",
+      "req": "REQ-308",
+      "status": "present",
+      "test": "TestGovernanceDemoteAcceptance"
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+views.regime = rgmView;
+VIEW_META.regime = ["Actuation Regimes", "how each target routes to a governed effect lane — resolutions, launches, deferred verdicts, and per-lane coverage (spec/017 · non-secret · read-only)"];

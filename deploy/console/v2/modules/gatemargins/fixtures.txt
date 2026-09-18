@@ -1,0 +1,25 @@
+/* ---- gate-margins fixtures (gm-) — the within-ε boundary-case queue (TG-178) --------------------
+   REAL DTO FIELD NAMES, verbatim from core/httpapi/gate_margins.go and the key set pinned by
+   gate_margins_contract_test.go: the page is GateBoundaryPage {epsilon, cases[]}; each case is
+   GateBoundaryCase {action_id, external_ref, ordinal, gate, verdict, reason, margin}. Margin is a
+   SIGNED distance-to-threshold: negative sat on the refusing side by |margin|, positive cleared by
+   margin, 0 is exactly at the threshold (a real value, never "unknown").
+
+   These are DESIGN-PREVIEW data only. They render behind fixtureChip() on the unauthenticated shell,
+   framed by the rail's DESIGN PREVIEW flag — and NEVER on a live shell (see modules/_live/js.txt). The
+   external_refs deliberately carry "demo" so an oracle can assert they never appear on the live path. */
+const GM_FIXTURE = {
+  epsilon: 0.05,
+  cases: [
+    { action_id: "9a8cca11c0de4f21", external_ref: "librenms-dc1-demo-181284", ordinal: 7, gate: "policy",
+      verdict: "pass", reason: "confidence 0.61 > min_confidence 0.60", margin: 0.01 },
+    { action_id: "4c77d0ab5e01aa93", external_ref: "crowdsec-dc1-demo-4471", ordinal: 4, gate: "confidence",
+      verdict: "refuse", reason: "confidence 0.58 < min_confidence 0.60", margin: -0.02 },
+    { action_id: "c31b77e0a9f10c44", external_ref: "prometheus-dc2-demo-0399", ordinal: 9, gate: "risk",
+      verdict: "refuse", reason: "risk score 0.70 == max_risk 0.70 at the boundary", margin: 0.0 },
+    { action_id: "77aa03f9b2c8de05", external_ref: "prometheus-dc2-demo-0415", ordinal: 6, gate: "novelty",
+      verdict: "pass", reason: "novelty 0.12 below 0.15 ceiling by a slim margin", margin: 0.03 },
+    { action_id: "5d20e6b4771af328", external_ref: "librenms-dc1-demo-0416", ordinal: 3, gate: "blast-radius",
+      verdict: "pass", reason: "predicted blast radius within the sanctioned envelope", margin: 0.045 },
+  ]
+};
