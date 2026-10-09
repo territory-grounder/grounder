@@ -1,0 +1,55 @@
+{
+  "generated_at": "2026-08-27T12:59:01Z",
+  "dimension": "correct_diagnosis",
+  "truth": "diagnosis",
+  "positive_cut": 4,
+  "bar": 0.7,
+  "sole_session_faults": 761,
+  "confusion": {
+    "fn": 8,
+    "fp": 0,
+    "tn": 37,
+    "tp": 621
+  },
+  "tpr": {
+    "NoInterval": false,
+    "Value": 0.9872813990461049,
+    "Lo": 0.9751055280936672,
+    "Hi": 0.99354150262131,
+    "N": 629,
+    "Defined": true
+  },
+  "tnr": {
+    "NoInterval": false,
+    "Value": 1,
+    "Lo": 0.9059421741627975,
+    "Hi": 1,
+    "N": 37,
+    "Defined": true
+  },
+  "precision": {
+    "NoInterval": false,
+    "Value": 1,
+    "Lo": 0.9938521063760007,
+    "Hi": 0.9999999999999999,
+    "N": 621,
+    "Defined": true
+  },
+  "accuracy": {
+    "NoInterval": false,
+    "Value": 0.987987987987988,
+    "Lo": 0.976477844706486,
+    "Hi": 0.9939010284441451,
+    "N": 666,
+    "Defined": true
+  },
+  "kappa": {
+    "NoInterval": true,
+    "Value": 0.8961038961038965,
+    "Lo": 0,
+    "Hi": 0,
+    "N": 666,
+    "Defined": true
+  },
+  "meets_bar": true
+}

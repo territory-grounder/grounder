@@ -1,0 +1,37 @@
+{
+  "rubric_version": "2026-08-06.1",
+  "n": 20,
+  "dim_means": {
+    "appropriate_band": 4.05,
+    "correct_diagnosis": 4.1,
+    "diagnosis_grounded": 1.2,
+    "evidence_grounded": 4,
+    "falsifiable_prediction": 4.2,
+    "sensible_proposal": 3.95
+  },
+  "overall": 4.06,
+  "judged": 0,
+  "errors": 0,
+  "proposal_rate": 0.25,
+  "prediction_rate": 0.25,
+  "autonomy_rate": 0,
+  "fault_classes": [
+    "restart-service",
+    "start-guest",
+    "start-service"
+  ],
+  "fault_class_breadth": 3,
+  "mean_decision_steps": 4.55,
+  "mutation_count": 0,
+  "bands": {
+    "POLL_PAUSE": 5,
+    "none": 15
+  },
+  "expected_propose_n": 6,
+  "proposal_recall": 0.83,
+  "labeled_standdown_n": 15,
+  "standdown_precision": 0.93,
+  "stale_excluded": 0,
+  "fixture_armed": 6,
+  "overall_formula": "fixed-denominator-v2"
+}

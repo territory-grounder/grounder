@@ -1,0 +1,55 @@
+{
+  "measured_at": "2026-07-18",
+  "git_sha": "b58465725e676c4bfa76142d94ce7383cedc88e0",
+  "runs": 3,
+  "n": 60,
+  "provenance": "Pooled mean of 3 honest on-box runs of origin/main @ b584657 on dc1tg01's live LiteLLM gateway (read-only, mutation OFF), via the on-box A/B harness (eval/run-on-box.sh), N=20 corpus each (N=60 pooled). Real Runner + shared core/judge. Measured during this session's R2 gate (not a dedicated run for this baseline). Individual-run overalls: 3.09, 3.23, 2.91. Re-measure with `TG_EVAL_RUNS=3 make eval-gate` and re-pool on a legitimate upward move; never lower it to hide a regression. | 2026-07-30 formula note: this card's overall (3.077) is already a full 5-dimension mean, so it is a FIXED POINT of the fixed-denominator-v2 rule and remains the valid anchor. Scorecards dated 2026-07-19..2026-07-29 whose proposal_rate is below this baseline's 0.45 are INCOMPARABLE on the headline number (the pre-v2 formula dropped unmeasured dimensions from the denominator — the 07-25 'overall 4.14' is 3.51 under v2); compare them only after gate.NormalizeScorecard.",
+  "individual_runs": [
+    {
+      "overall": 3.09,
+      "n": 20,
+      "note": "base-scorecard.json"
+    },
+    {
+      "overall": 3.23,
+      "n": 20,
+      "note": "run2-base-scorecard.json"
+    },
+    {
+      "overall": 2.91,
+      "n": 20,
+      "note": "run3-base-scorecard.json"
+    }
+  ],
+  "scorecard": {
+    "n": 60,
+    "dim_means": {
+      "appropriate_band": 4.233,
+      "correct_diagnosis": 3.267,
+      "evidence_grounded": 3.217,
+      "falsifiable_prediction": 1.483,
+      "sensible_proposal": 3.183
+    },
+    "overall": 3.077,
+    "judged": 0,
+    "errors": 0,
+    "proposal_rate": 0.45,
+    "prediction_rate": 0.45,
+    "autonomy_rate": 0,
+    "fault_classes": null,
+    "fault_class_breadth": 0,
+    "mean_decision_steps": 0,
+    "mutation_count": 0,
+    "bands": {
+      "POLL_PAUSE": 27,
+      "none": 33
+    },
+    "expected_propose_n": 0,
+    "proposal_recall": 0,
+    "labeled_standdown_n": 0,
+    "standdown_precision": 0,
+    "stale_excluded": 0,
+    "fixture_armed": 0,
+    "overall_formula": "fixed-denominator-v2"
+  }
+}

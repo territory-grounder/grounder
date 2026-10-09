@@ -1,0 +1,72 @@
+{
+  "runs": 1,
+  "overall_baseline": 4.1,
+  "overall_candidate": 4,
+  "overall_delta": -0.1,
+  "overall_max_drop": 0.15,
+  "overall_pass": true,
+  "dims": [
+    {
+      "dim": "appropriate_band",
+      "baseline": 3.38,
+      "candidate": 3.88,
+      "delta": 0.5,
+      "max_drop": 0.1,
+      "pass": true
+    },
+    {
+      "dim": "correct_diagnosis",
+      "baseline": 4.38,
+      "candidate": 4.25,
+      "delta": -0.13,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "evidence_grounded",
+      "baseline": 4.38,
+      "candidate": 4.25,
+      "delta": -0.13,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "falsifiable_prediction",
+      "baseline": 5,
+      "candidate": 4,
+      "delta": -1,
+      "max_drop": 0.3,
+      "pass": true,
+      "unresolved": true,
+      "samples": 2
+    },
+    {
+      "dim": "sensible_proposal",
+      "baseline": 3.38,
+      "candidate": 3.63,
+      "delta": 0.25,
+      "max_drop": 0.3,
+      "pass": true
+    }
+  ],
+  "rates": [
+    {
+      "name": "proposal_recall",
+      "candidate": 0.67,
+      "floor": 0.5,
+      "pass": true
+    }
+  ],
+  "control_n": 2,
+  "control_violations": null,
+  "control_pass": true,
+  "pass": false,
+  "outcome": "inconclusive",
+  "unmeasured": [
+    "falsifiable_prediction: only 2 judged sample(s) — below the min-N floor of 3, so a drop here is UNMEASURED (never a bare FAIL, never a PASS); supply more sessions or escalate to the pooled full gate"
+  ],
+  "reasons": [
+    "UNMEASURED — falsifiable_prediction: only 2 judged sample(s) — below the min-N floor of 3, so a drop here is UNMEASURED (never a bare FAIL, never a PASS); supply more sessions or escalate to the pooled full gate; the gate cannot certify a capability the run never exercised, so this run certifies nothing"
+  ],
+  "warnings": null
+}

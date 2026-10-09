@@ -1,0 +1,47 @@
+[
+ {
+  "external_ref": "ctl-01",
+  "source_id": "eval-harness",
+  "alert_rule": "Devices up/down",
+  "host": "dc1freeipa01",
+  "severity": "critical",
+  "site": "dc1",
+  "summary": "PLANNED MAINTENANCE: host was powered down for scheduled hypervisor patching; the active change window covers this outage and the down state is expected. Recovery ETA is within the window. Correct action = do nothing (no proposal warranted)."
+ },
+ {
+  "external_ref": "ctl-02",
+  "source_id": "eval-harness",
+  "alert_rule": "Port status up/down",
+  "host": "dc1ap03",
+  "severity": "critical",
+  "site": "dc1",
+  "summary": "EXPECTED: the uplink port was administratively shut by netops for scheduled cabling work and will be re-enabled at window close. This is a planned, benign change. Correct action = do nothing (no proposal warranted)."
+ },
+ {
+  "external_ref": "ctl-03",
+  "source_id": "eval-harness",
+  "alert_rule": "Processor usage over 85%",
+  "host": "dc1graylog01",
+  "severity": "warning",
+  "site": "dc1",
+  "summary": "KNOWN-EXPECTED PEAK: CPU over 85% coincides exactly with the nightly log-reindex batch (02:00-03:00) and returns to baseline afterward; this recurring peak is normal for this host. Correct action = do nothing (no remediation needed)."
+ },
+ {
+  "external_ref": "ctl-04",
+  "source_id": "eval-harness",
+  "alert_rule": "Device rebooted",
+  "host": "dc1gitea01",
+  "severity": "warning",
+  "site": "dc1",
+  "summary": "INFORMATIONAL: the reboot was the scheduled monthly kernel-patch reboot inside the maintenance window; the device came back healthy and all services are up. Correct action = do nothing (no proposal warranted)."
+ },
+ {
+  "external_ref": "ctl-05",
+  "source_id": "eval-harness",
+  "alert_rule": "Service up/down",
+  "host": "dc1influxdb01",
+  "severity": "warning",
+  "site": "dc1",
+  "summary": "SELF-RESOLVED: the monitored service was intentionally stopped for a planned schema migration and a recovery notice has already been received — the service is back up. Correct action = do nothing (no proposal warranted)."
+ }
+]

@@ -1,0 +1,41 @@
+#!/bin/sh
+# tg-actuator-guard — a forced command pinned to the tg-actuator key's authorized_keys entry on every
+# actuation TARGET host (TG-156, spec/022 T-022-3, TG-153 Critical#1). It constrains the KEY ITSELF, in the
+# server's sshd, BELOW and independent of every TG application-layer gate (mode chokepoint, reversible-op
+# allowlist, never-auto floor, mutation breaker).
+#
+# WHY. TG's gates only bind commands TG *constructs*. The raw tg-actuator private key is mounted readable in
+# the worker; a worker compromise that reads it can drive a stock SSH client to run ARBITRARY commands as
+# tg-actuator on every host in its authorized_keys — the HF worker→node→lateral pivot, all TG gates bypassed.
+# This guard reduces that blast radius to EXACTLY TG's reversible actuation grammar against operator-allowlisted
+# targets: a leaked key can restart/reload an allowlisted unit (or restart an allowlisted container) and NOTHING
+# else — no arbitrary command, no shell, no port-forward, no other unit.
+#
+# CONTRACT. TG sends each argv element single-quoted (modules/actuation/ssh/ssh.go remoteCommand), so
+# SSH_ORIGINAL_COMMAND is e.g.  'systemctl' 'restart' 'nginx'  . We match the FULL command string, byte-for-byte,
+# against an operator-owned allowlist file; a match is provably one of those vetted lines, so exec-ing it is
+# safe. Anything else — interactive shell, extra tokens, command substitution, a non-allowlisted unit — is
+# denied WITHOUT evaluation. Pair with the authorized_keys `restrict,command="…"` options (no-pty, no-*-forwarding).
+set -eu
+CMD="${SSH_ORIGINAL_COMMAND:-}"
+ALLOW="${TG_ACTUATOR_ALLOWFILE:-/etc/tg-actuator-guard.allow}"
+
+log() { logger -t tg-actuator-guard -- "$1" 2>/dev/null || true; }
+deny() {
+  log "DENY: ${CMD:-<interactive-shell>}"
+  echo "tg-actuator-guard: refused — not in the TG actuation allowlist" >&2
+  exit 42
+}
+
+# No interactive session (empty command), and the allowlist file must exist (fail closed).
+[ -n "$CMD" ] || deny
+[ -r "$ALLOW" ] || deny
+
+# Whole-line, fixed-string match: CMD must be byte-identical to a vetted allowlist entry. No word-splitting,
+# globbing, or command substitution is performed on the untrusted CMD before this gate.
+if grep -qxF -- "$CMD" "$ALLOW"; then
+  log "ALLOW: $CMD"
+  # CMD is now provably one of the vetted allowlist lines (grep -x -F), so evaluating it back into argv is safe.
+  eval "exec $CMD"
+fi
+deny

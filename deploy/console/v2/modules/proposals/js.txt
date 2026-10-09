@@ -1,0 +1,286 @@
+/* ============================================================================
+   PROPOSALS module (prop-) — the open-proposal-plane surface (spec/026
+   REQ-2607, epic TG-227/TG-228). Answers "which fixes did the agent name when
+   NO registered op-class existed?" — the shadow proposals: recorded, screened
+   (REQ-2606), ledgered (REQ-2605), and structurally unexecutable (REQ-2608:
+   nil argv, every effect leaf refuses, never-auto floor). These rows are the
+   raw material of the earned catalog (spec/028); this surface renders NO
+   actuation or mutation control of any kind — not even disabled ones, because
+   a control that implies executability on this plane would be a lie.
+   HONESTY CONTRACT: no fixture; guarded liveGet at view render; 503 renders an
+   honest unavailable state; an empty spine an honest empty state (INV-15); the
+   rail badge shows the REAL total only, em-dash until one exists.
+   ============================================================================ */
+
+/* relative time from RFC3339; honest passthrough on unparseable, "never" on empty. */
+function propRel(iso) {
+  if (!iso) return "never";
+  const t = Date.parse(iso);
+  if (isNaN(t)) return String(iso);
+  let s = Math.floor((Date.now() - t) / 1000);
+  if (s < 0) return "just now";
+  if (s < 60) return s + "s ago";
+  const m = Math.floor(s / 60); if (m < 60) return m + "m ago";
+  const hh = Math.floor(m / 60); if (hh < 24) return hh + "h ago";
+  const d = Math.floor(hh / 24); if (d < 30) return d + "d ago";
+  const mo = Math.floor(d / 30); if (mo < 12) return mo + "mo ago";
+  return Math.floor(mo / 12) + "y ago";
+}
+
+function propSec(lbl, title) {
+  return h("div", { class: "sec" },
+    h("span", { class: "lbl", style: "color:var(--map)" }, lbl),
+    h("h3", {}, title),
+    h("span", { class: "rule" }));
+}
+
+/* the REAL total on the rail badge — never a fabricated number; em-dash is the only non-count state. */
+function propBadge(total) {
+  document.querySelectorAll('[data-badge="proposals"]').forEach(el => { el.textContent = String(total); });
+}
+
+/* ---- TG-236: a DECISION surface, not a log -----------------------------------------------------
+   The 9-column chronological table below is correct, live and zero-fabrication — and an operator facing
+   200 rows of it learns nothing they can act on. Three oracles govern what replaces it:
+
+     1 COMPREHENSION      one shape answers what broke, what TG would do, and why it cannot — with no
+                          second surface to open.
+     2 SHAPE OVER TIME    ~200 rows collapse into the recurring shapes underneath them, with counts.
+     4 COUNTERFACTUAL     one number: over the week, how many incidents TG had an answer for.
+
+   Grouping is by (op_class, op) — the SAME identity core/opclasscat keys a candidate on
+   (CandidateKey = op_class + op + sorted param names). Host and rule are deliberately NOT part of it:
+   cross-host recurrence is exactly what "this remedy generalises" means, and keying on rule would
+   fragment one remedy across the four alert families a single fault raises. Grouping the console on a
+   different key than the backend clusters on would show the operator shapes that never become
+   candidates. */
+
+function propShapes(rows) {
+  const byKey = new Map();
+  for (const r of rows) {
+    const key = (r.op_class || "—") + "\u0000" + (r.op || "");
+    let g = byKey.get(key);
+    if (!g) { g = { op_class: r.op_class || "—", op: r.op || "", rows: [], hosts: new Set(), rules: new Set() }; byKey.set(key, g); }
+    g.rows.push(r);
+    if (r.host) g.hosts.add(r.host);
+    if (r.alert_rule) g.rules.add(r.alert_rule);
+  }
+  /* Most-recurring first: the shape worth ratifying is the one that keeps happening, and an operator
+     scanning top-down should meet it before the singletons. Ties break on the newest occurrence. */
+  return [...byKey.values()].sort((a, b) =>
+    b.rows.length - a.rows.length ||
+    String(b.rows[0].created_at || "").localeCompare(String(a.rows[0].created_at || "")));
+}
+
+/* Oracle 4. The denominator counts EVERY triage session in the window, including the ones TG correctly
+   stood down on — a ratio computed over proposals alone would approach 100% and mean nothing. */
+function propHeadline(cf) {
+  if (!cf || typeof cf.incidents !== "number") return null;
+  if (cf.incidents === 0) {
+    return h("div", { class: "prop-headline", "data-q": "headline" },
+      h("b", {}, "No incidents in the last " + cf.window_days + " days."),
+      h("span", { class: "desc" }, " Nothing to have addressed — this is quiet, not broken."));
+  }
+  /* The sentence used to end "…and was not permitted to apply any of them — no registered op-class covers
+     them yet". That was true of the ONE row the old filter matched and false of the 1,748 it hid: most of
+     these have a registered op-class and stopped for a different reason, and several hundred TG was
+     actually allowed to carry out. Blending "did" and "was blocked from" into one figure invites an
+     operator to grant a capability that is partly already granted, so the split is stated. */
+  const exec = typeof cf.executed === "number" ? cf.executed : null;
+  const blocked = exec == null ? null : Math.max(0, cf.addressed - exec);
+  return h("div", { class: "prop-headline", "data-q": "headline" },
+    h("b", {}, "This week TG proposed a remedy for " + cf.addressed + " of " + cf.incidents + " incidents."),
+    h("span", { class: "desc" },
+      exec == null
+        ? " Each was named and recorded. The shapes below group them by the action TG wanted to take."
+        : (exec === 0
+            ? " None of them were carried out — every one stopped at a gate. The shapes below group them by the action TG wanted to take."
+            : " It carried out " + exec + " and was stopped before the other " + blocked + ". "
+              + "The shapes below are the ones it did NOT get to take.")));
+}
+
+/* The shape's real blocker, derived from the rows rather than asserted. Order matters: a shape with NO
+   registered op-class cannot execute whatever its band says, so that answer wins; otherwise the band is
+   the gate it stopped at. Mixed bands within one shape are reported as mixed rather than smoothed to the
+   majority — "some of these are waiting on you and some are not" is the actionable fact. */
+function propWhyBlocked(g) {
+  if (!g.op_class || g.op_class === "—") {
+    return "no registered op-class covers this — nothing unregistered seals an argv, so it cannot execute";
+  }
+  const bands = [...new Set(g.rows.map(r => (r.band || "").toUpperCase()).filter(Boolean))];
+  if (bands.length === 0) return "recorded without a risk band — it stopped before classification";
+  if (bands.length > 1) {
+    return "mixed risk bands (" + bands.join(", ") + ") — some occurrences stopped at different gates";
+  }
+  switch (bands[0]) {
+    case "POLL_PAUSE":
+      return "POLL_PAUSE — this risk band requires a human vote, and none was cast before the window closed";
+    case "AUTO_NOTICE":
+      return "AUTO_NOTICE — cleared to run with notice, but it did not execute; check the mode chokepoint and breakers";
+    case "AUTO":
+      return "AUTO — cleared to run unattended, but it did not execute; check the mode chokepoint and breakers";
+    default:
+      return "risk band " + bands[0] + " — recorded, not carried out";
+  }
+}
+
+/* TG-307 \u2014 the per-occurrence diagnosis SIGNAL for the operator's proposal-review lane. The claim TEXT
+   (root cause, mechanism, the screened evidence quotes) is a detail of the walk and is served only behind
+   the elevated AuthTraceRead gate on /v1/sessions/{ref}/diagnosis; this lane is AuthReadOnly, so the cell
+   shows the SIGNAL and DEEP-LINKS to the #reasoning walk (which enforces that gate on its own fetch) for the
+   evidence itself. `diagnosis_contradicted` is the SERVER's answer \u2014 grounded contradictions only \u2014 never
+   recomputed here from row fields the console does not have.
+   An anchor, never a control: a deep-link to a read surface is navigation, and this plane renders nothing
+   that executes, ratifies or dismisses (spec/026 REQ-2608). */
+function propDiagFlag(r) {
+  const ref = r.external_ref || "";
+  const deep = ref ? ("?session=" + encodeURIComponent(ref) + "#reasoning") : null;
+  if (r.diagnosis_contradicted) {
+    return deep
+      ? h("a", { class: "prop-diag prop-diag-con", href: deep, "data-q": "prop-row-contradicted",
+          title: "the agent cited grounded evidence against its own root cause \u2014 open the walk to read it" },
+          "against root cause \u2192")
+      : h("span", { class: "prop-diag prop-diag-con", "data-q": "prop-row-contradicted" }, "against root cause");
+  }
+  if (r.diagnosis_uncited > 0) {
+    return h("span", { class: "prop-diag prop-diag-unc", "data-q": "prop-row-uncited",
+      title: r.diagnosis_uncited + " assertion" + (r.diagnosis_uncited === 1 ? "" : "s") + " bound to no gathered observation" },
+      r.diagnosis_uncited + " uncited");
+  }
+  if (r.diagnosis_recorded) {
+    return deep
+      ? h("a", { class: "prop-diag prop-diag-ok", href: deep, title: "a typed claim with nothing recorded against its own root cause" }, "grounded")
+      : h("span", { class: "prop-diag prop-diag-ok" }, "grounded");
+  }
+  // No typed claim was recorded (a pre-claim-store session, or a proposal that bound none). Honest silence,
+  // NEVER a fabricated all-clear: an em-dash reads as "nothing recorded", not as "grounded".
+  return h("span", { class: "prop-diag prop-diag-none", title: "no typed claim recorded for this session" }, "\u2014");
+}
+
+/* Oracle 1. Every shape answers the three questions in one place, in that order. */
+function propShapeCard(g, partial) {
+  const newest = g.rows[0], hosts = [...g.hosts], rules = [...g.rules];
+  const n = g.rows.length;
+  // TG-307: the recorded A2 failure, aggregated over the shape. A shape is what an operator weighs before
+  // arguing to ratify it into a verb, and "the agent held evidence against its own root cause here" is the
+  // single most important thing to know before granting that trust. Counted from the SERVER's grounded
+  // signal per row, never recomputed from the claim (which this lane is not served).
+  const contra = g.rows.filter(r => r.diagnosis_contradicted);
+  const kids = [
+    h("div", { class: "prop-shape-h" },
+      h("span", { class: "prop-op" }, g.op_class),
+      // "at least" is carried on the figure itself, not only in the banner above: the count is what an
+      // operator quotes when arguing for a verb, and it travels without its context.
+      h("span", { class: "prop-count" }, (partial ? "\u2265" : "") + n + "\u00d7 across " + hosts.length + " host" + (hosts.length === 1 ? "" : "s")),
+      h("span", { class: "prop-shadow" }, "shadow \u00b7 never executes")),
+  ];
+  if (contra.length) {
+    kids.push(h("div", { class: "prop-contra", "data-q": "prop-contradicted" },
+      h("b", {}, "Evidence against its own root cause"),
+      h("span", {}, " \u2014 the agent cited grounded evidence against its own diagnosis on " +
+        contra.length + " of " + n + " occurrence" + (n === 1 ? "" : "s") + ". Open one below to read it.")));
+  }
+  kids.push(
+    h("div", { class: "prop-q" }, h("span", { class: "prop-qn" }, "What broke"),
+      h("span", {}, rules.join(", ") || "\u2014")),
+    h("div", { class: "prop-q" }, h("span", { class: "prop-qn" }, "What TG would do"),
+      h("span", {}, (g.op || "\u2014") + (newest.undo_sketch ? " \u00b7 undo: " + newest.undo_sketch : ""))),
+    /* "Why it can't" is STRUCTURAL \u2014 a property of the shape, never of the individual incident \u2014 so an
+       operator is not left hunting for a different cause on each row. But it is not ONE sentence: this
+       said "no registered op-class covers this" for every row, which is true only of the shapes that
+       genuinely lack a class (243 of 1,485 in production). For the rest the honest answer is the gate they
+       actually stopped at, and POLL_PAUSE \u2014 1,266 of them \u2014 is a different problem with a different fix:
+       an unregistered class needs ratifying, a paused one needs someone to vote. */
+    h("div", { class: "prop-q" }, h("span", { class: "prop-qn" }, "Why it can't"),
+      h("span", {}, propWhyBlocked(g))),
+    h("div", { class: "prop-shape-f" },
+      h("span", {}, "hosts: " + (hosts.join(", ") || "\u2014")),
+      h("span", {}, "latest " + propRel(newest.created_at)),
+      h("span", { class: "prop-rationale", title: newest.rationale || "" },
+        newest.rationale ? "\u201c" + newest.rationale + "\u201d" : "")));
+  return h("div", { class: "prop-shape", "data-q": "shape" }, ...kids);
+}
+
+function propTable(rows) {
+  const head = h("tr", {},
+    h("th", {}, "when"), h("th", {}, "host"), h("th", {}, "alert rule"),
+    h("th", {}, "proposed fix"), h("th", {}, "rationale"), h("th", {}, "undo sketch"),
+    h("th", {}, "conf"), h("th", {}, "attribution"), h("th", {}, "diagnosis"), h("th", {}, "status"));
+  const body = rows.map(r => h("tr", {},
+    h("td", { title: r.created_at || "" }, propRel(r.created_at)),
+    h("td", {}, h("span", { class: "mono" }, r.host || "—")),
+    h("td", {}, r.alert_rule || "—"),
+    h("td", {}, h("span", { class: "prop-op", title: "free-form op_class (no registry entry) · op: " + (r.op || "—") }, r.op_class || "—")),
+    h("td", {}, h("div", { class: "prop-rationale" }, r.rationale || "—")),
+    h("td", {}, h("div", { class: "prop-undo" }, r.undo_sketch || "—")),
+    h("td", {}, h("span", { class: "mono" }, (typeof r.confidence === "number") ? r.confidence.toFixed(2) : "—")),
+    h("td", {}, h("span", { class: "prop-attr" }, r.attribution || "—")),
+    // TG-307: the diagnosis signal per occurrence — the recorded A2 flag, an uncited count, or honest "—".
+    h("td", {}, propDiagFlag(r)),
+    h("td", {}, h("span", { class: "prop-shadow" }, "shadow · never executes"))));
+  return h("div", { class: "wrapcard" }, h("div", { class: "prop-scroll" },
+    h("table", { class: "tbl" }, h("thead", {}, head), h("tbody", {}, ...body))));
+}
+
+function propView() {
+  const wrap = h("div");
+  if (typeof liveState === "undefined" || !liveState.on) {
+    wrap.append(h("div", { class: "empty", style: "padding:52px 20px" },
+      h("div", { class: "big" }, "Shadow proposals — live only"),
+      h("div", { class: "desc" }, "This surface reads live, screened shadow proposals from the control plane. It has no preview data; sign in to adopt it.")));
+    return wrap;
+  }
+  wrap.append(h("p", { class: "desc prop-intro" },
+    "The open proposal plane: fixes the agent named when NO registered op-class addressed the confirmed fault. Every row is recorded, screened, and ledgered — and ",
+    h("b", {}, "structurally unexecutable"),
+    " (nothing unregistered seals; every effect leaf refuses; never-auto floor). These rows seed the earned catalog's candidate dossiers (spec/028). This surface has no control that executes, ratifies, or dismisses anything."));
+  const slot = h("div", {}, h("div", { class: "empty", style: "padding:28px" }, h("div", { class: "desc" }, "Loading live shadow proposals…")));
+  wrap.append(propSec("LIVE · spec/026", "Shadow proposals — named, recorded, never executed"), slot);
+  (async () => {
+    let page;
+    try { page = await liveGet("/v1/proposals?limit=100"); }
+    catch (e) {
+      slot.replaceChildren(h("div", { class: "empty", style: "padding:34px 20px" },
+        h("div", { class: "big" }, "Proposals surface unavailable"),
+        h("div", { class: "desc" }, "The read spine answered fail-closed (503) or is not wired. Nothing is shown rather than something invented (INV-15).")));
+      return;
+    }
+    const rows = (page && page.proposals) || [];
+    propBadge((page && typeof page.total === "number") ? page.total : rows.length);
+    if (!rows.length) {
+      slot.replaceChildren(h("div", { class: "empty", style: "padding:34px 20px" },
+        h("div", { class: "big" }, "No shadow proposals recorded"),
+        h("div", { class: "desc" }, "Every fault so far was addressed by a registered op-class, or stopped with cause. An empty plane is a real state, not an error.")));
+      return;
+    }
+    /* SHAPES FIRST, the log second. The chronological table is retained deliberately — it is the
+       evidence behind the shapes, and removing it would make the summary unauditable. But it is no
+       longer what an operator meets first. */
+    /* ★ COMPLETENESS CLAIMED OVER A BOUNDED PAGE. This fetches limit=100 and then labelled the log "Every
+       occurrence" and each shape "N× across M hosts" — both computed from at most 100 rows. Recurrence IS
+       the decision this surface exists to support ("has this happened enough to earn a verb?"), so an
+       undercount here is not cosmetic: past 100 stored proposals, "seen 6×" may really be "seen 47×", and
+       nothing on screen said the number was a floor. The handler already returns the honest store total —
+       it was fetched, rendered into the badge, and then not consulted by the two figures that needed it. */
+    const total = (page && typeof page.total === "number") ? page.total : rows.length;
+    const partial = total > rows.length;
+    const shapes = propShapes(rows);
+    const kids = [];
+    const head = propHeadline(page && page.counterfactual);
+    if (head) kids.push(head);
+    if (partial) {
+      kids.push(h("div", { class: "prop-partial", "data-q": "partial" },
+        h("b", {}, "Counts below are a floor, not a total."),
+        h("span", {}, " This page holds the newest " + rows.length + " of " + total +
+          " recorded proposals, so each shape has occurred AT LEAST as often as shown.")));
+    }
+    kids.push(h("div", { class: "prop-shape-list" }, ...shapes.map(g => propShapeCard(g, partial))));
+    kids.push(h("details", { class: "prop-log" },
+      h("summary", {}, partial
+        ? ("Newest " + rows.length + " of " + total + " occurrences")
+        : ("Every occurrence, newest first (" + rows.length + " row" + (rows.length === 1 ? "" : "s") + ")")),
+      propTable(rows)));
+    slot.replaceChildren(...kids);
+  })();
+  return wrap;
+}

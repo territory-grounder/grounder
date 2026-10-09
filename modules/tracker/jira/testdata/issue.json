@@ -1,0 +1,23 @@
+{
+  "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+  "id": "10042",
+  "self": "https://your-domain.atlassian.net/rest/api/2/issue/10042",
+  "key": "PROJ-123",
+  "fields": {
+    "summary": "Login returns 500 on SSO callback",
+    "status": {
+      "self": "https://your-domain.atlassian.net/rest/api/2/status/3",
+      "description": "This issue is being actively worked on at the moment by the assignee.",
+      "iconUrl": "https://your-domain.atlassian.net/images/icons/statuses/inprogress.png",
+      "name": "In Progress",
+      "id": "3",
+      "statusCategory": {
+        "self": "https://your-domain.atlassian.net/rest/api/2/statuscategory/4",
+        "id": 4,
+        "key": "indeterminate",
+        "colorName": "yellow",
+        "name": "In Progress"
+      }
+    }
+  }
+}

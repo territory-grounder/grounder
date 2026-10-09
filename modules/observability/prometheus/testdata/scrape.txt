@@ -1,0 +1,6 @@
+tg_connector_up_stale{connector="netbox",series="tg_connector_up"} 0
+tg_connector_up_stale{connector="snmp",series="tg_connector_up"} 1
+tg_connector_up{connector="netbox"} 1
+tg_connector_up{connector="snmp"} 1
+tg_control_plane_up_stale{component="grounder",series="tg_control_plane_up"} 0
+tg_control_plane_up{component="grounder"} 1

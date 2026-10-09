@@ -1,0 +1,13 @@
+views.wiki = wkView;
+VIEW_META.wiki = ["Wiki", "the living wiki — lessons the verifier confirmed, runbooks embedded in the binary, the skill library by reference (REQ-521)"];
+FACETS.wiki = [["lessons", "Lessons"], ["articles", "Articles"], ["runbooks", "Runbooks"], ["skills", "Skills"]];
+facetState.wiki = facetState.wiki || "runbooks";  // land on populated runbooks, not the honestly-empty lessons tab
+wkBadge();
+/* eager live load: wrap session adoption so the wiki + badge go live the moment a session lands */
+const wkPrevLiveAdopt = liveAdopt;
+/* ★ FORWARD THE ARGUMENT. liveAdopt(refresh) exists so a 25s POLL cannot evict a working session on
+   one transient error — that guard is the whole reason the parameter is there. Both module wrappers
+   reassigned the global with a ZERO-ARG function, so liveRefresh()'s liveAdopt(true) arrived at the
+   real implementation as liveAdopt(undefined) and every poll tick took the FIRST-LOAD path. The guard
+   was written, shipped, and unreachable — two wrappers away from the code that needed it. */
+liveAdopt = async function(refresh){ const r = await wkPrevLiveAdopt(refresh); if (liveState.on) wkLoadIndex(); return r; };

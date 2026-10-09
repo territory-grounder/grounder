@@ -1,0 +1,158 @@
+{
+  "spec": "022-credential-delivery",
+  "tasks": [
+    {
+      "id": "T-022-1",
+      "title": "Deliver high-value secrets as bao: SecretRefs (env->OpenBao KV), fail-closed",
+      "files_owned": [
+        "core/credential/delivery.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-2200",
+        "REQ-2204"
+      ],
+      "acceptance": {
+        "feature": "credential-delivery.feature",
+        "scenarios": [
+          "High-value secrets are delivered as SecretRefs, never as plaintext environment values",
+          "An unresolvable credential refuses the operation with no plaintext fallback"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed",
+      "status_evidence": "VERIFIED LIVE 2026-07-27: 17 bao: SecretRefs present in the deployed .env, so high-value secrets are delivered as references rather than literals."
+    },
+    {
+      "id": "T-022-2",
+      "title": "Master key via an external key service (OpenBao Transit) - the worker never holds it",
+      "files_owned": [
+        "core/seal/master.go",
+        "core/seal/transit.go"
+      ],
+      "deps": [
+        "T-022-1"
+      ],
+      "req_ids": [
+        "REQ-2201"
+      ],
+      "acceptance": {
+        "feature": "credential-delivery.feature",
+        "scenarios": [
+          "The master key never resides in the worker and seal/unseal calls the external key service"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 450,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed",
+      "status_evidence": "Verified 2026-08-23 against the tree: core/seal/transit.go wraps the DEK through OpenBao Transit (/v1/transit/encrypt|decrypt/<key>), so the master-key operation runs INSIDE the substrate and the key never exists in this process; core/seal/fromenv.go selects Transit FIRST when configured. Oracles green this run: TestSealerTransitRoundTrip (real endpoint paths asserted, and a DEK the substrate refuses fails closed to ErrOpenFailed), TestNewTransitWrapperFailClosed (every missing-config direction), and TestTransitWinsOverALocalMasterKeyWhenBothAreConfigured — whose header documents the executed killing mutation (check the local key first ⇒ RED, the weaker posture wins). The pending status was stale bookkeeping, not missing work."
+    },
+    {
+      "id": "T-022-3",
+      "title": "Just-in-time actuation SSH identity + bounded-lifetime lease (SSH-CA / OTP)",
+      "files_owned": [
+        "modules/actuation/ssh/jit.go"
+      ],
+      "deps": [
+        "T-022-1"
+      ],
+      "req_ids": [
+        "REQ-2202",
+        "REQ-2207"
+      ],
+      "acceptance": {
+        "feature": "credential-delivery.feature",
+        "scenarios": [
+          "The actuation SSH identity is resolved just-in-time and not persisted between actuations",
+          "A leased actuation credential expires after its bounded lifetime"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "pending",
+      "status_evidence": "LIVE-ATTENDED, not unbuilt: the JIT actuation identity needs an SSH-CA roll across ~26 estate hosts (TG-423 on the board's live-attended list). The code-side seam it plugs into exists — the credential engine resolves the actuation identity per target through core/credential (spec/016), and the 4d2 authn-compose gate (T-016-5, 2026-08-23) is where a leased identity would be consumed. What remains is the estate roll and its bounded-lifetime lease policy, which is an attended live change."
+    },
+    {
+      "id": "T-022-4",
+      "title": "Split the read-only triage plane from the actuation-credential plane (disjoint OpenBao roles)",
+      "files_owned": [
+        "core/credential/plane_split.go"
+      ],
+      "deps": [
+        "T-022-1"
+      ],
+      "req_ids": [
+        "REQ-2203"
+      ],
+      "acceptance": {
+        "feature": "credential-delivery.feature",
+        "scenarios": [
+          "The read-only triage plane cannot resolve an actuation credential"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "completed",
+      "status_evidence": "TG-153, 2026-08-04. SUBSTRATE (done by hand, verified live): OpenBao policies tg-triage-ro (read secret/data/tg/*, DENY tg/actuator + tg/proxmox) and tg-actuate-ro (read ONLY tg/actuator + tg/proxmox), bound to AppRoles tg-triage / tg-actuate. Measured: triage token -> tg/actuator 403, hostdiag 200; actuate token -> tg/actuator 200, hostdiag 403. PROCESS: TG_CREDENTIAL_PLANE = triage|actuation|both (default both = the pre-TG-153 posture, byte-identical, so no existing deployment changes on upgrade). core/credential/plane_split.go gains ProcessPlane + PlaneSet.ValidateFor, which refuses a triage process holding ANY actuation reference and vice versa; cmd/worker/credential_plane.go withholds off-plane configuration at ACQUISITION so the credential is never resolved and never resident; temporal/runner routes the estate-mutating activity onto the tg.actuate queue that only the actuation worker polls; deploy/docker-compose.yml adds the opt-in worker-actuate service (split-planes profile). Oracles with executed killing mutations: TestTriagePlaneCannotReachAnyActuationCredential, TestActuationPlaneCannotReachAnyUntrustedContentSource, TestTriagePlaneRefusesAnyActuationRef, TestActuationActivityIsScheduledOnTheActuationQueue, plus the no-regression pair TestBothPlaneIsByteIdenticalToTheHistoricCheck / TestBothPlaneIsIdenticalToPreSplitBehaviour. NOT closed by this task: T-022-3 (just-in-time SSH identity) is still pending — the actuation worker holds a long-lived key, it just holds it alone. docs/THREAT-MODEL.md §5.1 states the resulting blast-radius bound and its residuals."
+    },
+    {
+      "id": "T-022-5",
+      "title": "Redact secret material on every substrate resolver error/output path",
+      "files_owned": [
+        "core/config/config.go"
+      ],
+      "deps": [
+        "T-022-1"
+      ],
+      "req_ids": [
+        "REQ-2205"
+      ],
+      "acceptance": {
+        "feature": "credential-delivery.feature",
+        "scenarios": [
+          "A resolved secret value never reaches a log, export, or error output"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 250,
+        "max_wall_clock_minutes": 75
+      },
+      "status": "completed",
+      "status_evidence": "Completed 2026-08-23: SecretRef.Resolve already named only scheme/shape (verified); the remaining echo sites are now redacted — core/config gains RedactedRef (scheme + payload length, never the payload) and LoggableRef (verbatim only for a genuine reference scheme), applied at vault/ansible/oidctoken malformed-ref refusals and the three plane-split validation errors. Guard oracles in all five packages assert the canary NEVER appears in any refusal (killing check executed: restoring the raw %q echo at the vault arm reds the oracle). vaultErrs/oauthErr already extract secret-free server messages."
+    },
+    {
+      "id": "T-022-6",
+      "title": "cosign image-signing key stored in OpenBao; sign-on-build + verify-before-deploy",
+      "files_owned": [
+        "spec/022-credential-delivery/requirements.md"
+      ],
+      "deps": [
+        "T-022-1"
+      ],
+      "req_ids": [
+        "REQ-2206"
+      ],
+      "acceptance": {
+        "feature": "credential-delivery.feature",
+        "scenarios": [
+          "The image-signing key is resolved from the substrate, not a plaintext CI variable"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 90
+      },
+      "status": "pending",
+      "status_evidence": "SUPERSEDED, not merely unbuilt (verified 2026-08-23 against .gitlab-ci.yml:996-998): the cosign sign+verify supply-chain gate was REMOVED by owner decision (TG-417) because the registry did not durably retain the signatures — they were signed and dropped within hours, so cosign-verify reddened every main pipeline and BLOCKED EVERY DEPLOY. Storing the signing key in OpenBao would restore a chain the project deliberately retired; the provenance need it served is now carried by the SBOM job (.gitlab-ci.yml:350) plus the deployed-SHA witness. Re-opening this task means re-deciding the gate first, which is an owner call, not build work."
+    }
+  ]
+}

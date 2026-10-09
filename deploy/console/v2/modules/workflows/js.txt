@@ -1,0 +1,422 @@
+/* ★ #workflows HAD ZERO FOCUSABLE ELEMENTS. Measured live at 1440x900 in both themes: `#view a[href],
+   button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])` inside #workflows
+   returned 0 — and so did [role], [tabindex], button and a[href]. Every one of the 50 run rows, the 10 stage
+   headers and the ReAct kid rows was a bare <div> with an onclick. A keyboard or screen-reader operator could
+   reach the view and then do NOTHING in it: no run selectable, no stage expandable. WCAG 2.1.1 is Level A.
+   wfKeyActivate is shared so the next clickable div added here cannot quietly be mouse-only. */
+const wfKeyActivate = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); } };
+
+/* wfListKey is the role=listbox keyboard contract for the governed-run list. Enter/Space activate (unchanged
+   from wfKeyActivate, which the other clickable divs still share); ArrowUp/ArrowDown move by one, Home/End to
+   the ends. Movement SELECTS as it goes, which is the single-select listbox convention and is what makes the
+   detail pane follow the arrows — the whole point of the widget.
+   It reads the options from the DOM rather than from wfVisibleRuns() so it can never disagree with what is
+   actually on screen after a facet filter. */
+function wfListKey(e, list, main){
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); return; }
+  const keys = ['ArrowDown','ArrowUp','Home','End'];
+  if (!keys.includes(e.key)) return;
+  const opts = Array.from((list || document).querySelectorAll('[role=option]'));
+  if (!opts.length) return;
+  const cur = opts.indexOf(e.currentTarget);
+  let next = cur;
+  if (e.key === 'ArrowDown') next = Math.min(opts.length - 1, cur + 1);
+  else if (e.key === 'ArrowUp') next = Math.max(0, cur - 1);
+  else if (e.key === 'Home') next = 0;
+  else if (e.key === 'End') next = opts.length - 1;
+  if (next === cur) { e.preventDefault(); return; }
+  e.preventDefault();
+  const key = opts[next].getAttribute('data-wf-key') || '';
+  const id = key.replace(/^run:/, '');
+  if (id) wfSelect(id, list, main);
+  // Re-resolve the node AFTER the re-render selection triggers: the original element is detached by then, so
+  // focusing it would silently drop focus to <body> — the defect this file already fixed once.
+  const again = (list || document).querySelector('[data-wf-key="' + (window.CSS && CSS.escape ? CSS.escape(key) : key) + '"]');
+  (again || opts[next]).focus();
+}
+/* ★ AND THEN THE LIVE POLL THREW THAT KEYBOARD OPERATOR OFF THE PAGE. Arming the view was only half the job.
+   Both panes re-render by replaceChildren(), which DETACHES the focused node — so measured live: 15 of 15
+   stage toggles moved focus to <body> on activation, every run activation did the same, and worst of all it
+   happened with NO USER INPUT AT ALL, because the 1s liveness tick and the SSE-driven refresh re-render on
+   their own. A screen-reader operator who tabbed 34 times to reach a run lost the reading cursor to the top
+   of the document within 20 seconds of arriving, forever, with nothing they did causing it.
+
+   A focus-destroying re-render is not a smaller bug than an unfocusable div: it is the same bug arriving on a
+   timer. So the identity that survives a re-render is explicit — every focusable node in this view carries a
+   stable data-wf-key — and both render entry points go through this wrapper. If the keyed node is gone
+   (facet changed, run vanished) focus lands on the pane itself, which is a place; it never lands on <body>,
+   which is not. */
+function wfKeyed(el, key, attrs){ return Object.assign(attrs || {}, {'data-wf-key': key}); }
+function wfPreserveFocus(container, render){
+  const a = document.activeElement;
+  const key = (container && a && a !== document.body && container.contains(a)) ? a.getAttribute('data-wf-key') : null;
+  const scrolled = key ? null : undefined;
+  render();
+  if(key === null) return;
+  let want = container.querySelector('[data-wf-key="' + (window.CSS && CSS.escape ? CSS.escape(key) : key) + '"]');
+  if(!want) want = container.querySelector('[tabindex="0"],[role=option],[role=button]');
+  if(want && typeof want.focus === 'function'){ want.focus({preventScroll:true}); return; }
+  // last resort: the pane itself is a place to stand. Never <body>.
+  if(!container.hasAttribute('tabindex')) container.setAttribute('tabindex','-1');
+  container.focus({preventScroll:true});
+}
+/* ===================== WORKFLOWS module (wf*) ===================== */
+let wfSelId = null;
+let wfOpenSet = {};     // "runId:i" / "runId:i:k<ki>" -> bool (explicit user toggles)
+let wfTimer = null;     // 1s liveness interval (self-clears when view leaves DOM)
+let wfTickN = 0;
+let wfPoolI = 0;
+
+/* ---- live-source seam (T-020-12) ----
+   The beautiful render below is data-source-agnostic. When the live wiring (modules/_live) has adopted real
+   /v1/sessions rows it sets wfRunsSrc to that array (same run/node shape as WF_RUNS) and the whole inspector
+   renders REAL governed walks. Absent that, the representative WF_RUNS fixtures render (labeled design-preview).
+   wfOnSelect, when defined by the live wiring, lazy-loads the selected run's per-step walk from the detail
+   endpoint. This keeps ONE render — the fixture is never a separate, lesser page. */
+let wfRunsSrc = null;
+function wfAllRuns(){ return wfRunsSrc || WF_RUNS; }
+function wfIsLive(){ return !!wfRunsSrc; }
+/* A disclosure that flips aria-expanded on a node the reader has just been thrown off announces nothing.
+   Even with focus preserved, the CONSEQUENCE of these two actions lives in a different pane, so it is said. */
+function wfAnnounceToggle(label, nowOpen){
+  if(typeof announce === 'function') announce(String(label || 'section') + (nowOpen ? ' expanded' : ' collapsed'));
+}
+function wfSelect(id, list, main){
+  const changed = wfSelId !== id;
+  wfSelId = id;
+  if(wfIsLive() && typeof wfOnSelect === 'function') wfOnSelect(id); // async: fetch+map the walk, then re-render
+  if(list) wfRenderList(list, main);
+  if(main) wfRenderMain(main);
+  if(changed){
+    const r = wfAllRuns().find(x => x.id === id);
+    if(r && typeof announce === 'function')
+      announce('Run ' + r.ref + ' selected — ' + r.title + ' on ' + r.host + ', ' +
+               (bandName[r.band] || r.band) + ', ' + (r.nodes ? r.nodes.length : 0) + ' stages shown.');
+  }
+}
+
+const wfBandTok = { auto:'--auto', notice:'--notice', pause:'--pause' };
+const wfBandGlyph = { auto:'▣', notice:'◈', pause:'‖' };
+
+function wfDurF(ms){
+  if(ms == null) return '—';
+  if(ms < 1000) return ms + 'ms';
+  if(ms < 60000) return (ms/1000).toFixed(1) + 's';
+  return Math.floor(ms/60000) + 'm ' + String(Math.round(ms%60000/1000)).padStart(2,'0') + 's';
+}
+function wfElapsedF(sec){
+  if(sec < 60) return sec + 's';
+  if(sec < 3600) return Math.floor(sec/60) + 'm ' + String(sec%60).padStart(2,'0') + 's';
+  return Math.floor(sec/3600) + 'h ' + String(Math.floor(sec%3600/60)).padStart(2,'0') + 'm';
+}
+/* A live run's elapsed is DERIVED from its real start instant, never counted up in the browser — a
+   client-side counter is a simulation of a fact the spine already owns, and it drifts. Fixture runs keep
+   their simulated counter; a run with neither answers "—" rather than "0s", because "we do not know how
+   long" and "it just started" are different things to tell someone deciding whether to intervene. */
+function wfElapsedText(r){
+  if(!r) return '—';
+  if(r.startedMs) return wfElapsedF(Math.max(0, Math.round((Date.now() - r.startedMs)/1000)));
+  return (r.elapsed == null) ? '—' : wfElapsedF(r.elapsed);
+}
+/* Header metrics that may be genuinely unknown. `—` is the only honest render of a value the DTO did not
+   carry; printing 0.00 would be indistinguishable from a measured zero. */
+function wfNum(v, dp){ return (v == null || isNaN(Number(v))) ? '—' : Number(v).toFixed(dp); }
+function wfIcon(t){
+  return ({
+    ingest:'<path d="M8 2v7"/><path d="M5 6.5 8 9.5l3-3"/><path d="M2.5 12.5V14h11v-1.5"/>',
+    correlate:'<circle cx="4" cy="4" r="1.7"/><circle cx="12" cy="5.5" r="1.7"/><circle cx="7" cy="12" r="1.7"/><path d="M5.6 4.4l4.7 1M11.2 7l-3.2 3.7M4.6 5.7l1.9 4.7"/>',
+    rag:'<ellipse cx="8" cy="3.5" rx="5" ry="1.8"/><path d="M3 3.5v9c0 1 2.2 1.8 5 1.8s5-.8 5-1.8v-9"/><path d="M3 8c0 1 2.2 1.8 5 1.8S13 9 13 8"/>',
+    classify:'<path d="M2.5 8 8 2.5h5.5V8L8 13.5z"/><circle cx="10.8" cy="5.2" r="1.1"/>',
+    commit:'<path d="M6 2.5 4.5 13.5M11.5 2.5 10 13.5M3 6h10.5M2.5 10H13"/>',
+    agent:'<path d="M13.5 8A5.5 5.5 0 1 1 11.6 3.9"/><path d="M11.5 1.5v2.6h2.6"/>',
+    screen:'<path d="M8 1.5l5.5 2v4.2c0 3.2-2.4 5.6-5.5 6.8-3.1-1.2-5.5-3.6-5.5-6.8V3.5z"/><path d="M5.5 8l1.8 1.8L11 6"/>',
+    gate:'<path d="M3 14V5.5M13 14V5.5M3 5.5 8 2l5 3.5"/><path d="M3 9h10M6 14v-3M10 14v-3"/>',
+    execute:'<path d="M5 3l8.5 5L5 13z"/>',
+    verify:'<path d="M2.5 8.5 6.5 12.5 13.5 4.5"/>'
+  })[t] || '<circle cx="8" cy="8" r="5"/>';
+}
+function wfIcEl(t){
+  return h('span',{class:'wf-ic', html:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">' + wfIcon(t) + '</svg>'});
+}
+function wfBandChip(b){
+  return h('span',{class:'wf-chip', style:'color:var(' + wfBandTok[b] + ')'}, h('span',{class:'g'}, wfBandGlyph[b]), bandName[b]);
+}
+function wfVerdictChip(v){
+  const m = {match:['MATCH','--match','✓'], partial:['PARTIAL','--partial','◐'], deviation:['DEVIATION','--deviation','✕']}[v];
+  return h('span',{class:'wf-chip', style:'color:var(' + m[1] + ')'}, h('span',{class:'g'}, m[2]), m[0]);
+}
+function wfGateChip(g){
+  return g === 'pass'
+    ? h('span',{class:'wf-chip', style:'color:var(--match)'}, h('span',{class:'g'},'✓'), 'PASS')
+    : h('span',{class:'wf-chip wf-mut'}, h('span',{class:'g'},'◆'), 'FLOORED');
+}
+/* The armed-revert chip (spec/029 T-029-5, REQ-2906): the commit_confirm window's durable state,
+   rendered only when the walk carries one — the dead-man's switch made visible. Glyph/color per
+   state family: armed counts down, confirmed is the clean end, a fired/failed revert is loud. */
+function wfCommitConfirmChip(cc){
+  if(!cc || !cc.state) return null;
+  const m = {
+    armed:               ['ARMED',        '--pause',     '◔'],
+    confirmed:           ['CONFIRMED',    '--match',     '✓'],
+    aborted:             ['ABORTED',      '--ink3',      '∅'],
+    elapsed_unconfirmed: ['ELAPSED',      '--partial',   '◐'],
+    held_unverifiable:   ['HELD',         '--hazard',    '‖'],
+    reverted:            ['REVERTED',     '--deviation', '↩'],
+    revert_failed:       ['REVERT FAILED','--deviation', '✕'],
+  }[cc.state] || [String(cc.state).toUpperCase(), '--ink4', '?'];
+  const tip = 'commit-confirmed window'
+    + (cc.op_class ? ' · ' + cc.op_class : '')
+    + (cc.deadline_at ? ' · deadline ' + cc.deadline_at : '')
+    + (cc.detail ? '\n' + cc.detail : '')
+    + (cc.inverse_action_id ? '\ninverse: ' + cc.inverse_action_id : '');
+  return h('span',{class:'wf-chip', style:'color:var(' + m[1] + ')', title: tip}, h('span',{class:'g'}, m[2]), m[0]);
+}
+function wfRunChip(r){
+  if(r.verdict) return wfVerdictChip(r.verdict);
+  const m = { running:['RUNNING','--map','▶'], waiting:['AWAITING APPROVAL','--pause','‖'],
+              floored:['FLOORED','--hazard','◆'], failed:['FAILED','--deviation','✕'],
+              done:['DONE','--ink3','✓'] }[r.status] || ['—','--ink4',''];
+  const cls = 'wf-chip' + (r.status === 'floored' ? ' wf-mut' : '');
+  return h('span',{class:cls, style: r.status === 'floored' ? null : 'color:var(' + m[1] + ')'}, h('span',{class:'g'}, m[2]), m[0]);
+}
+function wfFacet(){
+  return (typeof facetState !== 'undefined' && facetState.workflows) || 'all';
+}
+function wfFacetPass(r, k){
+  if(k === 'live') return r.live;
+  if(k === 'gated') return r.status === 'floored' || r.status === 'waiting';
+  if(k === 'verified') return !!r.verdict;
+  return true;
+}
+function wfVisibleRuns(){ return wfAllRuns().filter(r => wfFacetPass(r, wfFacet())); }
+
+/* ---------------- view root ---------------- */
+function wfView(){
+  if(wfTimer){ clearInterval(wfTimer); wfTimer = null; }
+  const vis = wfVisibleRuns();
+  if(!vis.some(r => r.id === wfSelId)) wfSelId = vis[0] ? vis[0].id : null;
+  const root = h('div', {class:'wf-wrap' + (reduceMotion ? '' : ' wf-anim')});
+  const list = h('div', {class:'wf-list', role:'listbox', 'aria-label':'Governed runs'});
+  const main = h('div', {class:'wf-main'});
+  root.append(list, main);
+  wfRenderList(list, main);
+  wfRenderMain(main);
+  wfStartClock(root, main);
+  return root;
+}
+
+/* ---------------- left pane ---------------- */
+function wfRenderList(list, main){
+  return wfPreserveFocus(list, () => wfRenderListInner(list, main));
+}
+function wfRenderListInner(list, main){
+  list.replaceChildren();
+  const runs = wfVisibleRuns();
+  list.append(h('div',{class:'wf-lhead'},
+    'Runs · ' + runs.length + '/' + wfAllRuns().length,
+    wfIsLive()
+      ? h('span',{class:'wf-fix', style:'color:var(--match)', title:'Live — assembled from the governance spine (/v1/sessions)'}, 'live')
+      // On a live shell a fixture fallback is named by the GLOBAL fixture banner (fixtureNote), so the
+      // inline chip renders only on the unauthenticated design preview — one label, one place.
+      : ((typeof liveState!=="undefined" && liveState && liveState.on)
+        ? null
+        : h('span',{class:'wf-fix', title:'Design preview — representative fixtures, not live telemetry'}, 'fixture data'))));
+  runs.forEach(r => {
+    list.append(h('div',{class:'wf-run' + (r.id === wfSelId ? ' sel' : ''),
+        // ★ THE COMPOSITE-WIDGET CONTRACT, not just the role. This declared role=listbox with 50 role=option
+        // children and implemented NONE of the keyboard behaviour the role promises: no ArrowUp/ArrowDown, no
+        // Home/End. A screen reader announced "listbox, 50 items" and the arrow keys did nothing, which is a
+        // worse position than an unlabelled list — the operator is told a navigation model that does not exist.
+        //
+        // tabindex is now ROVING: exactly one option is tabbable (the selected one), so the list is ONE tab
+        // stop instead of 50 and arrows move within it. 50 tab stops between the filter chips and the detail
+        // pane is the reason a keyboard operator could not reach the tracer without ~50 keypresses.
+        role:'option', tabindex: (r.id === wfSelId ? '0' : '-1'),
+        'aria-selected': String(r.id === wfSelId), 'data-wf-key': 'run:' + r.id,
+        onclick: () => wfSelect(r.id, list, main), onkeydown: e => wfListKey(e, list, main)},
+      h('span',{class:'wf-stripe', style:'background:var(' + wfBandTok[r.band] + ')'}),
+      h('div',{class:'wf-rmid'},
+        h('div',{class:'wf-rt'}, h('span',{class:'wf-ref'}, r.ref), h('span',{class:'wf-rtitle'}, r.title)),
+        h('div',{class:'wf-rb'}, h('span',{class:'wf-host'}, r.host), wfRunChip(r))),
+      h('div',{class:'wf-rright'},
+        h('span', Object.assign({class:'wf-el'}, r.live ? {'data-wf-clock': r.id} : {}), wfElapsedF(r.elapsed)),
+        h('span',{class:'wf-bandsm', style:'color:var(' + wfBandTok[r.band] + ')'}, bandName[r.band]))));
+  });
+  if(!runs.length) list.append(h('div',{class:'wf-empty'}, 'No runs match this facet.'));
+}
+
+/* ---------------- right pane ---------------- */
+function wfRenderMain(main){
+  if(!main) return; // a detached/rapidly-replaced node's onclick can pass a null container — no-op, never throw
+  return wfPreserveFocus(main, () => wfRenderMainInner(main));
+}
+function wfRenderMainInner(main){
+  const st = main.scrollTop;
+  main.replaceChildren();
+  const r = wfAllRuns().find(x => x.id === wfSelId);
+  if(!r){ main.append(h('div',{class:'wf-empty'}, 'Select a run.')); return; }
+  main.append(wfHead(r));
+  // Live runs lazy-load their walk from /v1/sessions/{ref}; reflect that honestly instead of an empty timeline.
+  if(r._err !== undefined && r._err !== null){
+    // NAME THE CAUSE, THEN THE ACTION THAT WORKS. This read used to answer every failure with "The trace
+    // endpoint is unavailable (403) — retry.", which was wrong twice over: the endpoint was fine (the session
+    // simply lacked the elevated trace-read role), and retrying is precisely the thing that cannot help — the
+    // pre-!683 client took that instruction literally and issued 28,094 rejected requests at ~75/s. An
+    // operator followed the same advice by hand and lost time to it.
+    //
+    // 403 on this GET means one thing on this surface: the session does not carry trace-read. Signing in
+    // again re-derives it from the directory, which is the fix when a control-plane restart dropped the grant
+    // (see REQ-527) and a truthful statement of what is missing when the account never had it.
+    main.append(h('div',{class:'wf-empty'},
+      r._err === 403 ? 'This session does not carry the trace-read role. Sign in again to refresh it.'
+      : r._err === 404 ? 'That session was not found (unknown or unauthorized reference).'
+      : 'The trace endpoint answered ' + r._err + '. Retry, or check the control plane if it persists.'));
+  } else if(r._loading){
+    main.append(h('div',{class:'wf-empty'}, 'Loading the governed walk…'));
+  } else if(wfIsLive() && (!r.nodes || !r.nodes.length)){
+    main.append(h('div',{class:'wf-empty'}, 'This session recorded no decision boundaries yet.'));
+  } else {
+    main.append(wfTimeline(r));
+  }
+  main.scrollTop = st;
+}
+function wfMet(k, ...vals){ return h('div',{class:'wf-met'}, k ? h('span',{class:'wf-mk'}, k) : null, ...vals); }
+function wfMeter(v,kind){ const c = kind==='risk' ? (v<0.33?'var(--match)':v<0.66?'var(--partial)':'var(--deviation)') : 'var(--map)';
+  return h('span',{class:'wf-meter'}, h('span',{class:'wf-meterf', style:'width:' + pct(v) + '%;background:' + c})); }
+function wfHead(r){
+  return h('div',{class:'wf-head'},
+    h('div',{class:'wf-h1'},
+      wfBandChip(r.band),
+      h('span',{class:'wf-htitle'}, r.title),
+      h('span',{class:'wf-ref'}, r.ref + ' · ' + r.host),
+      h('span',{class:'wf-hclock'},
+        wfCommitConfirmChip(r.commit_confirm),
+        wfRunChip(r),
+        h('span',{class:'wf-mk'}, 'elapsed'),
+        h('span', Object.assign({class:'wf-el'}, r.live ? {'data-wf-clock': r.id} : {}), wfElapsedText(r)))),
+    h('div',{class:'wf-h2'},
+      wfMet('exec', h('span',{class:'wf-mv'}, r.exec_class)),
+      /* THREE states, not two. An unknown reversibility must never render as 'yes': that is the reading an
+         operator acts on, and it is the one the old `!==undefined ? … : true` default guaranteed. */
+      wfMet('reversible', r.reversible == null
+        ? h('span',{class:'wf-mv wf-unk', title:'the session record does not carry reversibility — not a claim that it is safe to undo'}, 'unknown')
+        : h('span',{class:'wf-mv' + (r.reversible ? '' : ' bad')}, r.reversible ? 'yes' : 'NO')),
+      /* The meter is a picture of a measurement; with no measurement there is nothing to draw, so the bar
+         is omitted rather than drawn at a default position. */
+      wfMet('risk', r.risk == null ? null : wfMeter(r.risk,'risk'), h('span',{class:'wf-mv' + (r.risk == null ? ' wf-unk' : '')}, wfNum(r.risk, 2))),
+      wfMet('conf', r.conf == null ? null : wfMeter(r.conf), h('span',{class:'wf-mv' + (r.conf == null ? ' wf-unk' : '')}, wfNum(r.conf, 2))),
+      wfMet('blast', h('span',{class:'wf-mv' + (r.blast == null ? ' wf-unk' : '')},
+        r.blast == null ? '—' : (r.blast + (r.blast === 1 ? ' host' : ' hosts')))),
+      wfMet('action', h('span',{class:'wf-hash'}, r.action)),
+      wfMet('', h('span',{class:'wf-chip wf-mut', title:'Actuation posture — while the mode withholds it, all actuation renders as dry-run / read-only preview'},
+        h('span',{class:'g'},'◆'), postureClaim().label))));
+}
+function wfTimeline(r){
+  const maxDur = Math.max(1, ...r.nodes.map(n => n.dur || 0));
+  return h('div',{class:'wf-tl'}, r.nodes.map((n, i) => wfNodeEl(r, n, i, maxDur)));
+}
+function wfPayEl(n){
+  if(!n.pay && !n.plan) return null;
+  const cls = 'wf-pay p-' + (n.src === 'haz' ? 'haz' : n.src === 'map' ? 'map' : 'terr');
+  const kids = [];
+  if(n.pay) kids.push(n.pay);
+  if(n.plan) kids.push(...n.plan.map(p =>
+    h('span',{class:'op op-' + p.op}, ({add:'+ ', change:'~ ', destroy:'− '})[p.op] + p.t)));
+  return h('div',{class:cls}, ...kids);
+}
+function wfCmpEl(n){
+  if(!n.cmp) return null;
+  return h('div',{class:'wf-cmp'},
+    h('span',{class:'ck map'}, 'MAP'), h('span',{class:'cv'}, n.cmp.map),
+    h('span',{class:'ck terr'}, 'TERRITORY'), h('span',{class:'cv'}, n.cmp.terr));
+}
+function wfKidEls(r, i, k, ki){
+  const key = r.id + ':' + i + ':k' + ki;
+  const open = !!wfOpenSet[key];
+  const canOpen = !!k.res && k.st !== 'active';
+  const row = h('div',Object.assign({class:'wf-kid'},
+      canOpen ? {role:'button', tabindex:'0', 'aria-expanded': String(open), onkeydown: wfKeyActivate, 'data-wf-key': 'kid:' + key,
+                 onclick: (e) => { wfOpenSet[key] = !open; wfAnnounceToggle(k.tool, !open);
+                                   wfRenderMain(e.currentTarget.closest('.wf-main')); }} : {}),
+    h('span',{class:'wf-ktool'}, k.tool),
+    h('span',{class:'wf-kq'}, k.q + (k.st === 'active' && !reduceMotion ? ' ▌' : '')),
+    k.retry ? h('span',{class:'wf-retry'}, 'retry ×' + k.retry) : null,
+    h('span',{class:'wf-kdur'}, k.st === 'active' ? '···' : wfDurF(k.dur)),
+    h('span',{class:'wf-kst k-' + k.st}, ({done:'✓', active:'●', failed:'✕'})[k.st] || ''));
+  const out = [row];
+  if(open) out.push(h('div',{class:'wf-kres'}, k.res));
+  return out;
+}
+function wfNodeEl(r, n, i, maxDur){
+  const key = r.id + ':' + i;
+  const open = key in wfOpenSet ? wfOpenSet[key] : (n.st === 'active' || n.st === 'waiting' || n.st === 'floored');
+  const hasPay = !!(n.pay || n.plan || n.cmp || n.cta);
+  const dotCls = 'wf-dot d-' + (n.t === 'verify' && n.verdict ? 'verdict-' + n.verdict : n.st);
+  const hdr = h('div', Object.assign({class:'wf-nh' + (hasPay ? ' click' : '')},
+      hasPay ? {role:'button', tabindex:'0', 'aria-expanded': String(open), onkeydown: wfKeyActivate, 'data-wf-key': 'nh:' + key,
+                onclick: (e) => { wfOpenSet[key] = !open; wfAnnounceToggle(n.lb, !open);
+                                  wfRenderMain(e.currentTarget.closest('.wf-main')); }} : {}),
+    wfIcEl(n.t),
+    h('span',{class:'wf-lb'}, n.lb),
+    n.band ? wfBandChip(n.band) : null,
+    n.hash ? h('span',{class:'wf-hash'}, n.hash) : null,
+    n.gate ? wfGateChip(n.gate) : null,
+    n.t === 'verify' && n.verdict ? wfVerdictChip(n.verdict) : null,
+    n.st === 'waiting' ? h('span',{class:'wf-chip', style:'color:var(--pause)'}, h('span',{class:'g'},'‖'), 'PAUSED') : null,
+    n.retry ? h('span',{class:'wf-retry'}, 'retry ×' + n.retry) : null,
+    h('span',{class:'wf-sp'}),
+    n.dur != null ? h('span',{class:'wf-db'},
+      h('span',{class:'wf-dbf', style:'width:' + Math.max(4, Math.round(100 * Math.sqrt(n.dur / maxDur))) + '%'})) : null,
+    h('span',{class:'wf-durv'}, n.st === 'active' ? '···' : wfDurF(n.dur)),
+    h('span',{class:'wf-ts'}, n.ts || ''),
+    // aria-expanded already carries this state; the glyph is the SIGHTED channel for the same fact and
+    // was being spoken as "black right-pointing small triangle" at the end of every stage header's name.
+    h('span',{class:'wf-chev','aria-hidden':'true'}, hasPay ? (open ? '▾' : '▸') : ''));
+  return h('div',{class:'wf-node st-' + n.st},
+    h('div',{class:'wf-rail' + (n.st === 'active' ? ' wf-flow' : '')}, h('span',{class:dotCls})),
+    h('div',{class:'wf-card'},
+      hdr,
+      open ? wfPayEl(n) : null,
+      open ? wfCmpEl(n) : null,
+      n.kids ? h('div',{class:'wf-kids'}, n.kids.map((k, ki) => wfKidEls(r, i, k, ki)).flat()) : null,
+      open && n.cta ? h('div',{class:'wf-cta'},
+        h('button',{class:'wf-btn', disabled:true}, n.cta),
+        h('span',{class:'wf-gnote'}, postureClaim().state==='off' ? postureClaim().label + ' — read-only preview'
+          : postureClaim().state==='on' ? postureClaim().label + ' — approved actions execute'
+          : postureClaim().label)) : null));
+}
+
+/* ---------------- liveness: 1s clock + advancing run (reduceMotion-guarded) ---------------- */
+function wfStartClock(root, main){
+  wfTimer = setInterval(() => {
+    if(!document.contains(root)){ clearInterval(wfTimer); wfTimer = null; return; }
+    wfTickN++;
+    /* ★ THE TICKER ITERATED THE FIXTURES WHILE THE VIEW RENDERED THE LIVE RUNS. wfAllRuns() returns
+       wfRunsSrc||WF_RUNS, so on a live estate the rows on screen come from wfRunsSrc while this lookup
+       searched WF_RUNS — no id ever matched, nothing was ever updated, and every live run displayed
+       "elapsed 0s" permanently. The clock has to read the same source the renderer does.
+       Only fixture runs are INCREMENTED; a live run's elapsed is derived from its real start instant, so
+       counting it here would be simulating a fact the spine already knows. */
+    wfAllRuns().forEach(r => { if(r.live && !r.startedMs && r.elapsed != null) r.elapsed++; });
+    $$('[data-wf-clock]').forEach(el => {
+      const r = wfAllRuns().find(x => x.id === el.getAttribute('data-wf-clock'));
+      if(r) el.textContent = wfElapsedText(r);
+    });
+    if(!reduceMotion && wfTickN % 6 === 0) wfAdvance(main);
+  }, 1000);
+}
+function wfAdvance(main){
+  if(wfIsLive()) return; // live runs update from the real SSE step channel, never a client-side simulation
+  const r = WF_RUNS.find(x => x.live && !x._advDone);
+  if(!r) return;
+  const ag = r.nodes.find(n => n.t === 'agent' && n.st === 'active');
+  if(!ag || !ag.kids) return;
+  const act = ag.kids.find(k => k.st === 'active');
+  if(act){ act.st = 'done'; if(act.dur == null) act.dur = 300 + Math.round(Math.random() * 1400); }
+  if(ag.kids.length >= 9){ r._advDone = true; }
+  else {
+    const nx = WF_TOOL_POOL[wfPoolI % WF_TOOL_POOL.length]; wfPoolI++;
+    ag.kids.push({tool: nx.tool, q: nx.q, st:'active', dur: null, res: nx.res, retry: 0});
+  }
+  if(wfSelId === r.id) wfRenderMain(main);
+}

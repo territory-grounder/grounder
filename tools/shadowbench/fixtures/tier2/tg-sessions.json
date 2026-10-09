@@ -1,0 +1,36 @@
+[
+  {
+    "host": "gp-alpha01",
+    "alertRule": "Space-on-/-is-90-and-95-in-use",
+    "band": "OBSERVE",
+    "op": "",
+    "outcome": "stand-down",
+    "proposed": false,
+    "predicted": "",
+    "conclusionExcerpt": "Root usage 91% is driven by one fast-growing application log (/var/log/fakeapp/app.log). The rootfs is a loopback device, so growing the filesystem is inapplicable; the concurrent fakeapp outage is the actionable fault and the correct answer for this disk signal is a grounded stand-down until a reclaim verb exists.",
+    "evidenceCount": 3,
+    "evidenceIds": ["ev-101", "ev-102", "ev-103"],
+    "hasPrediction": false,
+    "prediction": "",
+    "reasoningExcerpt": "CYCLE 1\nTHOUGHT: two concurrent signals on one host; find the single most-likely cause each observation supports\nTOOL: get-host-state\nOBSERVATION: / at 91 percent; fakeapp unit inactive; app.log 700MB and growing",
+    "createdAt": "2026-08-14T10:05:00+00:00",
+    "external_ref": "librenms-fx-disk-001"
+  },
+  {
+    "host": "gp-alpha01",
+    "alertRule": "Service-up/down",
+    "band": "SEMI_AUTO",
+    "op": "restart-service",
+    "outcome": "proposed",
+    "proposed": true,
+    "predicted": "service active within 60s",
+    "conclusionExcerpt": "fakeapp is inactive (dead) while the guest itself is healthy; the single most-likely cause is the stopped unit. Proposing restart-service on fakeapp. The concurrent disk signal is a separate log-growth condition and gets no bundled remedy in this proposal.",
+    "evidenceCount": 4,
+    "evidenceIds": ["ev-104", "ev-105", "ev-106", "ev-107"],
+    "hasPrediction": true,
+    "prediction": "after the unit restarts, the Service-up/down alert clears at the next service check and stays clear for 15 minutes",
+    "reasoningExcerpt": "CYCLE 1\nTHOUGHT: the guest answers ICMP and SSH; the unit is inactive; the disk signal traces to the app log, not to the unit\nTOOL: get-service-state\nOBSERVATION: fakeapp inactive since 10:01Z; no OOM kill in dmesg; log growth continues independently",
+    "createdAt": "2026-08-14T10:07:00+00:00",
+    "external_ref": "librenms-fx-svc-001"
+  }
+]

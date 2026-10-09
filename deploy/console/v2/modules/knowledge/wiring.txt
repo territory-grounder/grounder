@@ -1,0 +1,2 @@
+views.knowledge = knowView;
+VIEW_META.knowledge = ["Knowledge", "The living wiki — host, incident-precedent & operational-rule pages the estate composes for itself from graph + verdicts"];

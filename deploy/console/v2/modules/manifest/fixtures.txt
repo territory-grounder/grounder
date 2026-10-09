@@ -1,0 +1,12 @@
+/* MANIFEST module — HONESTY CONTRACT: THIS SURFACE HAS NO FIXTURE, DELIBERATELY (spec/027 REQ-2703).
+   Every row the manifest view shows is fetched live from GET /v1/manifest at view render. There is no
+   representative/sample data to fall back to, and here the reason is sharper than anywhere else in the
+   console: a plausible fake entry on THIS surface is a fake ACTUATION TARGET, one adopt click away from
+   an operator granting TG permission over a machine that may not exist. INV-15 bans fabricated rows
+   everywhere; on a review queue whose entire purpose is to be adopted, a fixture would be an invitation
+   to grant fiction.
+   Unauthenticated: the auth gate only. 503 (nil reader / spine unwired): an honest unavailable state.
+   Empty spine: an honest empty state ("discovery has not drafted anything yet"), never an invented estate.
+   The rail badge stays an em-dash until a REAL draft count exists.
+   (File present to satisfy the five-file module convention and to carry this contract, per the
+   policy/proposals precedent; assemble.py ships no bytes from it.) */

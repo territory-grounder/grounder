@@ -1,0 +1,139 @@
+{
+  "feature": "earned-op-class-catalog.feature",
+  "note": "Honest coverage frontier. PRESENT rows name an oracle that exists and passes today — godog for the two cross-package claims, Playwright for the three console properties, and PACKAGE tests where the owning package already drives the real path (re-driving those through godog would add a second caller, not a second proof). 2026-08-03: ten rows flipped after TG-227's four blockers landed (!887/!888) — the named oracles are the ones that shipped with, or already covered, that window; each names its killing mutation in its own header. 7 rows remain PENDING (INV-22): the dossier/console renders, the replay double-credit (TG-266 — the graduation_credit consumer does not exist yet, so its oracle CANNOT), the forecast-isolation and ratified-entry flows, and the opcover exemption. A row flips only when the named oracle runs and can be shown to fail.",
+  "scenarios": [
+    {
+      "name": "The same incident re-proposed five times counts once",
+      "req": "REQ-2801",
+      "status": "present",
+      "test": "temporal/opclasscluster/cron_test.go::TestOneIncidentReProposedNeverAdvancesOnTheRealPass (journal exactly-once is structural: PK (candidate_key, external_ref), migration 0048)"
+    },
+    {
+      "name": "Three distinct incidents across two hosts advance a key to candidate",
+      "req": "REQ-2811",
+      "status": "present",
+      "test": "temporal/opclasscluster/cron_test.go::TestThreeDistinctIncidentsAcrossTwoHostsAdvanceToCandidate"
+    },
+    {
+      "name": "Threshold-minus-one stays observing",
+      "req": "REQ-2811",
+      "status": "present",
+      "test": "temporal/opclasscluster/cron_test.go::TestThresholdMinusOneStaysObservingOnTheRealPass"
+    },
+    {
+      "name": "The cron refuses its pass when occurrence intake is stale while sessions flow",
+      "req": "REQ-2812",
+      "status": "present",
+      "test": "temporal/opclasscluster/cron_test.go::TestCronRefusesItsPassWhenIntakeIsStaleWhileSessionsFlow (also observed live 2026-08-03: the deployed cron refused on a 54h-stale journal vs 4 flowing sessions)"
+    },
+    {
+      "name": "Ratify demands a rationale and every transition lands on the one chain",
+      "req": "REQ-2813",
+      "status": "present",
+      "test": "core/opclasscat/candidate_test.go::TestTransitionRequiresRationaleAndGuardsTheStateMachine (blank rationale refused; ratified unreachable except from ratify_ready; no resurrection of a decided key) + core/opclasscat/candidate_test.go::TestTransitionLedgersBeforeTheRowAndBindsTheCandidateKey (the ONE chain, ordered before the row) + core/opclasscat/candidate_test.go::TestLedgerFailureLeavesTheRowUntouched"
+    },
+    {
+      "name": "The ratify form renders empty beside screened model exhibits",
+      "req": "REQ-2813",
+      "status": "present",
+      "test": "deploy/console/v2/e2e/candidates-ratify.mjs"
+    },
+    {
+      "name": "Admission refuses a slotted argv0 an unknown family and an embedded-slug collision",
+      "req": "REQ-2814",
+      "status": "present",
+      "test": "core/actuate/opschema/template_test.go::TestATemplateMayNotBeginWithASlot (slotted argv0) + core/actuate/opschema/family_tier_test.go::TestRegistryRejectsAnUnknownFamily + core/actuate/opschema/template_test.go::TestTemplateRejectsASlotEmbeddedInALargerElement (embedded-slug collision)"
+    },
+    {
+      "name": "The laundering tripwire refuses a byte-matching template",
+      "req": "REQ-2814",
+      "status": "present",
+      "test": "core/actuate/opschema/overlay_test.go::TestLaunderingTripwireRefusesTranscribedModelText (refuses the transcription AND accepts an operator-authored template of the same intent — both directions)"
+    },
+    {
+      "name": "A tampered overlay row is dropped loudly at refresh",
+      "req": "REQ-2815",
+      "status": "present",
+      "test": "core/actuate/opschema/overlay_test.go::TestTamperedOverlayRowIsDroppedNotServed + cmd/worker/opclass_overlay_refresh_test.go::TestTamperedOverlayRowIsDroppedLoudlyAtRefresh (the production refresh path, including the loud line)"
+    },
+    {
+      "name": "An absent class seals to nothing executable",
+      "req": "REQ-2805",
+      "status": "present",
+      "test": "spec/028-earned-op-class-catalog/acceptance/steps_test.go"
+    },
+    {
+      "name": "A ratified class enters at approve and opens the not-graduated poll",
+      "req": "REQ-2806",
+      "status": "present",
+      "test": "ENTERS AT APPROVE: core/policy/graduation_ladder_rung_test.go::TestFirstClimbLandsAtAutoNoticeAndNeverSkipsIt (runs 1 and 2 of 3 must still resolve LevelApprove — the class sits at approve until it has earned the rung, and the first climb lands on auto_notice rather than skipping to auto, so a class can never act unobserved having never once been watched acting). OPENS THE NOT-GRADUATED POLL: core/risk/ungraduated_test.go (an ungraduated class POLLS with poll_reason=op-class-not-graduated, and the oracle also pins the ORDERING — a suspicious actor or a floor must keep its stronger reason, because a band that is right with a misreported reason is worse on the security path). Both halves matter together: the policy engine composing `approve` while no poll opened was a measured DEAD END — 13 sessions in 24h banded AUTO with verdict approve and zero polls, so nobody could ever grant what was being asked."
+    },
+    {
+      "name": "Promotion requires the full threshold and persists durably or refuses",
+      "req": "REQ-2807",
+      "status": "present",
+      "test": "cmd/worker/opclass_overlay_refresh_test.go::TestProductionLadderReadsRatifiedPerClassThreshold + core/policy/graduation_test.go::TestPromotionNotPersistedWithholdsAutonomy"
+    },
+    {
+      "name": "A replayed graduation activity cannot double-credit",
+      "req": "REQ-2807",
+      "status": "present",
+      "test": "core/db/graduation_credit_test.go::TestCreditIsClaimableExactlyOncePerIncident (a REPLAYED claim for the same (op_class, incident) reports not-claimed rather than crediting a second step toward autonomy) + core/db/graduation_credit_test.go::TestTheClaimKeyIsThePairNotEitherHalf (the idempotency key is the PAIR — keying on op_class alone would let one incident block every class, on external_ref alone would let one class block every incident, so a key that is too NARROW and one that is too WIDE are both red) + core/db/graduation_credit_test.go::TestAnEmptyKeyHalfIsRefusedRatherThanCredited. DSN-gated, driving the real migration 0064/0067 constraints rather than an in-memory fake; each carries its killing mutation in a comment."
+    },
+    {
+      "name": "The per-rung band truth table holds on the real path",
+      "req": "REQ-2809",
+      "status": "present",
+      "test": "core/policy/graduation_ladder_rung_test.go::TestAutoNoticeActsWithoutAVoteButAutoIsStillDistinct + cmd/worker/ladder_rung_wiring_test.go (the real-path pin)"
+    },
+    {
+      "name": "A deviation at auto notice drops the class to approve and resets streaks",
+      "req": "REQ-2810",
+      "status": "present",
+      "test": "core/policy/graduation_ladder_rung_test.go::TestDeviationDropsAllTheWayFromEitherRung"
+    },
+    {
+      "name": "A forecast-lane verdict never feeds graduation",
+      "req": "REQ-2810",
+      "status": "present",
+      "test": "spec/028-earned-op-class-catalog/acceptance/steps_test.go"
+    },
+    {
+      "name": "An overlay-only class caps at auto notice",
+      "req": "REQ-2808",
+      "status": "present",
+      "test": "core/policy/graduation_ladder_rung_test.go::TestOverlayClassHoldsAtTheAutoCeiling"
+    },
+    {
+      "name": "A revoked class exits the composed registry within one refresh",
+      "req": "REQ-2810",
+      "status": "present",
+      "test": "cmd/worker/opclass_overlay_refresh_test.go::TestRevokedClassExitsComposedRegistryWithinOneRefresh (registry exit + threshold exit); the refused-in-flight leg is REQ-2805's own godog oracle (absence seals to nothing executable)"
+    },
+    {
+      "name": "A destructive candidate is ratifiable only at a never-auto tier and never climbs",
+      "req": "REQ-2811",
+      "status": "present",
+      "test": "RATIFIABLE ONLY AT NEVER-AUTO: core/actuate/opschema/overlay_test.go::TestRatificationRefusesTierContradictionAndEmbeddedShadow (with the server reading the op as destructive, a spec CLAIMING a low-reversible auto-eligible tier is refused at admission — a tier claim can never soften the server's own reading). NEVER CLIMBS: core/policy/band_test.go::TestComposeForceCannotBreachNeverAutoFloor (even an operator FORCE override under the least-restrictive AUTO band clamps back to approve when the floor applies, and the clamp is recorded) + modules/actuation/ssh/mutate_test.go::TestNeverAutoFloorRefusedEvenIfAllowlisted (the leaf floors it whether or not it is allowlisted, and whether or not it is MIS-allowlisted). Three layers, because 'never climbs' has to hold at admission, at composition, and at the leaf — a class that could not be ratified high but could be composed high would still reach the estate."
+    },
+    {
+      "name": "The dossier answers the five operator questions in order",
+      "req": "REQ-2816",
+      "status": "present",
+      "test": "deploy/console/v2/e2e/candidates-ratify.mjs"
+    },
+    {
+      "name": "The graduation console extends the existing ladder rather than adding a second one",
+      "req": "REQ-2817",
+      "status": "present",
+      "test": "deploy/console/v2/e2e/candidates-ratify.mjs"
+    },
+    {
+      "name": "Overlay classes carry a declared opcover exemption",
+      "req": "REQ-2818",
+      "status": "pending",
+      "test": "",
+      "note": "PENDING WORK, not a missing oracle, and currently VACUOUS. opcover's population is opschema.Specs() — the COMPILED-IN registry (7 op-classes today, 5 fault-provoked + 2 declared exemptions, reporting COVERED). Operator-ratified OVERLAY classes are loaded at runtime from opclass_ratified, so a build-time check structurally cannot see them: the day the first class is ratified, opcover keeps reporting COVERED over 7 embedded classes while an 8th AUTO-capable class exists outside its denominator. That is the wrong-denominator shape, latent, with a precise trigger. Measured live 2026-08-07: opclass_ratified holds 0 rows (0 live), and all 10 opclass_candidate rows are still `observing` — so nothing needs exempting yet and the gap cannot be observed. spec/opcover-exemptions.json declares reload-service and disk-grow only; neither is the overlay exemption naming the embed-export path this requirement asks for. Resolving it means BOTH the declaration and a guard that fires on the first ratification rather than on review."
+    }
+  ]
+}

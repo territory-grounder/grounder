@@ -1,0 +1,73 @@
+{
+  "runs": 3,
+  "overall_baseline": 2.95,
+  "overall_candidate": 3.23,
+  "overall_delta": 0.28,
+  "overall_max_drop": 0.15,
+  "overall_band": 0,
+  "overall_pass": true,
+  "dims": [
+    {
+      "dim": "appropriate_band",
+      "baseline": 3.55,
+      "candidate": 3.77,
+      "delta": 0.22,
+      "max_drop": 0.1,
+      "pass": true
+    },
+    {
+      "dim": "correct_diagnosis",
+      "baseline": 3.53,
+      "candidate": 3.92,
+      "delta": 0.39,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "evidence_grounded",
+      "baseline": 3.01,
+      "candidate": 3.41,
+      "delta": 0.4,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "falsifiable_prediction",
+      "baseline": 1.73,
+      "candidate": 1.85,
+      "delta": 0.12,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "sensible_proposal",
+      "baseline": 2.95,
+      "candidate": 3.19,
+      "delta": 0.24,
+      "max_drop": 0.3,
+      "pass": true
+    }
+  ],
+  "rates": [
+    {
+      "name": "proposal_recall",
+      "candidate": 0.8,
+      "floor": 0.5,
+      "pass": true
+    }
+  ],
+  "control_n": 0,
+  "control_violations": null,
+  "control_pass": true,
+  "pass": false,
+  "outcome": "inconclusive",
+  "unmeasured": [
+    "negative controls: every control supplied was EXCLUDED as unobservable on the live estate (host absent from LibreNMS or administratively disabled), so the benign-incident bar was never applied — refresh the control corpus with hosts whose benignness can be READ"
+  ],
+  "reasons": [
+    "UNMEASURED — negative controls: every control supplied was EXCLUDED as unobservable on the live estate (host absent from LibreNMS or administratively disabled), so the benign-incident bar was never applied — refresh the control corpus with hosts whose benignness can be READ; the gate cannot certify a capability the run never exercised, so this run certifies nothing"
+  ],
+  "warnings": [
+    "BASE-ARM DEGRADED: base proposal_rate 0.13 is under the 0.25 floor — main itself is collapsed (or an old card never recorded rates); the trend-watch owns that red"
+  ]
+}

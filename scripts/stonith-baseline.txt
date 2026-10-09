@@ -1,0 +1,15 @@
+# STONITH baseline — grandfathered environment-specific literals in shipped artifacts.
+#
+# The STONITH rule (owner standing directive): no environment-specific literal (estate hostname, realm,
+# base DN, estate domain) may be baked into a SHIPPED artifact (compiled Go, go:embed data, compose
+# defaults). A fresh install must be able to carry NO trace of this estate. See docs/BACKLOG.md "STONITH".
+#
+# This file is a RATCHET baseline: the lint (scripts/lint-forbidden.sh check 6/6) fails on any NEW estate
+# literal in shipped Go/compose, but SUPPRESSES the pre-existing ones listed here so the build stays green
+# while the debt is paid down as GOVERNED increments. Each entry is `file<TAB>literal-substring`.
+# DO NOT add new entries to grow the debt — the point is to shrink it.
+#
+# EMPTY as of 2026-07-24: the LDAP estate-DN cluster (9 literals across ldapident.go / credsource/ldap.go /
+# core/auth/ldap_auth.go / cmd/grounder / docker-compose) was externalized to deploy-time env
+# (TG_LDAP_USER_BASE / TG_LDAP_GROUP_BASE / TG_LDAP_AUTH_USER_DN_TEMPLATE / TG_LDAP_URLS). Zero grandfathered
+# violations remain — the gate now enforces install-neutrality on the full shipped surface.

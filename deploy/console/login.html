@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Territory Grounder — Sign in</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<style>
+  /* Minimal, self-contained. No app code, no fixtures, no estate data, no external assets:
+     an unauthenticated request must be able to render this WITHOUT the gated bundle. */
+  :root{ color-scheme: dark; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; min-height:100vh; display:grid; place-items:center;
+    background:#0b0e13; color:#c9d3e0; font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .card{ width:min(92vw,340px); padding:28px 26px; border:1px solid #1e2733; border-radius:10px; background:#0f141c; }
+  h1{ font-size:15px; font-weight:600; margin:0 0 4px; letter-spacing:.02em; }
+  .sub{ font-size:11px; color:#6b7789; margin:0 0 18px; }
+  label{ display:block; font-size:11px; color:#8b97a8; margin:14px 0 5px; text-transform:uppercase; letter-spacing:.05em; }
+  input{ width:100%; padding:9px 11px; border:1px solid #263141; border-radius:6px; background:#0b0e13; color:#e6edf5; font:inherit; }
+  input:focus{ outline:2px solid #2f6feb; outline-offset:-1px; border-color:#2f6feb; }
+  button{ width:100%; margin-top:20px; padding:10px; border:0; border-radius:6px; background:#2f6feb; color:#fff; font:inherit; font-weight:600; cursor:pointer; }
+  button:disabled{ opacity:.6; cursor:default; }
+  .err{ margin-top:14px; font-size:12px; color:#f0857a; min-height:1.2em; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <h1>Territory Grounder</h1>
+    <p class="sub">Operator sign-in required.</p>
+    <form id="f">
+      <label for="op">Operator</label>
+      <input id="op" name="op" type="text" autocomplete="username" autofocus required>
+      <label for="tok">Password</label>
+      <input id="tok" name="tok" type="password" autocomplete="current-password" required>
+      <button id="go" type="submit">Sign in</button>
+      <div class="err" id="err" role="alert" aria-live="polite"></div>
+    </form>
+  </main>
+<script>
+(function(){
+  var f=document.getElementById('f'), op=document.getElementById('op'), tok=document.getElementById('tok'),
+      go=document.getElementById('go'), err=document.getElementById('err');
+  // 401 is deliberately GENERIC (no operator-name enumeration). 404/5xx name a SERVER condition an operator
+  // cannot fix by retyping — the operability distinction the app's loginFailureText makes, kept so a
+  // control-plane outage during sign-in is not misread as a wrong password.
+  function msg(status){
+    if(status===401||status===403) return "Invalid operator name or password.";
+    if(status===404) return "Sign-in is unavailable on this control plane (404) — the session route is not registered. This is a server condition, not your password.";
+    if(status===429) return "Rate limited — wait a minute and retry.";
+    if(status>=500) return "The control plane is failing ("+status+") — this is not your password. Retry shortly.";
+    return "Sign-in failed ("+status+").";
+  }
+  f.addEventListener('submit', async function(e){
+    e.preventDefault();
+    var name=(op.value||"").trim(), token=tok.value||"";
+    if(!name||!token){ err.textContent="Operator name and password are required."; return; }
+    go.disabled=true; err.textContent="Verifying…";
+    var r;
+    try{
+      // Same contract the app uses (modules/_live/js.txt liveLogin): credentials in headers, not a body.
+      r = await fetch("/api/v1/session",{ method:"POST", credentials:"same-origin",
+        headers:{ "X-TG-Operator":name, "Authorization":"Bearer "+token } });
+    }catch(ex){ go.disabled=false; err.textContent="Network error — retry."; return; }
+    if(r.ok){ window.location.replace("/"); return; }   // cookie set → reload into the now-authenticated app
+    go.disabled=false; err.textContent=msg(r.status);
+  });
+})();
+</script>
+</body>
+</html>

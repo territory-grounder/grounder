@@ -1,0 +1,443 @@
+/* ============================================================================
+   CANDIDATES module (oc-) — the earned op-class ladder (spec/028 REQ-2816 /
+   REQ-2813 / REQ-2817, epic TG-227 plane 3). Answers "what capability does the
+   estate keep asking for, and should I grant it?"
+
+   THE OPERATOR AUTHORS, THE MODEL ONLY EXHIBITS. The ratify form is
+   STRUCTURALLY empty: ocInput() takes no value parameter, so there is no code
+   path — not a default, not a placeholder, not a "copy from proposal" button —
+   by which the model's text can reach an input. The model's own words render
+   through ocExhibit() instead: quoted, ruled, labelled UNTRUSTED, and visually
+   separated from the form. That separation is the requirement, not decoration
+   (REQ-2813): a value an operator did not type is a capability the model
+   granted itself, and the server's laundering tripwire (ADR-0016 decision 3)
+   refuses a template that byte-matches the model's prose precisely so the easy
+   path — paste the suggestion — is closed.
+
+   THE CEILING IS TOLD TRUTHFULLY. An overlay class that finishes the second
+   climb is HELD at auto_notice with its streak pinned at the threshold; the
+   server derives ceiling_held rather than storing it. Rendering that class as
+   "still climbing" would promise an operator a promotion that cannot arrive
+   without an embed-export MR, so the held state is captioned in words and
+   never as a fraction.
+
+   HONESTY CONTRACT: no fixture (a fake row here is a fake CAPABILITY one click
+   from being granted); guarded liveGet at view render; 503 renders an honest
+   unavailable state; an empty queue an honest empty state (INV-15); the rail
+   badge shows the REAL ratify-ready count only, em-dash until one exists.
+   Controls are data-keyed off the SERVER-computed caller_can_act.
+   ============================================================================ */
+
+var ocUI = { busy: null, err: null, note: null, page: null, dossier: null, key: null };
+
+function ocRel(iso) {
+  if (!iso) return "—";
+  const t = Date.parse(iso);
+  if (isNaN(t)) return String(iso);
+  let s = Math.floor((Date.now() - t) / 1000);
+  if (s < 0) return "just now";
+  if (s < 60) return s + "s ago";
+  const m = Math.floor(s / 60); if (m < 60) return m + "m ago";
+  const hh = Math.floor(m / 60); if (hh < 24) return hh + "h ago";
+  const d = Math.floor(hh / 24); if (d < 30) return d + "d ago";
+  const mo = Math.floor(d / 30); if (mo < 12) return mo + "mo ago";
+  return Math.floor(mo / 12) + "y ago";
+}
+
+function ocSec(lbl, title) {
+  return h("div", { class: "sec" },
+    h("span", { class: "lbl", style: "color:var(--map)" }, lbl),
+    h("h3", {}, title),
+    h("span", { class: "rule" }));
+}
+
+/* the REAL ratify-ready count on the rail badge — never a fabricated number. */
+function ocBadge(n) {
+  document.querySelectorAll('[data-badge="candidates"]').forEach(el => { el.textContent = String(n); });
+}
+
+function ocStatus(s) {
+  const t = String(s || "").toLowerCase();
+  return h("span", { class: "oc-st " + t }, (s || "—").toUpperCase().replace(/_/g, " "));
+}
+
+/* ---- the write lane: two candidate verbs, three class verbs, all closed ---------------------- */
+
+async function ocPost(path, body) {
+  return fetch("/api" + path, {
+    method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+}
+
+async function ocWriteFail(r) {
+  let server = ""; try { server = (await r.text()).trim().slice(0, 400); } catch (e) {}
+  if (r.status === 401 || r.status === 403) return "operator session required — granting a capability is an operator act";
+  if (r.status === 429) return "rate limited — grants are paced so a runaway client cannot widen the estate faster than a human could read a dossier";
+  if (r.status === 409) return "refused: not a legal transition from this state" + (server ? " — " + server : "");
+  /* 422 is the tripwire and the admission validator. The server's own message names WHICH element was
+     inadmissible; flattening it to "invalid" would send an operator back to paste the same string. */
+  if (r.status === 422) return "refused: " + (server || "the template is inadmissible");
+  if (r.status === 400) return "refused: " + (server || "a rationale is required — every grant states why");
+  if (r.status === 503 || r.status === 404 || r.status === 405) return "write path unavailable — the control plane is serving the read surface only";
+  return "write failed (" + r.status + ")" + (server ? " — " + server : "");
+}
+
+async function ocRun(label, path, body, after) {
+  ocUI.busy = label; ocUI.err = null; ocUI.note = null; ocRender();
+  try {
+    const r = await ocPost(path, body);
+    if (!r.ok) { ocUI.err = await ocWriteFail(r); }
+    else {
+      let out = {}; try { out = await r.json(); } catch (e) {}
+      if (after) after(out);
+    }
+  } catch (e) {
+    ocUI.err = "write failed — the control plane did not answer";
+  }
+  ocUI.busy = null;
+  ocRender();
+}
+
+function ocAsk(title) {
+  const rationale = window.prompt(title, "");
+  /* Cancel is a real answer: no rationale, no decision. */
+  if (rationale === null) return null;
+  if (!rationale.trim()) { ocUI.err = "a rationale is required — every grant, dismissal and withdrawal states why"; ocRender(); return null; }
+  return rationale.trim();
+}
+
+function ocDismiss(c) {
+  const rationale = ocAsk("Dismiss " + c.op_class + " — why is this not a capability TG should have?");
+  if (rationale === null) return;
+  ocRun(c.candidate_key + ":dismiss",
+    "/v1/opclass/candidates/" + encodeURIComponent(c.candidate_key) + "/dismiss",
+    { rationale: rationale },
+    () => { ocUI.note = "dismissed " + c.op_class + " — recorded on the ledger"; ocUI.page = null; ocUI.dossier = null; ocUI.key = null; });
+}
+
+/* NO CLASS-VERB CONTROLS HERE, DELIBERATELY. The server serves demote / revoke / export-embed on
+   /v1/opclass/classes/{class}/{verb}, and this module could reach them in ten lines. It does not, because
+   those verbs act on GRANTED classes and this surface lists CANDIDATES — a control here would be an
+   operator aiming a withdrawal at a row that is not the thing being withdrawn. The ladder those classes
+   live on is /v1/policy/graduation, which REQ-2817 says the console extends rather than duplicates; the
+   verbs belong to whatever task gives that ladder a write lane. An unreachable helper kept "for later" is
+   the same lie in a quieter register: it reads as capability this surface has and never exercises. */
+
+/* ---- the EMPTY form -------------------------------------------------------------------------- */
+
+/* ocInput takes NO value parameter. That is the structural guarantee behind REQ-2813: there is no
+   argument through which a caller could prefill one of these from the dossier, so "the form renders
+   empty" is not a convention this module happens to follow — it is the only thing it can do. */
+function ocInput(id, label, hint, disabled) {
+  const input = h("input", { class: "oc-fi", id: id, type: "text", autocomplete: "off", spellcheck: "false" });
+  if (disabled) input.disabled = true;
+  return h("div", { class: "oc-fr" },
+    h("label", { class: "oc-fl", for: id }, label),
+    input,
+    hint ? h("span", { class: "oc-fh" }, hint) : null);
+}
+
+function ocVal(id) {
+  const el = document.getElementById(id);
+  return el ? String(el.value || "").trim() : "";
+}
+
+function ocSplit(s) {
+  return s.split(/\s+/).map(x => x.trim()).filter(Boolean);
+}
+
+function ocRatify(d) {
+  const c = d.candidate || {};
+  const argv = ocSplit(ocVal("ocArgv"));
+  if (!argv.length) { ocUI.err = "the argv template is what actually runs — type it before granting"; ocRender(); return; }
+  const rationale = ocVal("ocRationale");
+  if (!rationale) { ocUI.err = "a rationale is required — every grant states why"; ocRender(); return; }
+  const threshold = parseInt(ocVal("ocThreshold"), 10);
+  /* Every declared param is REQUIRED, because the validator refuses an optional one: a slot whose value
+     could be absent renders a DIFFERENT command than the template reads as. There is therefore no
+     "optional?" checkbox to get wrong — the only param this form can author is a mandatory one. */
+  const params = ocSplit(ocVal("ocParams")).map(n => ({ name: n, type: "string", required: true }));
+  const body = {
+    rationale: rationale,
+    op: ocVal("ocOp"),
+    family: ocVal("ocFamily"),
+    safety_tier: ocVal("ocTier"),
+    params: params,
+    argv_template: argv,
+    rollback_template: ocSplit(ocVal("ocRollback")),
+    promote_threshold: isNaN(threshold) ? 0 : threshold
+  };
+  ocRun(c.candidate_key + ":ratify",
+    "/v1/opclass/candidates/" + encodeURIComponent(c.candidate_key) + "/ratify",
+    body,
+    (out) => {
+      ocUI.note = "ratified " + (out.op_class || c.op_class) + " — it enters at approve and climbs from there"
+        + (out.entry_hash ? " (entry " + String(out.entry_hash).slice(0, 12) + "…)" : "");
+      ocUI.page = null; ocUI.dossier = null; ocUI.key = null;
+    });
+}
+
+/* ---- the five questions ---------------------------------------------------------------------- */
+
+function ocQ(n, title, desc, ...body) {
+  return h("div", { class: "oc-q" },
+    h("div", { class: "oc-qh" }, h("span", { class: "oc-qn" }, n), h("span", { class: "oc-qt" }, title)),
+    desc ? h("p", { class: "oc-qd" }, desc) : null,
+    ...body);
+}
+
+/* THE EXHIBIT. Model text renders here and ONLY here — quoted, labelled untrusted, visually separated
+   from the form. h() appends text through createTextNode, so nothing in an exhibit is ever interpreted
+   as markup; and nothing in an exhibit is ever an input's value. */
+function ocExhibit(e) {
+  const meta = [e.host, e.target, e.band, e.outcome].filter(Boolean).join(" · ");
+  return h("div", { class: "oc-ex" },
+    h("span", { class: "oc-exl" }, "UNTRUSTED — the model's own words, quoted"),
+    e.model_verb ? h("div", { class: "oc-exq", "data-exhibit": "verb" }, e.model_verb) : null,
+    e.model_rationale ? h("div", { class: "oc-exq", "data-exhibit": "rationale" }, e.model_rationale) : null,
+    e.model_undo_sketch ? h("div", { class: "oc-exq", "data-exhibit": "undo" }, e.model_undo_sketch) : null,
+    h("div", { class: "oc-exm" }, meta + (e.observed_at ? " · " + ocRel(e.observed_at) : "") + (e.external_ref ? " · " + e.external_ref : "")));
+}
+
+function ocDossierView(d) {
+  const c = d.candidate || {};
+  const canAct = !!d.caller_can_act;
+  const exhibits = d.exhibits || [];
+  const hosts = d.hosts || [];
+  const wrap = h("div");
+
+  wrap.append(h("div", { class: "oc-act", style: "margin:0 2px 10px" },
+    h("button", { class: "oc-btn", type: "button", onclick: () => { ocUI.dossier = null; ocUI.key = null; ocRender(); } }, "← back to the queue")));
+
+  wrap.append(ocSec("DOSSIER · spec/028", c.op_class || "candidate"));
+
+  /* 1 — what keeps happening */
+  const refs = exhibits.map(e => e.external_ref).filter(Boolean);
+  wrap.append(ocQ("1", "What keeps happening", null,
+    h("div", { class: "wrapcard" }, h("div", { class: "oc-form" },
+      h("div", { class: "oc-fh", "data-q": "recurrence" },
+        String(c.occurrences || 0) + " occurrence(s) across " + String(c.hosts || 0) + " host(s)"
+        + (c.first_seen_at ? " · first " + ocRel(c.first_seen_at) : "")
+        + (c.last_seen_at ? " · latest " + ocRel(c.last_seen_at) : "")),
+      ocJourney(c) ? h("div", { class: "oc-fh", "data-q": "journey" }, ocJourney(c)) : null,
+      hosts.length ? h("div", { class: "oc-fh" }, "hosts: " + hosts.join(", ")) : null,
+      (c.param_names && c.param_names.length) ? h("div", { class: "oc-fh", "data-q": "params" }, "params observed varying across occurrences: " + c.param_names.join(", ")) : null,
+      refs.length ? h("div", { class: "oc-fh" }, "exemplars: " + refs.join(", ")) : null))));
+
+  /* 2 — what TG wants to do (the exhibits) */
+  wrap.append(ocQ("2", "What TG wants to do",
+    "The model's own account, quoted. It is evidence you are reading, not a value on its way into the form below — the server refuses a template that byte-matches any of it.",
+    exhibits.length
+      ? h("div", {}, ...exhibits.slice(0, 8).map(ocExhibit))
+      : h("div", { class: "oc-fh" }, "No screened model text recorded for this candidate.")));
+
+  /* 3 — what it could break */
+  wrap.append(ocQ("3", "What it could break",
+    "Blast radius is walked from the estate graph, with per-edge provenance and confidence. A dossier whose walk is incomplete does not reach an operator: the engine holds it short of ratify-ready.",
+    h("div", { class: "wrapcard" }, h("div", { class: "oc-form" },
+      h("div", { class: "oc-fh", "data-q": "blast" },
+        d.ratify_ready
+          ? "The estate walk completed — this dossier is ratify-ready."
+          : "The estate walk has not completed for this candidate; it is NOT ratify-ready, and ratification will be refused.")))));
+
+  /* 4 — how good its predictions are */
+  wrap.append(ocQ("4", "How good its predictions are",
+    "Displayed only. Prediction accuracy never feeds the ladder: graduation counts terminus-confirmed verified-clean runs from the action lane, and a forecast-lane verdict credits nothing.",
+    h("div", { class: "wrapcard" }, h("div", { class: "oc-form" },
+      h("div", { class: "oc-fh", "data-q": "predictions" },
+        "Recorded outcomes: " + (exhibits.length ? exhibits.map(e => e.outcome || "—").join(", ") : "none yet"))))));
+
+  /* 5 — what the operator must type */
+  const barred = !!c.auto_barred;
+  const blocked = d.embedded || d.already_granted;
+  const form = h("div", { class: "oc-form" },
+    ocInput("ocOp", "op (the verb this class performs)", "e.g. restart-service — the operation identity, not a sentence", !canAct || blocked),
+    ocInput("ocFamily", "family", "the declared family this class belongs to", !canAct || blocked),
+    ocInput("ocTier", "safety tier", barred ? "this candidate is barred from the silent rung — a never-auto tier is required" : "the tier that governs how far this class may ever climb", !canAct || blocked),
+    ocInput("ocParams", "params (space-separated names)", "each becomes a REQUIRED slot; reference one in the templates as ${name}, always as a whole element", !canAct || blocked),
+    ocInput("ocArgv", "argv template (space-separated — THIS is what runs)", "type the command yourself; argv[0] is the program and may never be a slot; pasting the model's string is refused by the tripwire", !canAct || blocked),
+    ocInput("ocRollback", "rollback template (space-separated)", "how this is undone", !canAct || blocked),
+    ocInput("ocThreshold", "promote threshold", "clean runs required before the first climb (blank = the engine default)", !canAct || blocked),
+    ocInput("ocRationale", "rationale", "why this capability, why now — recorded on the chain beside the grant", !canAct || blocked));
+
+  const ratifyBtn = h("button", { class: "oc-btn ratify", type: "button", "data-act": "ratify", onclick: () => ocRatify(d) }, "Ratify");
+  const dismissBtn = h("button", { class: "oc-btn dismiss", type: "button", "data-act": "dismiss", onclick: () => ocDismiss(c) }, "Dismiss");
+  if (!canAct || blocked) { ratifyBtn.disabled = true; }
+  if (!canAct) { dismissBtn.disabled = true; }
+
+  wrap.append(ocQ("5", "What you must type",
+    "Every field starts empty and stays empty until you fill it. There is no control here that copies the model's suggestion into the form — that is the whole point of the separation above.",
+    barred ? h("div", { class: "oc-held" }, "This candidate is AUTO-BARRED: it may be ratified, but it can never reach a silent rung. Its tier must be a never-auto tier.") : null,
+    d.embedded ? h("div", { class: "oc-held" }, "This slug already exists in the EMBEDDED registry. An overlay row may never shadow it, so ratification is refused here.") : null,
+    (d.already_granted && !d.embedded) ? h("div", { class: "oc-held" }, "This class is already granted in the overlay. Withdraw it before ratifying a replacement.") : null,
+    h("div", { class: "wrapcard" }, form),
+    h("div", { class: "oc-act", style: "margin:10px 2px 0" }, ratifyBtn, dismissBtn)));
+
+  return wrap;
+}
+
+
+/* ---- the journey (TG-236 oracle 3: "the journey made visible") ---------------------------------
+   The server computes the remaining distance to candidacy from the SAME constants the cron promotes on
+   (opclasscat.CandacyGap), and has served it as `to_candidate` since !799 — rendered nowhere until now.
+   Without it the queue shows a status and a count, and an operator has no way to know whether a row is
+   one incident away from being ratifiable or twenty. That is the difference between a list you check
+   back on and a list you stop opening.
+
+   THE SECOND LEG IS AN OR, AND THIS MUST SAY SO. Candidacy needs >=3 distinct incidents AND
+   (>=2 distinct hosts OR >=7 days of span). Rendering "1 more host and 4 more days" would overstate the
+   bar and suppress a ratification TG is in fact ready for — so the two routes are joined by "or". */
+function ocJourney(c) {
+  if (!c.to_candidate) return null;                       /* absent once the shape has arrived */
+  const g = c.to_candidate, parts = [];
+  if (g.refs_needed > 0) parts.push(g.refs_needed + " more incident" + (g.refs_needed === 1 ? "" : "s"));
+  const routes = [];
+  if (g.hosts_needed > 0) routes.push(g.hosts_needed + " more host" + (g.hosts_needed === 1 ? "" : "s"));
+  if (g.span_hours_needed > 0) routes.push(Math.ceil(g.span_hours_needed / 24) + " more days of span");
+  if (routes.length) parts.push(routes.join(" or "));
+  if (!parts.length && !g.confidence_short) return null;
+  let text = parts.length ? "needs " + parts.join(" + ") + " to become ratifiable" : "";
+  if (g.confidence_short) {
+    /* Confidence is a THRESHOLD, never a quantity to trade against — the server refuses arithmetic in
+       which a higher mean substitutes for fewer incidents, and the wording must not imply otherwise. */
+    text = text ? text + "; mean confidence is also below the bar" : "mean confidence is below the bar";
+  }
+  return h("span", { class: "oc-journey", title: "computed from the same thresholds the promotion cron reads" }, text);
+}
+
+/* ---- the queue ------------------------------------------------------------------------------- */
+
+function ocQueue(page) {
+  const cands = page.candidates || [];
+  const canAct = !!page.caller_can_act;
+  const head = h("tr", {}, ...["Op-class", "Status", "Recurrence", "Tier", "Latest", ""].map(x => h("th", {}, x)));
+  const body = cands.map(c => h("tr", {},
+    h("td", { class: "m", style: "color:var(--map)" }, c.op_class || "—"),
+    h("td", {}, ocStatus(c.status)),
+    h("td", {},
+      h("span", { class: "oc-num" }, String(c.occurrences || 0) + "× / " + String(c.hosts || 0) + " host(s)"),
+      ocJourney(c)),
+    h("td", {}, c.auto_barred
+      ? h("span", { class: "oc-bar", title: "barred from the silent rung — ratifiable only at a never-auto tier" }, "never auto")
+      : h("span", { class: "oc-num" }, c.tier || "—")),
+    h("td", { title: c.last_seen_at || "" }, ocRel(c.last_seen_at)),
+    h("td", {}, h("div", { class: "oc-act" },
+      h("button", {
+        class: "oc-btn", type: "button", "data-act": "open",
+        onclick: () => { ocUI.key = c.candidate_key; ocUI.dossier = null; ocRender(); }
+      }, "Read the dossier")))));
+  const kids = [];
+  if (!canAct) {
+    kids.push(h("div", { class: "oc-note" },
+      "Read-only: ratifying a capability requires an operator session. Dossiers are readable; the grant controls below are shown disabled rather than hidden, so the queue is never silently missing."));
+  }
+  kids.push(h("div", { class: "wrapcard" }, h("div", { class: "oc-scroll" },
+    h("table", { class: "tbl" }, h("thead", {}, head), h("tbody", {}, ...body)))));
+  return h("div", {}, ...kids);
+}
+
+/* ---- render ---------------------------------------------------------------------------------- */
+
+var ocSlot = null;
+
+function ocRender() {
+  if (!ocSlot) return;
+  const kids = [];
+  if (ocUI.err) kids.push(h("div", { class: "oc-err" }, ocUI.err));
+  if (ocUI.note) kids.push(h("div", { class: "oc-note" }, ocUI.note));
+
+  /* a dossier was requested: render it once loaded, and load it if not. */
+  if (ocUI.key) {
+    if (!ocUI.dossier) {
+      kids.push(h("div", { class: "empty", style: "padding:28px" }, h("div", { class: "desc" }, "Loading the dossier…")));
+      ocSlot.replaceChildren(...kids);
+      ocLoadDossier(ocUI.key);
+      return;
+    }
+    kids.push(ocDossierView(ocUI.dossier));
+    ocSlot.replaceChildren(...kids);
+    return;
+  }
+
+  const page = ocUI.page;
+  if (!page) {
+    kids.push(h("div", { class: "empty", style: "padding:28px" }, h("div", { class: "desc" }, "Loading the earned-class queue…")));
+    ocSlot.replaceChildren(...kids);
+    ocLoad();
+    return;
+  }
+  const cands = page.candidates || [];
+  if (!cands.length) {
+    kids.push(h("div", { class: "empty", style: "padding:34px 20px" },
+      h("div", { class: "big" }, "Nothing has recurred often enough yet"),
+      h("div", { class: "desc" }, "Candidates appear when the same remediation shape recurs across enough incidents and hosts to be worth a human's attention. An empty queue is a real state — nothing is invented to fill it.")));
+    ocSlot.replaceChildren(...kids);
+    return;
+  }
+  kids.push(ocQueue(page));
+  ocSlot.replaceChildren(...kids);
+}
+
+async function ocUnavailable(what) {
+  ocSlot.replaceChildren(h("div", { class: "empty", style: "padding:34px 20px" },
+    h("div", { class: "big" }, what + " unavailable"),
+    h("div", { class: "desc" }, "The read spine answered fail-closed (503) or is not wired. Nothing is shown rather than something invented (INV-15).")));
+}
+
+async function ocLoad() {
+  let page;
+  try { page = await liveGet("/v1/opclass/candidates?limit=200"); }
+  catch (e) { ocUnavailable("Earned-class queue"); return; }
+  ocUI.page = page;
+  const ready = (page.candidates || []).filter(c => String(c.status || "") === "ratify_ready").length;
+  ocBadge(ready);
+  ocRender();
+}
+
+async function ocLoadDossier(key) {
+  let d;
+  try { d = await liveGet("/v1/opclass/candidates/" + encodeURIComponent(key)); }
+  catch (e) { ocUnavailable("Dossier"); return; }
+  ocUI.dossier = d;
+  ocRender();
+}
+
+/* ocWrap retains the mounted subtree so a RE-RENDER cannot evict an operator from a form they are typing
+   in. This is not an optimisation — it is a correctness fix for a defect this module's own oracle caught:
+   liveAdopt() ends with route(<current view>) and liveRefresh() calls liveAdopt(true) on a timer, so every
+   view in this console is rebuilt from scratch every poll. On a read surface that is invisible. Here it
+   discarded a half-authored ratification and bounced the reader back to the queue mid-dossier — on the one
+   surface whose entire premise is that the operator types the command themselves, and where losing the
+   text is a nudge toward the shortest way to refill the box.
+   route() empties #view and appends whatever this function returns, so returning the RETAINED node simply
+   re-attaches the same DOM, keystrokes and all. Note what this does NOT do: it never sets an input's
+   value. The typed text survives because the input element was never destroyed, so the structural
+   empty-form guarantee above is untouched — there is still no code path from the dossier into a field. */
+var ocWrap = null;
+
+function ocView() {
+  if (typeof liveState === "undefined" || !liveState.on) {
+    ocWrap = null; ocSlot = null;
+    return h("div", { class: "empty", style: "padding:52px 20px" },
+      h("div", { class: "big" }, "Earned classes — live only"),
+      h("div", { class: "desc" }, "This surface converts live evidence into permission. It has no preview data: a fabricated candidate here would be a fabricated capability one ratify click from being granted."));
+  }
+  /* Mid-dossier: hand back what is already on screen. A refresh must not steal the page from under a
+     reader, and a queue that silently reloaded behind them would be a second surprise on top of the first. */
+  if (ocWrap && ocUI.key) return ocWrap;
+  const wrap = h("div");
+  ocUI.err = null; ocUI.note = null; ocUI.page = null; ocUI.dossier = null; ocUI.key = null;
+  wrap.append(h("p", { class: "desc oc-intro" },
+    "Capabilities the estate proposed for itself. A remediation shape that recurs often enough becomes a ",
+    h("b", {}, "candidate"),
+    " with an evidence dossier; you read it and type the command yourself. Ratifying admits the class at ",
+    h("b", {}, "approve"),
+    " — it still asks first — and it climbs to auto-notice by earning clean, verified runs. The silent rung stays a code release: an overlay class that finishes the climb is HELD there, and only an embed-export MR carries it into the reviewed registry."));
+  ocSlot = h("div", {});
+  wrap.append(ocSec("LIVE · spec/028", "Earned op-classes — evidence in, permission out"), ocSlot);
+  ocWrap = wrap;
+  ocRender();
+  return wrap;
+}

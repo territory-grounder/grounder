@@ -1,0 +1,9 @@
+/* PROPOSALS module — HONESTY CONTRACT: THIS SURFACE HAS NO FIXTURE, DELIBERATELY (spec/026 REQ-2607).
+   Every value the proposals view shows is fetched live from GET /v1/proposals at view render. There is no
+   representative/sample data to fall back to, because a plausible-but-fake shadow proposal is exactly the
+   fabricated-row class INV-15 bans: these rows are the raw material of the earned catalog (spec/028
+   candidate dossiers cluster them), so a fixture row here would seed a future capability from fiction.
+   Unauthenticated: the auth gate only. 503 (nil reader / spine unwired): an honest unavailable state.
+   Empty spine: an honest empty state. The rail badge stays an em-dash until a REAL total exists.
+   (File present to satisfy the five-file module convention and to carry this contract, per the policy-
+   module precedent; assemble.py ships no bytes from it.) */

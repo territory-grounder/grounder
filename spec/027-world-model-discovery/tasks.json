@@ -1,0 +1,271 @@
+{
+  "spec": "027-world-model-discovery",
+  "tasks": [
+    {
+      "id": "T-027-1",
+      "title": "systemd-unit EdgeSource (compiled-in, transport-injectable)",
+      "files_owned": [
+        "modules/discovery/systemd/systemd.go",
+        "modules/discovery/systemd/systemd_test.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-2701"
+      ],
+      "acceptance": {
+        "feature": "world-model-discovery.feature",
+        "scenarios": [
+          "Discovery drafts entries with source provenance and table confidence"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 350,
+        "max_wall_clock_minutes": 150
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-027-2",
+      "title": "docker-container EdgeSource (compiled-in, transport-injectable)",
+      "files_owned": [
+        "modules/discovery/docker/docker.go",
+        "modules/discovery/docker/docker_test.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-2701"
+      ],
+      "acceptance": {
+        "feature": "world-model-discovery.feature",
+        "scenarios": [
+          "An unknown entity type from a corrupted source is loud-rejected"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 350,
+        "max_wall_clock_minutes": 150
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-027-3",
+      "title": "Module registration for the two discovery sources (INV-17)",
+      "files_owned": [
+        "modules/registry.go"
+      ],
+      "deps": [
+        "T-027-1",
+        "T-027-2"
+      ],
+      "req_ids": [
+        "REQ-2701"
+      ],
+      "acceptance": {
+        "feature": "world-model-discovery.feature",
+        "scenarios": [
+          "Discovery drafts entries with source provenance and table confidence"
+        ],
+        "go_test": "cmd/worker: TestDiscoveryProbesAreReferencedByTheCompositionRoot (AST guard: main.go imports AND calls both systemddisc.New and dockerdisc.New, with a vacuity floor); TestDiscoveryRunnerRefusesUnallowlistedAndMalformedHosts; TestDiscoveryRunnerIsNilWithoutAnAllowlist; TestDiscoveryRunnerHostListIsDeterministic; core/wiring: the discovery.service seam is in the closed set, so both clean-tree fixtures must re-make their \"nothing is dark\" claim.",
+        "mutation_control": "EXECUTED RED 2026-08-01, 5 mutations: (AD) delete both probe imports and constructions from cmd/worker/main.go -> TestDiscoveryProbesAreReferencedByTheCompositionRoot RED; (AE) an empty allowlist yields a refuse-everything runner instead of nil -> TestDiscoveryRunnerIsNilWithoutAnAllowlist RED; (AF) drop the allowlist check -> TestDiscoveryRunnerRefusesUnallowlistedAndMalformedHosts RED; (AG) host order becomes non-ascending -> TestDiscoveryRunnerHostListIsDeterministic RED; (AH) remove discovery.service from the closed seam set -> TestDarkReportIsEmptyOnACleanTree RED. AF initially SURVIVED: the first oracle asserted only `err != nil`, and an un-allowlisted host still errored one step later on the nil resolver. The oracle was rewritten to assert WHICH refusal fired. A control that cannot fail when the thing it guards breaks is not a control."
+      },
+      "budget": {
+        "max_loc_delta": 40,
+        "max_wall_clock_minutes": 30
+      },
+      "status": "completed",
+      "description": "[Cross-spec ownership note: modules/registry.go previously delivered under spec/008 T-008-0 (completed); this task adds the two EdgeSource registrations.] CORRECTION 2026-08-01: this task was marked completed while modules/registry.go declared only the SurfaceDiscovery CONSTANT. No registration existed, and `grep -rn \"modules/discovery\"` outside those two packages returned NOTHING — both probes were linked into no binary. They are the only producers of estate.TypeService, and core/worldmodel routes exclusively TypeService to KindUnit and KindContainer, so two of the three adoption kinds were unreachable by construction while the world.discovery seam reported LIVE and the boot log announced the lane as armed. Declaring a surface is not registering on it. Now genuinely delivered: cmd/worker/main.go constructs both probes over a read-only host-key-verified SSH transport (host allowlist -> credential engine -> native runner, the same fail-closed path the journal reader uses), registers each on modules.SurfaceDiscovery, folds them into estateSources, and records the new discovery.service seam on EVERY path so the dark case is declared rather than inferred. Dark by default: TG_DISCOVERY_SYSTEMD_HOSTS and TG_DISCOVERY_DOCKER_HOSTS ship empty."
+    },
+    {
+      "id": "T-027-4",
+      "title": "Migration 0047 manifest_entry + the audited Transition chokepoint",
+      "files_owned": [
+        "core/db/manifest_entry.go",
+        "core/db/migrations/0047_manifest_entry.down.sql",
+        "core/db/migrations/0047_manifest_entry.up.sql",
+        "core/worldmodel/manifest.go",
+        "core/worldmodel/manifest_test.go",
+        "core/worldmodel/materialization_test.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-2702",
+        "REQ-2706"
+      ],
+      "acceptance": {
+        "feature": "world-model-discovery.feature",
+        "scenarios": [
+          "Adopting an entry appends the ledger row before the row update",
+          "Adoption never lowers confidence and learned contributions stay capped"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 420,
+        "max_wall_clock_minutes": 200
+      },
+      "status": "completed",
+      "notes": "DELIVERED 2026-08-01: the spec listed a single 0047_manifest_entry.sql; the repo convention is up/down PAIRS, so both were written. core/db/manifest_entry.go carries the pgx store (named WorldManifestStore — db.ManifestStore is the unrelated action_manifest/INV-07 writer). The flagship materialization oracle lives in core/worldmodel/materialization_test.go."
+    },
+    {
+      "id": "T-027-5",
+      "title": "Re-discovery singleton cron (finalizer shape) + drift lifecycle",
+      "files_owned": [
+        "temporal/worlddiscovery/cron.go",
+        "temporal/worlddiscovery/cron_test.go"
+      ],
+      "deps": [
+        "T-027-3",
+        "T-027-4"
+      ],
+      "req_ids": [
+        "REQ-2705"
+      ],
+      "acceptance": {
+        "feature": "world-model-discovery.feature",
+        "scenarios": [
+          "Drift marks disappeared entries stale and drafts new entries without auto-retiring",
+          "A failing source contributes nothing and is reported loudly"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 380,
+        "max_wall_clock_minutes": 180
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-027-6",
+      "title": "AllowlistProvider seams at the three constructor sites (UNION with env, provenance-labeled)",
+      "files_owned": [
+        "cmd/worker/main.go",
+        "cmd/worker/manifest_allowlist_test.go"
+      ],
+      "deps": [
+        "T-027-4"
+      ],
+      "req_ids": [
+        "REQ-2704"
+      ],
+      "acceptance": {
+        "feature": "world-model-discovery.feature",
+        "scenarios": [
+          "A non-adopted unit is refused at the leaf and the same effect passes after adopt"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 200,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed",
+      "description": "[Cross-spec ownership note: cmd/worker/main.go previously delivered under specs 012/020/024 (completed tasks); this task adds the AllowlistProvider seams + bootstrap composition. The spec/028 T-028-6 resolver wiring also touches main.go — sequence 027 before 028 Stage-4 wiring.]",
+      "notes": "COORDINATION (2026-08-01): cmd/worker/main.go also received the spec/028 Stage-2 evidence-seam wiring (RecordProposalOccurrence adapter + the observe-only clustering cron registration) under spec/028 T-028-2 — rebase over it; the AllowlistProvider scope is untouched. DELIVERED 2026-08-01: AllowlistProvider seams wired at the per-target ssh lane (resolved PER BUILD, so an adopt takes effect without a restart) and the proxmox actuator (built once at boot — a newly adopted guest applies at next start; documented, not papered over). The per-target build was EXTRACTED into buildPerTargetSSHLeaf because a RED control proved signature-shaped aliveness insufficient: neutering the provider inside the closure broke no test and no build."
+    },
+    {
+      "id": "T-027-7",
+      "title": "guardallow accepts adopted manifest entries as subject input",
+      "files_owned": [
+        "tools/guardallow/main.go"
+      ],
+      "deps": [
+        "T-027-4"
+      ],
+      "req_ids": [
+        "REQ-2704"
+      ],
+      "acceptance": {
+        "feature": "world-model-discovery.feature",
+        "scenarios": [
+          "A non-adopted unit is refused at the leaf and the same effect passes after adopt"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 120,
+        "max_wall_clock_minutes": 60
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-027-8",
+      "title": "Manifest read + closed-verb write API (hardened lane)",
+      "files_owned": [
+        "core/httpapi/manifest.go"
+      ],
+      "deps": [
+        "T-027-4"
+      ],
+      "req_ids": [
+        "REQ-2703"
+      ],
+      "acceptance": {
+        "feature": "world-model-discovery.feature",
+        "scenarios": [
+          "Reject without a rationale is refused"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 150
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-027-9",
+      "title": "Console manifest view: diff panel, provenance labels, one-click adopt",
+      "files_owned": [
+        "deploy/console/v2/modules/manifest/css.txt",
+        "deploy/console/v2/modules/manifest/js.txt",
+        "deploy/console/v2/modules/manifest/wiring.txt",
+        "deploy/console/v2/e2e/manifest-review.mjs",
+        "deploy/console/v2/modules/manifest/fixtures.txt",
+        "deploy/console/v2/modules/manifest/meta.json"
+      ],
+      "deps": [
+        "T-027-8"
+      ],
+      "req_ids": [
+        "REQ-2703",
+        "REQ-2707"
+      ],
+      "acceptance": {
+        "feature": "world-model-discovery.feature",
+        "scenarios": [
+          "The manifest view renders diffs and honors server-computed caller permissions"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 450,
+        "max_wall_clock_minutes": 200
+      },
+      "status": "completed",
+      "description": "[fixtures.txt carries the live-only HONESTY CONTRACT; meta.json completes the five-file module convention. The assemble.py list entries and the console.html rail anchor for the manifest module are edited under THIS task (files owned by spec/026 T-026-6 for its own module only).]"
+    },
+    {
+      "id": "T-027-10",
+      "title": "Acceptance oracles + RED mutation controls (godog, real path incl. leaf materialization)",
+      "files_owned": [
+        "spec/027-world-model-discovery/acceptance/acceptance_test.go",
+        "spec/027-world-model-discovery/acceptance/steps_test.go"
+      ],
+      "deps": [
+        "T-027-5",
+        "T-027-6"
+      ],
+      "req_ids": [
+        "REQ-2703",
+        "REQ-2704",
+        "REQ-2707"
+      ],
+      "acceptance": {
+        "feature": "world-model-discovery.feature",
+        "scenarios": [
+          "A ratified class without adopted targets polls but cannot touch the host"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 500,
+        "max_wall_clock_minutes": 240
+      },
+      "status": "completed",
+      "note": "NOT STARTED. Every requirement this task covers has unit + composition oracles with recorded RED controls, but the godog acceptance layer that drives the REAL path end-to-end (including the leaf) is not written. Do not read the other tasks being completed as this one being covered by them."
+    }
+  ]
+}

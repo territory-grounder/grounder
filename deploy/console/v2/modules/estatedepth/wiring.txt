@@ -1,0 +1,14 @@
+/* --- estatedepth wiring (place fixtures block BEFORE the js block; both top-level) --- */
+views.estatedepth = est2View;
+VIEW_META.estatedepth = ["Estate Depth","Node inspector (golden signals · dependencies · blast radius) + incident master-clock"];
+FACETS.estatedepth = EST2_FACETS;
+facetState.estatedepth = "all";
+/* nav rail (TERRITORY group, directly after the existing estate entry):
+   <a class="navi" data-view="estatedepth"><svg class="ic" ...>ICON</svg><span class="t">Estate Depth</span><span class="n" data-badge="estatedepth">0</span></a> */
+/* badge refresh — degraded-node count:
+   $('[data-badge="estatedepth"]').textContent = ESTATE.nodes.filter(n => n.health !== "ok").length; */
+/* HOOK 1 — existing estate topology view (augments, does not replace): in its node click handler,
+   open the right drawer (or a side panel) with:  drawerBody.replaceChildren(estateNodeDetail(node.id));
+   Pass a second arg to navigate within the panel: estateNodeDetail(node.id, id => rerenderWith(id)). */
+/* HOOK 2 — session drawer: append the master-clock as a full-width section:
+   drawerBody.append(incidentTimeline(session)); */

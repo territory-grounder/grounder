@@ -1,0 +1,187 @@
+{{/*
+Temporal durable-orchestration substrate + its backing Postgres + the Temporal UI (spec/009 REQ-901).
+Parity with the compose `temporal-postgres`, `temporal`, and `temporal-ui` services.
+
+The Temporal frontend (7233) and UI (8080) are ClusterIP-only — never on a default Ingress
+(spec/009 REQ-909). The backing-Postgres password arrives by Secret reference (INV-13), never a literal.
+*/}}
+{{- $tpg := include "grounder.componentName" (dict "root" . "component" "temporal-postgres") -}}
+{{- $tmp := include "grounder.componentName" (dict "root" . "component" "temporal") -}}
+{{- $tui := include "grounder.componentName" (dict "root" . "component" "temporal-ui") -}}
+# --- Temporal backing Postgres ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $tpg }}
+  labels:
+    {{- include "grounder.labels" . | nindent 4 }}
+    {{- include "grounder.selectorLabels" (dict "root" . "component" "temporal-postgres") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "grounder.selectorLabels" (dict "root" . "component" "temporal-postgres") | nindent 4 }}
+  ports:
+    - name: postgres
+      port: {{ .Values.temporal.postgres.port }}
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $tpg }}
+  labels:
+    {{- include "grounder.labels" . | nindent 4 }}
+    {{- include "grounder.selectorLabels" (dict "root" . "component" "temporal-postgres") | nindent 4 }}
+spec:
+  serviceName: {{ $tpg }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "grounder.selectorLabels" (dict "root" . "component" "temporal-postgres") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "grounder.labels" . | nindent 8 }}
+        {{- include "grounder.selectorLabels" (dict "root" . "component" "temporal-postgres") | nindent 8 }}
+    spec:
+      containers:
+        - name: postgres
+          image: "{{ .Values.temporal.postgres.image.repository }}:{{ .Values.temporal.postgres.image.tag }}"
+          imagePullPolicy: {{ .Values.temporal.postgres.image.pullPolicy }}
+          ports:
+            - name: postgres
+              containerPort: {{ .Values.temporal.postgres.port }}
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.temporal.postgres.user | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.temporal.postgres.database | quote }}
+            {{- include "grounder.secretEnv" (dict "root" . "name" "POSTGRES_PASSWORD" "key" .Values.secrets.keys.temporalPgPassword) | nindent 12 }}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.temporal.postgres.user | quote }}]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.temporal.postgres.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.temporal.postgres.storage.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.temporal.postgres.storage.size }}
+---
+# --- Temporal server (auto-setup) ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $tmp }}
+  labels:
+    {{- include "grounder.labels" . | nindent 4 }}
+    {{- include "grounder.selectorLabels" (dict "root" . "component" "temporal") | nindent 4 }}
+spec:
+  # ClusterIP only — the frontend is never on a default Ingress (spec/009 REQ-909).
+  type: ClusterIP
+  selector:
+    {{- include "grounder.selectorLabels" (dict "root" . "component" "temporal") | nindent 4 }}
+  ports:
+    - name: frontend
+      port: {{ .Values.temporal.frontendPort }}
+      targetPort: frontend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $tmp }}
+  labels:
+    {{- include "grounder.labels" . | nindent 4 }}
+    {{- include "grounder.selectorLabels" (dict "root" . "component" "temporal") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "grounder.selectorLabels" (dict "root" . "component" "temporal") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "grounder.labels" . | nindent 8 }}
+        {{- include "grounder.selectorLabels" (dict "root" . "component" "temporal") | nindent 8 }}
+    spec:
+      containers:
+        - name: temporal
+          image: "{{ .Values.temporal.image.repository }}:{{ .Values.temporal.image.tag }}"
+          imagePullPolicy: {{ .Values.temporal.image.pullPolicy }}
+          ports:
+            - name: frontend
+              containerPort: {{ .Values.temporal.frontendPort }}
+          env:
+            - name: DB
+              value: postgres12
+            - name: DB_PORT
+              value: {{ .Values.temporal.postgres.port | quote }}
+            - name: POSTGRES_USER
+              value: {{ .Values.temporal.postgres.user | quote }}
+            - name: POSTGRES_SEEDS
+              value: {{ $tpg | quote }}
+            {{- include "grounder.secretEnv" (dict "root" . "name" "POSTGRES_PWD" "key" .Values.secrets.keys.temporalPgPassword) | nindent 12 }}
+          resources:
+            {{- toYaml .Values.temporal.resources | nindent 12 }}
+{{- if .Values.temporal.ui.enabled }}
+---
+# --- Temporal UI ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $tui }}
+  labels:
+    {{- include "grounder.labels" . | nindent 4 }}
+    {{- include "grounder.selectorLabels" (dict "root" . "component" "temporal-ui") | nindent 4 }}
+spec:
+  # ClusterIP only — the UI is never on a default Ingress (spec/009 REQ-909).
+  type: ClusterIP
+  selector:
+    {{- include "grounder.selectorLabels" (dict "root" . "component" "temporal-ui") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.temporal.ui.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $tui }}
+  labels:
+    {{- include "grounder.labels" . | nindent 4 }}
+    {{- include "grounder.selectorLabels" (dict "root" . "component" "temporal-ui") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "grounder.selectorLabels" (dict "root" . "component" "temporal-ui") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "grounder.labels" . | nindent 8 }}
+        {{- include "grounder.selectorLabels" (dict "root" . "component" "temporal-ui") | nindent 8 }}
+    spec:
+      containers:
+        - name: temporal-ui
+          image: "{{ .Values.temporal.ui.image.repository }}:{{ .Values.temporal.ui.image.tag }}"
+          imagePullPolicy: {{ .Values.temporal.ui.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.temporal.ui.port }}
+          env:
+            - name: TEMPORAL_ADDRESS
+              value: "{{ $tmp }}:{{ .Values.temporal.frontendPort }}"
+{{- end }}

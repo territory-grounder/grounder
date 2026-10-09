@@ -1,0 +1,33 @@
+{
+  "_comment": "AUTO-PROMOTED falsifiability scenarios: live-scored deviations from core/falsify that reproduced, de-duplicated against the frozen fixture + sealed holdout, and SETTLED to a real cascade over the estate graph. Each expect_falsifiable is the deterministic scorer's OWN output for the real observed cascade (the known-correct expected outcome), not a guess. Additive only — promotion never removes, reweights, or relaxes a hand-authored case or the gate threshold, and never feeds the sealed holdout. Regenerate with `go run ./tools/evalgate --discovery`.",
+  "scenarios": [
+    {
+      "ref": "disc-27d7fc3e",
+      "target_host": "dc1pve04",
+      "site": "dc1",
+      "expect_falsifiable": true,
+      "observed": [
+        {
+          "host": "dc1cap01",
+          "rule": "HostDown",
+          "site": "dc1"
+        },
+        {
+          "host": "dc1claude01",
+          "rule": "HostDown",
+          "site": "dc1"
+        },
+        {
+          "host": "dc1dmz01",
+          "rule": "HostDown",
+          "site": "dc1"
+        },
+        {
+          "host": "dc1redis02",
+          "rule": "HostDown",
+          "site": "dc1"
+        }
+      ]
+    }
+  ]
+}
