@@ -1,0 +1,138 @@
+{
+  "feature": "prediction-gate.feature",
+  "note": "Honest coverage frontier for the remediation lane (fails CLOSED). status: present = a runnable step drives real code and passes; pending = specified behavior whose oracle is not bound yet (core/predict.PredictionGate + core/verify.Verifier are Phase 2; core/manifest exists but its REQ-102b oracle binding is deferred to the parent); retrospective_gap = shipped without a driving test (must be zero for governed behavior, INV-22). All scenarios are pending here \u2014 the parent binds the green ones.",
+  "scenarios": [
+    {
+      "name": "A prediction is committed before the approval poll starts",
+      "req": "REQ-101",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "A proposal with no committed prediction is denied",
+      "req": "REQ-102",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "An approval poll cannot be built without a gated prediction",
+      "req": "REQ-102",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "Analysis-only mode records the prediction without gating the approval",
+      "req": "REQ-105",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "The mechanical verdict is written only by the deterministic verifier",
+      "req": "REQ-103",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "The acting model has no write path to the verdict columns",
+      "req": "REQ-103",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "The verifier returns a typed verdict detail whose enum matches the bare verdict",
+      "req": "REQ-103a",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "A deviation verdict blocks auto-resolution",
+      "req": "REQ-104",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "The action_id is threaded unchanged through predict approve execute and verify",
+      "req": "REQ-102",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "A mid-session action change mints a new action_id and forces a re-gate",
+      "req": "REQ-102",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "The manifest action_id changes when any action field changes",
+      "req": "REQ-102b",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "A sealed manifest asserts its own action_id and rejects a foreign one",
+      "req": "REQ-102b",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "The sole ParseProposal entry point rejects every second grammar",
+      "req": "REQ-102",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "A cross-site alert with both sites estate-known and different is excluded from deviation evidence",
+      "req": "REQ-107",
+      "status": "present",
+      "test": "TestScopedCrossSiteBothKnownDifferentIsExcluded"
+    },
+    {
+      "name": "An unknown-site host is never cross-site-excluded",
+      "req": "REQ-107",
+      "status": "present",
+      "test": "TestScopedUnknownSiteHostStillDeviates"
+    },
+    {
+      "name": "A family-sibling rule on a predicted host scores as the predicted failure mode",
+      "req": "REQ-108",
+      "status": "present",
+      "test": "TestScopedFamilySiblingRuleOnPredictedHostIsNotAMismatch"
+    },
+    {
+      "name": "An executed prediction is falsifiability-scored but receives no forecast verdict",
+      "req": "REQ-109",
+      "status": "present",
+      "test": "TestScoreDueExecutedPredictionGetsNoForecastVerdict"
+    },
+    {
+      "name": "A pre-existing alert at commit time does not deviate a forecast",
+      "req": "REQ-109",
+      "status": "present",
+      "test": "TestScoreDuePreexistingBaselineAlertIsNotADeviation"
+    },
+    {
+      "name": "The shuffled control is not laundered by verdict scoping",
+      "req": "REQ-109",
+      "status": "present",
+      "test": "TestScoreDueScopingNeverLaundersTheShuffledControl"
+    },
+    {
+      "name": "A cascade slower than the retired fixed window adjudicates as a hit",
+      "req": "REQ-110",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "An edge with fast observed history keeps a tight window",
+      "req": "REQ-110",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    },
+    {
+      "name": "Widening the observation window does not raise the shuffled control match rate",
+      "req": "REQ-110",
+      "status": "present",
+      "test": "TestPredictionGateAcceptance"
+    }
+  ]
+}

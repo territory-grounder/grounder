@@ -1,0 +1,218 @@
+/* ============================================================================
+   MANIFEST module (mf-) — the world-model REVIEW surface (spec/027 REQ-2703,
+   epic TG-227 plane 2). Answers "what did discovery find, and what have I
+   granted?" — and lets an operator adopt, reject, or retire each entry.
+
+   THE ADMIN REVIEWS, NEVER AUTHORS. There is no create control on this surface
+   and no endpoint behind one (paradigm rule 9): discovery is the only author of
+   rows; a human only ever decides on them. That is the difference between
+   reviewing a generated manifest and hand-typing an allowlist, which is the
+   configuration-project failure this whole plane exists to remove.
+
+   HONESTY CONTRACT: no fixture (a fake row here is a fake ACTUATION TARGET one
+   click from being granted); guarded liveGet at view render; 503 renders an
+   honest unavailable state; an empty spine an honest empty state (INV-15); the
+   rail badge shows the REAL draft count only, em-dash until one exists.
+   Controls are data-keyed off the SERVER-computed caller_can_act — never off
+   the client's own guess about who it is.
+   ============================================================================ */
+
+var mfUI = { busy: null, err: null, note: null, page: null };
+
+function mfRel(iso) {
+  if (!iso) return "—";
+  const t = Date.parse(iso);
+  if (isNaN(t)) return String(iso);
+  let s = Math.floor((Date.now() - t) / 1000);
+  if (s < 0) return "just now";
+  if (s < 60) return s + "s ago";
+  const m = Math.floor(s / 60); if (m < 60) return m + "m ago";
+  const hh = Math.floor(m / 60); if (hh < 24) return hh + "h ago";
+  const d = Math.floor(hh / 24); if (d < 30) return d + "d ago";
+  const mo = Math.floor(d / 30); if (mo < 12) return mo + "mo ago";
+  return Math.floor(mo / 12) + "y ago";
+}
+
+function mfSec(lbl, title) {
+  return h("div", { class: "sec" },
+    h("span", { class: "lbl", style: "color:var(--map)" }, lbl),
+    h("h3", {}, title),
+    h("span", { class: "rule" }));
+}
+
+/* the REAL draft count on the rail badge — never a fabricated number. */
+function mfBadge(n) {
+  document.querySelectorAll('[data-badge="manifest"]').forEach(el => { el.textContent = String(n); });
+}
+
+/* the write lane: three closed verbs, each carrying a mandatory rationale. */
+async function mfPost(id, verb, rationale) {
+  return fetch("/api/v1/manifest/entries/" + encodeURIComponent(id) + "/" + encodeURIComponent(verb), {
+    method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rationale: rationale })
+  });
+}
+
+async function mfWriteFail(r) {
+  let server = ""; try { server = (await r.text()).trim().slice(0, 200); } catch (e) {}
+  if (r.status === 401 || r.status === 403) return "operator session required — sign in to review the manifest";
+  if (r.status === 429) return "rate limited — adoptions are paced so a runaway client cannot grant the estate faster than a human could review it";
+  if (r.status === 409) return "refused: not a legal transition from this status (a rejected or retired row is terminal — a rework is a NEW draft from discovery)";
+  if (r.status === 400) return "refused: " + (server || "rationale is required — every grant and revocation states why");
+  if (r.status === 503 || r.status === 404 || r.status === 405) return "write path unavailable — the control plane is serving the read surface only";
+  return "write failed (" + r.status + ")" + (server ? " — " + server : "");
+}
+
+async function mfAct(entry, verb) {
+  const prompt_ = verb === "adopt"
+    ? "Adopt " + entry.name + " — why is this a target TG may act on?"
+    : (verb === "reject" ? "Reject " + entry.name + " — why not?" : "Retire " + entry.name + " — why revoke this grant?");
+  const rationale = window.prompt(prompt_, "");
+  /* Cancel is a real answer: no rationale, no decision. */
+  if (rationale === null) return;
+  if (!rationale.trim()) { mfUI.err = "a rationale is required — every grant and revocation states why"; mfRender(); return; }
+  mfUI.busy = entry.id + ":" + verb; mfUI.err = null; mfUI.note = null; mfRender();
+  try {
+    const r = await mfPost(entry.id, verb, rationale.trim());
+    if (!r.ok) { mfUI.err = await mfWriteFail(r); }
+    else { mfUI.note = verb + "ed " + entry.name + " — recorded on the ledger"; mfUI.page = null; }
+  } catch (e) {
+    mfUI.err = "write failed — the control plane did not answer";
+  }
+  mfUI.busy = null;
+  mfRender();
+}
+
+/* ---- the diff panel: what discovery PROPOSES against what is already GRANTED ----
+   Not a text diff — an entity-set diff, which is the comparison an operator actually makes here. */
+function mfDiffPanel(entries) {
+  const granted = entries.filter(e => e.status === "approved" || e.status === "retired_candidate_stale");
+  const drafts = entries.filter(e => e.status === "draft");
+  const box = h("div", { class: "wrapcard" });
+  box.append(h("div", { class: "sec", style: "margin:0;padding:10px 12px 0" },
+    h("span", { class: "lbl", style: "color:var(--accent)" }, "diff"),
+    h("h3", {}, "granted → proposed"),
+    h("span", { class: "rule" }),
+    h("span", { class: "lbl", style: "font-size:9px" }, "+" + drafts.length + " proposed · " + granted.length + " granted")));
+  const d = h("div", { class: "mf-diff" });
+  granted.forEach(e => d.append(h("div", { class: "mf-dln same" },
+    h("span", { class: "gut" }, " "), h("span", {}, e.entity_type + " " + e.name))));
+  drafts.forEach(e => d.append(h("div", { class: "mf-dln add" },
+    h("span", { class: "gut" }, "+"), h("span", {}, e.entity_type + " " + e.name))));
+  if (!granted.length && !drafts.length) {
+    d.append(h("div", { class: "mf-dln same" }, h("span", { class: "gut" }, " "), h("span", {}, "nothing discovered yet")));
+  }
+  box.append(d);
+  return box;
+}
+
+function mfStatusPill(status) {
+  const cls = status === "retired_candidate_stale" ? "stale" : status;
+  const label = status === "retired_candidate_stale" ? "stale · still granted" : status;
+  return h("span", { class: "mf-st " + cls }, label);
+}
+
+function mfActions(e) {
+  /* Data-keyed off the SERVER's caller_can_act. A control the caller cannot use is rendered DISABLED
+     rather than hidden: hiding it would leave a read-only operator wondering where the queue went, and
+     enabling it would promise an action the server will refuse. */
+  const can = !!e.caller_can_act;
+  const busy = v => mfUI.busy === (e.id + ":" + v);
+  const btn = (verb, label) => h("button", {
+    class: "mf-btn " + verb, "data-act": verb, "data-entry": String(e.id),
+    disabled: (!can || !!mfUI.busy) ? "" : null,
+    title: can ? "" : "read-only: an operator session is required to decide on manifest entries",
+    onclick: () => mfAct(e, verb)
+  }, busy(verb) ? "…" : label);
+  const acts = h("div", { class: "mf-act" });
+  if (e.status === "draft") { acts.append(btn("adopt", "Adopt"), btn("reject", "Reject")); }
+  else if (e.status === "approved" || e.status === "retired_candidate_stale") { acts.append(btn("retire", "Retire")); }
+  else { acts.append(h("span", { class: "mf-src" }, "terminal")); }
+  return acts;
+}
+
+function mfTable(entries) {
+  const head = h("tr", {},
+    h("th", {}, "status"), h("th", {}, "type"), h("th", {}, "name"), h("th", {}, "host"),
+    h("th", {}, "source"), h("th", {}, "conf"), h("th", {}, "grants"), h("th", {}, "last seen"),
+    h("th", {}, "review"));
+  const body = entries.map(e => h("tr", {},
+    h("td", {}, mfStatusPill(e.status)),
+    h("td", {}, h("span", { class: "mf-src" }, e.entity_type)),
+    h("td", {}, h("span", { class: "mono" }, e.name)),
+    h("td", {}, h("span", { class: "mf-src" }, e.host || "—")),
+    h("td", {}, h("span", { class: "mf-src" }, e.source || "—")),
+    h("td", {}, h("span", { class: "mf-conf" }, (typeof e.confidence === "number") ? e.confidence.toFixed(2) : "—")),
+    /* The honest answer to "does adopting this actually grant anything?" — computed by the SERVER from
+       the same function that materializes the allowlist, so the label can never drift from the effect. */
+    h("td", {}, e.materializes
+      ? h("span", { class: "mf-mat" }, e.allowlist_kind + " allowlist")
+      : h("span", { class: "mf-mat none", title: "this entity type materializes into no leaf allowlist — adopting it grants no actuation" }, "grants nothing")),
+    h("td", { title: e.last_seen_at || "" }, mfRel(e.last_seen_at)),
+    h("td", {}, mfActions(e))));
+  return h("div", { class: "wrapcard" }, h("div", { class: "mf-scroll" },
+    h("table", { class: "tbl" }, h("thead", {}, head), h("tbody", {}, ...body))));
+}
+
+var mfSlot = null;
+function mfRender() {
+  if (!mfSlot) return;
+  const page = mfUI.page;
+  const kids = [];
+  if (mfUI.err) kids.push(h("div", { class: "mf-err" }, mfUI.err));
+  if (mfUI.note) kids.push(h("div", { class: "mf-note" }, mfUI.note));
+  if (!page) {
+    kids.push(h("div", { class: "empty", style: "padding:28px" }, h("div", { class: "desc" }, "Loading the reviewable world model…")));
+    mfSlot.replaceChildren(...kids);
+    mfLoad();
+    return;
+  }
+  const entries = page.entries || [];
+  if (!entries.length) {
+    kids.push(h("div", { class: "empty", style: "padding:34px 20px" },
+      h("div", { class: "big" }, "Discovery has not drafted anything yet"),
+      h("div", { class: "desc" }, "The re-discovery pass drafts what the estate actually runs. An empty manifest is a real state — nothing is invented to fill it.")));
+    mfSlot.replaceChildren(...kids);
+    return;
+  }
+  if (!page.caller_can_act) {
+    kids.push(h("div", { class: "mf-note" },
+      "Read-only: reviewing the manifest requires an operator session. The controls below are shown disabled rather than hidden, so the queue is never silently missing."));
+  }
+  kids.push(mfDiffPanel(entries), mfTable(entries));
+  mfSlot.replaceChildren(...kids);
+}
+
+async function mfLoad() {
+  let page;
+  try { page = await liveGet("/v1/manifest?limit=500"); }
+  catch (e) {
+    mfSlot.replaceChildren(h("div", { class: "empty", style: "padding:34px 20px" },
+      h("div", { class: "big" }, "Manifest surface unavailable"),
+      h("div", { class: "desc" }, "The read spine answered fail-closed (503) or is not wired. Nothing is shown rather than something invented (INV-15).")));
+    return;
+  }
+  mfUI.page = page;
+  mfBadge((page && typeof page.drafts === "number") ? page.drafts : 0);
+  mfRender();
+}
+
+function mfView() {
+  const wrap = h("div");
+  if (typeof liveState === "undefined" || !liveState.on) {
+    wrap.append(h("div", { class: "empty", style: "padding:52px 20px" },
+      h("div", { class: "big" }, "World model — live only"),
+      h("div", { class: "desc" }, "This surface reviews live, discovered estate entries. It has no preview data: a fabricated row here would be a fabricated actuation target.")));
+    return wrap;
+  }
+  mfUI.err = null; mfUI.note = null; mfUI.page = null;
+  wrap.append(h("p", { class: "desc mf-intro" },
+    "The auto-drafted world model: what discovery found the estate actually runs. You ",
+    h("b", {}, "review"),
+    " these — adopt, reject, or retire — and an adopted entry becomes an allowlist source the actuation leaf will accept. There is no control here to author a target by hand: discovery proposes, you decide, and the leaf still refuses everything it was not handed."));
+  mfSlot = h("div", {});
+  wrap.append(mfSec("LIVE · spec/027", "Reviewable estate — discovery drafts, you grant"), mfSlot);
+  mfRender();
+  return wrap;
+}

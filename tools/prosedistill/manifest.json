@@ -1,0 +1,635 @@
+{
+  "readme": [
+    "TG-477 (epic TG-114 C-8): the distillation manifest for the FIRST prose-distillation batch — the",
+    "predecessor's skill library, re-authored per ADR-0012 into skills/<class>/<name>/SKILL.md drafts.",
+    "",
+    "THIS FILE IS THE INVENTORY TRUTH. The plan said 'the predecessor's 12 skills'; what is actually on",
+    "disk is 24 SKILL.md prose sources (9 packaged skills + 15 shell-skill prose files) plus 2 script-only",
+    "skill directories that carry no prose. Every one of the 26 appears below with a disposition:",
+    "  distilled — re-authored into tools/prosedistill/distilled/<target_name>.md and composed into the",
+    "              skills/ tree by tools/prosedistill (13: 10 class=skill + 3 class=runbook);",
+    "  merged    — its distinct judgment was folded into another entry's distilled target (3);",
+    "  skipped   — not distilled, with the reason (10). The dominant skip reason is honesty about",
+    "              duplication: TG already re-authored several of these protocols into the live compiled",
+    "              seed library (agent/skills/seeds/, TG-471) — minting a second draft of a live protocol",
+    "              would create exactly the two-sources drift ADR-0017 exists to prevent.",
+    "",
+    "Auxiliary source files (alert-status/COMMANDS.md, drift-check/CHECKS.md, cost-report/QUERIES.sql and",
+    "every *.sh) are estate command/query sheets: ADR-0012 strips bundled executables categorically —",
+    "their durable judgment, where any exists, was captured via the owning SKILL.md entry below.",
+    "",
+    "source_path is RELATIVE to the predecessor checkout root (the tool's --source-root flag) so no",
+    "machine-local absolute path is ever committed. Seeding these drafts into the skill store is",
+    "DELIBERATELY NOT part of this batch — see the doc comment in main.go.",
+    "",
+    "BATCHES 2+3 (TG-478 + TG-479, appended 2026-08-14). Batch 2 is the predecessor's specialist agent",
+    "definitions (.claude/agents/ — 11 on disk, matching the plan's 11): 5 distilled (1 skill + 4",
+    "runbook), 1 merged, 5 skipped. The dominant skip reason is domain: four specialists are software-",
+    "development seats (CI debugging, code exploration/review, cross-repo impact) — TG's agent decision",
+    "path is estate triage, not software development — and one charters the predecessor's operator-",
+    "education module, a plane TG does not have. Batch 3 is the predecessor's runbook corpus",
+    "(docs/runbooks/ — 30 prose files on disk, matching the plan's 30): 14 distilled (1 skill + 13",
+    "runbook), 6 merged, 10 skipped. Skips split three ways: safety/trial governance that in TG is CODE",
+    "(the op-class registry, mode chokepoint, flywheel eval gate) and which ADR-0017 keeps out of the",
+    "store plane by absence; software-development orchestration (parallel dev, project bootstrap, spec",
+    "lint, repo onboarding) outside TG's domain; and one-off repo-state or dev-host janitor docs with no",
+    "durable estate judgment. wiki/operations/runbooks.md was inspected and is NOT a distinct source —",
+    "it is a generated compilation of the openclaw skill files batch 1 already inventoried.",
+    "",
+    "BATCH 4 (TG-85, epic TG-78, appended 2026-08-19): the Cisco IOS/ASA triage command-layer pack — 6",
+    "distilled runbook entries. UNLIKE batches 1-3, these are NOT ported from predecessor prose (the",
+    "predecessor's Cisco prose corpus — cisco-asa-specialist, tunnel-failover — is already fully",
+    "inventoried above); source_path departs from 'relative to the predecessor checkout root' and instead",
+    "names the primary Cisco vendor documentation page each entry is grounded in, per entry's own notes",
+    "field and each artifact's own Doc basis section. Companion to firewall-triage-patterns (batch 2's",
+    "judgment layer distilled from cisco-asa-specialist): that pack covers which cause to suspect first;",
+    "this batch covers the exact show/debug commands, output interpretation, and remediation.",
+    "",
+    "BATCH 5 (TG-78, appended 2026-08-19): the Kubernetes triage command-layer pack — 6 distilled",
+    "runbook entries, same shape as batch 4: NOT ported from predecessor prose; source_path names the",
+    "primary kubernetes.io reference per entry, and each artifact's own Doc basis section lists every",
+    "page grounding a specific command or claim. Distinct from k8s-alert-vetting (batch 2, the",
+    "k8s-diagnostician judgment layer: which alert to trust, when to suspect the dependency layer",
+    "below) and the live compiled seed k8s-triage.md (fix-shape lanes): this batch is the COMMAND",
+    "layer underneath both — the exact kubectl/crictl/etcdctl to run per failure class (pod",
+    "crashloop/OOMKilled, pod pending/scheduling, node NotReady/kubelet, PVC/StorageClass binding,",
+    "Service/Ingress/CoreDNS, control-plane apiserver/etcd degradation), how to read the output, and",
+    "the remediation. Tool-gated like every other runbook-class K8s entry in this manifest (ADR-0012):",
+    "TG has no Kubernetes read tool wired into the agent's own tool registry —",
+    "modules/actuation/kubernetes exists as a declared-but-disabled reference actuation module (Phase",
+    "0/1, a deniedRunner, no execution path; modules/bootstrap/bootstrap.go) — so this batch is",
+    "advisory knowledge-library content until a vendor-official, read-only cluster surface is wired",
+    "behind the interceptor."
+  ],
+  "entries": [
+    {
+      "source_path": ".claude/skills/alert-status/SKILL.md",
+      "disposition": "distilled",
+      "target_name": "alert-queue-review",
+      "class": "skill",
+      "description": "Review the whole active alert queue before any single-alert deep dive — age, staleness, flapping, and incident grouping",
+      "notes": "COMMANDS.md (8 estate data-source commands) stripped; the queue-review judgment generalizes onto get-active-alerts."
+    },
+    {
+      "source_path": ".claude/skills/chatops-workflow/SKILL.md",
+      "disposition": "distilled",
+      "target_name": "incident-lifecycle",
+      "class": "runbook",
+      "description": "The phase map of an alert-triggered incident session — entry question and exit criterion per phase, no phase skipped",
+      "notes": "Runbook class — a process map, not one behavioral unit. Its embedded behavioral protocols (debugging protocol, proving-your-work, shortcuts-to-resist, loop red-flags) already live as TG compiled seeds (agent/skills/seeds/, TG-471) and are deliberately NOT re-drafted here."
+    },
+    {
+      "source_path": ".claude/skills/conservative-remediation/SKILL.md",
+      "disposition": "skipped",
+      "notes": "Duplicative of the live compiled seed agent/skills/seeds/conservative-remediation.md (TG-471): the situation-to-conservative-reversible-action judgment is already TG-authored and agent-loaded. A second draft of a live protocol is the two-sources drift ADR-0017 forbids. The source's auto-execute authority claims are the predecessor's control shape; in TG that authority lives in the op-class registry and the mode chokepoint, never in prose."
+    },
+    {
+      "source_path": ".claude/skills/cost-report/SKILL.md",
+      "disposition": "distilled",
+      "target_name": "cost-review",
+      "class": "runbook",
+      "description": "Periodic model-spend and session-quality review — category thresholds, variant comparison, trend, low-confidence sessions",
+      "notes": "Runbook class — operator-facing review knowledge, not agent loop competence. QUERIES.sql (predecessor SQLite schema) stripped; thresholds and anomaly judgment re-authored generically."
+    },
+    {
+      "source_path": ".claude/skills/drift-check/SKILL.md",
+      "disposition": "distilled",
+      "target_name": "drift-check",
+      "class": "skill",
+      "description": "Compare declared configuration against running state, report drift per surface, and let drift reshape the fix",
+      "notes": "CHECKS.md (4 estate check commands) stripped; declared-vs-running judgment re-authored onto TG reads plus a generic configuration source of truth."
+    },
+    {
+      "source_path": ".claude/skills/proactive-discovery/SKILL.md",
+      "disposition": "distilled",
+      "target_name": "amber-zone-discovery",
+      "class": "skill",
+      "description": "Find conditions degrading but not yet alerting, surface each once, and route findings by reversibility",
+      "notes": "The richer v2 of the pre-alert discovery pair; openclaw/skills/proactive-scan/SKILL.md merges into this target. Routing authority is re-authored to TG law — reversible findings become PROPOSALS through the governed gate; prose never authorizes actuation."
+    },
+    {
+      "source_path": ".claude/skills/team-formation/SKILL.md",
+      "disposition": "skipped",
+      "notes": "Obsolete for TG: charters a roster of the predecessor's eleven sub-agents — an architecture TG does not have (single governed loop with typed dispatch, INV-08). The residual idea (declare the investigation plan up front, advisory not mandatory) is too thin to stand alone and its TG surface (session trajectory) already exists."
+    },
+    {
+      "source_path": ".claude/skills/triage/SKILL.md",
+      "disposition": "skipped",
+      "notes": "Duplicative of the live compiled seed agent/skills/seeds/triage-protocol.md (TG-471), which is the TG re-authoring of this protocol onto the real tool vocabulary. Its remaining mechanics are TG-native systems already: evidence citation is proving-your-work, precedent consult is the precedent-recall target, typed confidence is core code."
+    },
+    {
+      "source_path": ".claude/skills/wiki-compile/SKILL.md",
+      "disposition": "skipped",
+      "notes": "Estate tool wrapper (drives a predecessor compiler script) with no durable decision content beyond run-and-report. TG's knowledge-library plane is its own epic item (ADR-0017 runbook class); nothing here survives re-authoring."
+    },
+    {
+      "source_path": "openclaw/skills/baseline-add/baseline-add.sh",
+      "disposition": "skipped",
+      "notes": "Script-only skill directory — no SKILL.md prose exists to distill; ADR-0012 strips bundled executables categorically."
+    },
+    {
+      "source_path": "openclaw/skills/codegraph-lookup/SKILL.md",
+      "disposition": "skipped",
+      "notes": "Out of TG's domain: code-graph queries over the predecessor's development repositories. TG's agent decision path is estate triage, not software development; no TG tool exists or is planned on this surface."
+    },
+    {
+      "source_path": "openclaw/skills/correlated-triage/SKILL.md",
+      "disposition": "distilled",
+      "target_name": "alert-burst-correlation",
+      "class": "skill",
+      "description": "Treat simultaneous multi-host alerts as one event — master plus children, a correlation verdict, one escalation",
+      "notes": "Ticket-system plumbing stripped; the master-child grouping and shared-upstream correlation judgment re-authored onto get-estate-context topology."
+    },
+    {
+      "source_path": "openclaw/skills/cross-tier-review/SKILL.md",
+      "disposition": "distilled",
+      "target_name": "independent-review",
+      "class": "skill",
+      "description": "Review another analysis by independently re-verifying claims — five checks, then an evidence-bound verdict",
+      "notes": "The gateway wire format and dev-task variant stripped; the five-check verification discipline and verdict vocabulary kept whole."
+    },
+    {
+      "source_path": "openclaw/skills/error-propagation/SKILL.md",
+      "disposition": "distilled",
+      "target_name": "failure-handoff",
+      "class": "skill",
+      "description": "When an investigation fails mid-flight, hand the next tier resumable structured context instead of a restart",
+      "notes": "Estate example block stripped; the handoff structure and the failure-as-evidence judgment kept."
+    },
+    {
+      "source_path": "openclaw/skills/escalate-to-claude/SKILL.md",
+      "disposition": "distilled",
+      "target_name": "escalation-boundary",
+      "class": "skill",
+      "description": "Escalate implementation and mutation work, answer information questions yourself from the source of truth",
+      "notes": "Webhook/session plumbing stripped. openclaw/skills/youtrack-lookup/SKILL.md merges into this target — its lookup-not-escalation boundary and never-answer-from-memory rules are the same judgment from the other side."
+    },
+    {
+      "source_path": "openclaw/skills/exec-safety/SKILL.md",
+      "disposition": "skipped",
+      "notes": "Deliberately NOT distilled as content: a prose blocked-command list is the predecessor's safety shape. In TG the blocked-action floor is code — the fail-closed interceptor, the op-class registry, and the never-auto floor — and ADR-0017 rules that safety prose never enters the store plane at all (enforced by absence). Landing it as store-bound draft content would invert that ruling."
+    },
+    {
+      "source_path": "openclaw/skills/infra-triage/SKILL.md",
+      "disposition": "distilled",
+      "target_name": "alert-deduplication",
+      "class": "skill",
+      "description": "One incident per fault — reuse open incidents, reopen ones under verification, link related, escalate recurrence",
+      "notes": "The pipeline choreography (ticket creation, webhook callbacks, custom fields) is estate plumbing and stripped; the dedup windows, reuse/reopen rules and recurrence-escalation judgment are the distilled content. The investigation protocol itself is the live seed triage-protocol.md, not re-drafted here."
+    },
+    {
+      "source_path": "openclaw/skills/k8s-triage/SKILL.md",
+      "disposition": "skipped",
+      "notes": "Duplicative of the live compiled seed agent/skills/seeds/k8s-triage.md (TG-471). Also tool-gated by ADR-0012: no further Kubernetes skill content until a vendor-official read-only tool surface is wired behind the interceptor."
+    },
+    {
+      "source_path": "openclaw/skills/lab-lookup/lab-lookup.sh",
+      "disposition": "skipped",
+      "notes": "Script-only skill directory — no SKILL.md prose exists to distill; ADR-0012 strips bundled executables categorically."
+    },
+    {
+      "source_path": "openclaw/skills/memory-recall/SKILL.md",
+      "disposition": "distilled",
+      "target_name": "precedent-recall",
+      "class": "skill",
+      "description": "Consult precedent before diagnosing, weigh it against live evidence, and treat empty history as a finding",
+      "notes": "openclaw/skills/playbook-lookup/SKILL.md merges into this target — own-outcome recall and incident-playbook lookup collapse onto TG's one precedent surface (get-incident-history)."
+    },
+    {
+      "source_path": "openclaw/skills/netbox-lookup/SKILL.md",
+      "disposition": "distilled",
+      "target_name": "identity-first-lookup",
+      "class": "skill",
+      "description": "Resolve what the target IS from the source of truth before diagnosing it, and stop on identity mismatch",
+      "notes": "The predecessor's CMDB subcommand sheet stripped; the identity-before-diagnosis ordering and mismatch-stop judgment re-authored onto get-estate-context."
+    },
+    {
+      "source_path": "openclaw/skills/operational-kb/SKILL.md",
+      "disposition": "skipped",
+      "notes": "Estate-only: node RAM sizes, hypervisor quirks, cluster rosters and access paths. ADR-0012 is explicit that estate specifics belong in the estate graph and configuration, not in prose; TG serves this via get-estate-context."
+    },
+    {
+      "source_path": "openclaw/skills/playbook-lookup/SKILL.md",
+      "disposition": "merged",
+      "target_name": "precedent-recall",
+      "notes": "Merged into precedent-recall: past-resolution lookup by host, rule, or incident id is the same competence as own-outcome recall on TG's single precedent surface; its present-the-id-date-confidence and say-when-empty rules are carried in that target."
+    },
+    {
+      "source_path": "openclaw/skills/proactive-scan/SKILL.md",
+      "disposition": "merged",
+      "target_name": "amber-zone-discovery",
+      "notes": "Merged into amber-zone-discovery: the v1 check table (disk, certificate expiry, stale work items) folds into the v2 amber-band set; the surface-vs-act split is superseded by the v2 reversibility routing."
+    },
+    {
+      "source_path": "openclaw/skills/security-triage/SKILL.md",
+      "disposition": "distilled",
+      "target_name": "security-finding-triage",
+      "class": "runbook",
+      "description": "Triage a scanner finding by identity, novelty against baseline, and exposure — deep verification is escalated",
+      "notes": "Runbook class, tool-gated: TG has no security-scanner read tools wired, so this lands as knowledge-library content; per ADR-0012 a skill-class version waits for a vendor-official read-only tool surface. Scanner host mapping and addresses stripped."
+    },
+    {
+      "source_path": "openclaw/skills/youtrack-lookup/SKILL.md",
+      "disposition": "merged",
+      "target_name": "escalation-boundary",
+      "notes": "Merged into escalation-boundary: the lookup-vs-escalation boundary and the run-the-read-never-answer-from-memory rule are the same judgment stated from the information side; tracker command mechanics are estate plumbing."
+    },
+    {
+      "source_path": ".claude/agents/ci-debugger.md",
+      "disposition": "skipped",
+      "notes": "Out of TG's domain: a software-development seat (CI pipeline failure diagnosis for the predecessor's product repos). TG's agent decision path is estate triage, not software development — the same boundary as batch 1's codegraph-lookup skip. Its flake-vs-regression judgment stays with the dev tooling."
+    },
+    {
+      "source_path": ".claude/agents/cisco-asa-specialist.md",
+      "disposition": "distilled",
+      "target_name": "firewall-triage-patterns",
+      "class": "runbook",
+      "description": "Perimeter-firewall triage judgment — uplink first on multi-site bursts, reboot-window awareness, protection-state cleanup, delete-then-recreate on stateful config",
+      "notes": "Runbook class, tool-gated: high-risk network CLIs are re-author-only per ADR-0012 and TG has no firewall tools wired. Device inventory, addresses, provider names, command sheets and legacy-cipher access recipes stripped; the durable judgment (shared-uplink-first ordering, watchdog-reboot windows, post-recovery protection-state cleanup, delete-then-recreate on stateful config, device-is-truth sync direction) re-authored generically."
+    },
+    {
+      "source_path": ".claude/agents/code-explorer.md",
+      "disposition": "skipped",
+      "notes": "Out of TG's domain: codebase research for the predecessor's development repos — the same boundary as batch 1's codegraph-lookup skip. No TG surface exists or is planned."
+    },
+    {
+      "source_path": ".claude/agents/code-reviewer.md",
+      "disposition": "skipped",
+      "notes": "Out of TG's domain: source-code review for the predecessor's development repos. Its one transferable idea — fresh-eyes review in a separate context with severity-ranked, evidence-cited findings — already lands in batch 1's independent-review target; the rest is dev-convention checklists."
+    },
+    {
+      "source_path": ".claude/agents/dependency-analyst.md",
+      "disposition": "skipped",
+      "notes": "Out of TG's domain: cross-repo refactoring impact analysis for the predecessor's development monorepo. No TG surface; the leaves-first change-ordering judgment is dev-workflow content."
+    },
+    {
+      "source_path": ".claude/agents/k8s-diagnostician.md",
+      "disposition": "distilled",
+      "target_name": "k8s-alert-vetting",
+      "class": "runbook",
+      "description": "Vet a Kubernetes alert against known recurring patterns and live cluster state before treating it as novel — the dependency layer below may own the fault",
+      "notes": "Runbook class, tool-gated (ADR-0012: no k8s skill until a vendor-official read-only tool surface is wired). Distinct from the live seed k8s-triage.md, which owns fix-shape lanes; this target owns alert VETTING — known-false-positive matching with confirmation, live-cluster-over-monitor liveness, storage-latency-to-control-plane cascade, drain gating. Cluster rosters, addresses and per-cluster known-issue rows stripped."
+    },
+    {
+      "source_path": ".claude/agents/security-analyst.md",
+      "disposition": "distilled",
+      "target_name": "security-deep-verification",
+      "class": "runbook",
+      "description": "The escalated tier a security finding hands into — verify exposure from an untrusted vantage, enrich with threat context, size blast radius, time-box remediation",
+      "notes": "Runbook class, tool-gated (no scanner, threat-intel or perimeter-ACL read tools wired). The complement of batch 1's security-finding-triage: that target is the triage seat which ESCALATES deep verification; this is the receiving protocol. Scanner topology, addresses and vendor endpoints stripped; the untrusted-vantage exposure rule, severity-moves-both-ways reasoning, audit-before-mass-delete and live-config-is-truth kept."
+    },
+    {
+      "source_path": ".claude/agents/storage-specialist.md",
+      "disposition": "distilled",
+      "target_name": "storage-alert-triage",
+      "class": "runbook",
+      "description": "Storage-incident judgment — no reboots to clear alerts, trajectory-graded capacity, observed replication before any drain, cascade-aware fix ordering",
+      "notes": "Runbook class, tool-gated: storage-vendor CLIs are not TG tools; check-host-disk covers guest filesystems only. Host inventory, NAS models and command sheets stripped; the reboot-cascade prohibition, vendor-panel-vs-host cross-check, days-until-full trajectory grading, observed-replication-before-drain and dependency-ordered fixes re-authored generically."
+    },
+    {
+      "source_path": ".claude/agents/teacher-agent.md",
+      "disposition": "skipped",
+      "notes": "Role definition for the predecessor's operator-education module — a plane TG does not have. Its load-bearing invariant (every factual claim cites a verbatim source; refuse rather than invent) is TG's live proving-your-work seed already; the rest is curriculum/quiz plumbing."
+    },
+    {
+      "source_path": ".claude/agents/triage-researcher.md",
+      "disposition": "distilled",
+      "target_name": "research-brief",
+      "class": "skill",
+      "description": "Gather structured facts for a decision without proposing — trust-ranked sources, full target names, alert vetting, and an obstacles section for what could not be observed",
+      "notes": "The predecessor's dispatch framing, host inventory, log-query sheets and diary plumbing stripped. The facts-not-fixes seat, the liveness-ranked source hierarchy for state questions (complementing identity-first-lookup's identity split), site-qualified naming, flap/maintenance vetting and the obstacles-section duty re-authored onto TG reads."
+    },
+    {
+      "source_path": ".claude/agents/workflow-validator.md",
+      "disposition": "merged",
+      "target_name": "live-workflow-edit-safety",
+      "notes": "Merged into live-workflow-edit-safety: its validate-before-deploy sequence, exactly-one-top-level-return rule and known-footgun checklist are the same judgment as the source runbook behind that target (the same founding outage), stated as a role; the platform-version-specific node checks and credential-id pins are estate plumbing."
+    },
+    {
+      "source_path": "docs/runbooks/auto-resolve-pipeline.md",
+      "disposition": "distilled",
+      "target_name": "incident-chain-trace",
+      "class": "runbook",
+      "description": "Follow one incident through every pipeline stage by a shared key — per-stage green is not chain health, and fixes are proven end-to-end",
+      "notes": "The predecessor's stage names, workflow ids and store queries stripped. Kept whole: a chain dark for months across layers while each stage passed alone; one incident-keyed query walking the whole chain; symptom-to-owning-stage red-flag tables; freshness over row-existence; prove fixes end-to-end, never at their own stage."
+    },
+    {
+      "source_path": "docs/runbooks/cli-session-rag-capture.md",
+      "disposition": "merged",
+      "target_name": "knowledge-base-hygiene",
+      "notes": "Merged into knowledge-base-hygiene: its durable judgment — discount lower-trust capture at retrieval rather than exclude, skip below-substance captures, roll back by retrieval suppression before deletion, never hand-edit machine-extracted rows — is that target's weighting and rollback rule set. The chunking/embedding/cron mechanics are predecessor plumbing."
+    },
+    {
+      "source_path": "docs/runbooks/combined-failure-response.md",
+      "disposition": "merged",
+      "target_name": "fault-injection-exercise",
+      "notes": "Merged into fault-injection-exercise: contributes multi-fault sequencing with cooldowns, the operator-attended rule for the widest scenarios, pre-declared maintenance state plus notification, phased priority-ordered recovery, and the fixed-window post-mortem landing where precedent lookup finds it. Scenario scripts and site specifics stripped."
+    },
+    {
+      "source_path": "docs/runbooks/daemon-worktree-cleanup.md",
+      "disposition": "skipped",
+      "notes": "Development-host build-artifact janitor (worktree/target-dir sweeper). Out of TG's domain; its careful bits (active-use detection before deletion, dry-run first, derived-artifacts-need-no-rollback) are dev-tooling judgment, not estate triage."
+    },
+    {
+      "source_path": "docs/runbooks/deploy-git-reconciliation.md",
+      "disposition": "skipped",
+      "notes": "A dated, one-off reconciliation plan for the predecessor's live working tree (branch-behind-main accounting, which local commits to preserve). Repo-state hygiene for one specific checkout, not durable estate judgment; TG's own tree discipline is session law, not store content."
+    },
+    {
+      "source_path": "docs/runbooks/dmz-container-recovery.md",
+      "disposition": "merged",
+      "target_name": "fault-injection-exercise",
+      "notes": "Merged into fault-injection-exercise: contributes the one-redundant-leg-at-a-time constraint, the fragile-system exclusion list, and the crash-loop check (restart counts as an instrument) before an exercise closes — the restart-count rule also surfaces in recovery-revalidation. Container inventories and endpoints stripped."
+    },
+    {
+      "source_path": "docs/runbooks/gateway-watchdog-deadman.md",
+      "disposition": "merged",
+      "target_name": "platform-self-healing",
+      "notes": "Merged into platform-self-healing: the dead-man judgment — heartbeat emitted on every exit path, absent()-guarded staleness so no-data pages, state recorded as found before healing, prove-the-alert-fires drills — is carried whole in that target; in the predecessor's own history this watchdog was consolidated into the platform controller. Metric names and host paths stripped."
+    },
+    {
+      "source_path": "docs/runbooks/gr-wan-monitor.md",
+      "disposition": "distilled",
+      "target_name": "site-isolation-triage",
+      "class": "runbook",
+      "description": "Decide DOWN vs ISOLATED when the telemetry path itself failed — two-sided probes, multi-anchor evidence, and out-of-band reporting",
+      "notes": "Born from a real mis-triage: a primary-WAN loss severed the tunnel mesh, the site stayed alive on a backup uplink, and from outside it read as needs-physical-access. Provider names, addresses, SMS plumbing and host specifics stripped; the isolated-vs-dark discrimination, distinct-device anchor spread, confirm windows, structural-gap honesty and the single-observer weakness kept."
+    },
+    {
+      "source_path": "docs/runbooks/infragraph.md",
+      "disposition": "distilled",
+      "target_name": "causal-graph-stewardship",
+      "class": "runbook",
+      "description": "Operate a learned causal dependency graph — visible staleness, capped mined confidence, fail-open advisory vs fail-closed actuation, mechanical adjudication",
+      "notes": "The predecessor's graph implementation (tables, query CLI, crons, phase plan) stripped. The invariants kept whole: self-expiring learned edges that degrade visibly; mined-confidence caps below suppression/actuation eligibility; advisory-fails-open vs actuation-fails-closed with no remediation-without-predictions; verdicts only from mechanical adjudication; resolver-before-write; coverage grown via authoritative sources in ROI order."
+    },
+    {
+      "source_path": "docs/runbooks/isp-degradation-response.md",
+      "disposition": "merged",
+      "target_name": "fault-injection-exercise",
+      "notes": "Merged into fault-injection-exercise: contributes the degradation-vs-outage fault class, protocol-timer reasoning (hold timers absorb injected latency), the DEGRADED-acceptable grade for stress scenarios, and post-exercise cleanup verification. Injection command sheets and provider tables stripped."
+    },
+    {
+      "source_path": "docs/runbooks/memory-promotion-pipeline.md",
+      "disposition": "distilled",
+      "target_name": "knowledge-base-hygiene",
+      "class": "runbook",
+      "description": "Periodic knowledge-base review — cluster and expire by durability class, weight lower-trust capture at retrieval, never auto-delete",
+      "notes": "Runbook class — operator review knowledge, like batch 1's cost-review. Embedding backend and paths stripped. Kept: report-proposes-review-disposes; identity-not-body clustering; durable-guidance never expires while snapshots do; no cross-durability merges; automate the cadence only after manual rounds prove signal quality. cli-session-rag-capture merges its retrieval-weighting judgment here."
+    },
+    {
+      "source_path": "docs/runbooks/n8n-code-node-safety.md",
+      "disposition": "distilled",
+      "target_name": "live-workflow-edit-safety",
+      "class": "runbook",
+      "description": "The unskippable sequence for editing code inside a live automation platform — snapshot, validate, push, re-fetch, test-fire — because dead code still parses",
+      "notes": "Runbook class, tool-gated: TG has no workflow-platform write tools (and would not auto-edit one). The 14-hour-outage lesson kept whole: dead code is parsed code; the validator gates the push; re-fetch proves the platform stored what was sent; loud-failure floor. Platform node ids, API commands and version-pinned check rows stripped; workflow-validator (batch 2) merges here."
+    },
+    {
+      "source_path": "docs/runbooks/new-project-bootstrap.md",
+      "disposition": "skipped",
+      "notes": "Software-development orchestration: greenfield project bootstrap for the predecessor's parallel-dev pipeline (spec interview, validator gates, slot onboarding). Out of TG's domain end to end."
+    },
+    {
+      "source_path": "docs/runbooks/openobserve-credential-rotation.md",
+      "disposition": "distilled",
+      "target_name": "credential-rotation-safety",
+      "class": "runbook",
+      "description": "Rotate credentials without lockout — recovery path first, verify the new value before cutting consumers over, and a secret that touched history is burned",
+      "notes": "Runbook class — credential-plane operator knowledge; TG has no rotation tools wired. Product names, host ids and the leaked value's specifics stripped. Kept: the sole-admin unrecoverable-lockout rule (why that rotation is operator-coordinated, never automated), the staged set-verify-cut order, durable-config over one-shot mutation, per-consumer verification, and history-burns-the-secret."
+    },
+    {
+      "source_path": "docs/runbooks/oxidized-role.md",
+      "disposition": "distilled",
+      "target_name": "config-backup-tiers",
+      "class": "runbook",
+      "description": "Config backups as independent tiers — live device outranks every copy, one writer per record path, and the dumb offline tier survives the clever one",
+      "notes": "Product and host names stripped. Kept: failure-independent tier layering; backup-never-authoritative (live device wins, disagreement is a drift finding for the record path); one-writer-per-record-path (the dual-push sync was retired precisely for conflicting commits); the deliberate dumbness of the survival tier; periodic keep-or-retire review with named triggers."
+    },
+    {
+      "source_path": "docs/runbooks/parallel-dev-feature.md",
+      "disposition": "skipped",
+      "notes": "Software-development orchestration: dispatching parallel code workers, merge coordination, work-unit state machines. Out of TG's domain — TG's agent decision path is estate triage; TG's own MR/worktree discipline is session law, not store content."
+    },
+    {
+      "source_path": "docs/runbooks/platform-controller.md",
+      "disposition": "distilled",
+      "target_name": "platform-self-healing",
+      "class": "runbook",
+      "description": "Govern the platform's own reconcile loop — heal Plane A only, idempotency-gated re-runs, heal caps that escalate, and a dead-man that outlives maintenance",
+      "notes": "Scheduler/job names and metric plumbing stripped. Kept whole: the two-plane boundary (heal the platform, never the mission — mission authority stays with the governed gates); idempotency safe-lists with escalate-on-unknown; cap-then-escalate, never thrash; maintenance suppresses heals but never the heartbeat; single-operator consolidation with visible retirement; ships-dark analysis-only default; honest oversight-vs-control wording. gateway-watchdog-deadman merges its dead-man judgment here."
+    },
+    {
+      "source_path": "docs/runbooks/post-recovery-validation.md",
+      "disposition": "distilled",
+      "target_name": "recovery-revalidation",
+      "class": "skill",
+      "description": "After any recovery, re-prove baseline layer by layer — own instrument per layer, suppression cleanup, polling-cycle patience, precedent-visible closure",
+      "notes": "Skill class: the ladder judgment generalizes onto TG reads (get-device-status, check-host-services, get-active-alerts, get-estate-context) and extends the prediction check TG's verifier owns. The predecessor's tunnel/routing/endpoint command sheets stripped; per-layer own-instrument checks, residue cleanup (suppression flags, protection state), lingering-alert patience and stuck-state descent kept."
+    },
+    {
+      "source_path": "docs/runbooks/prompt-patch-trials.md",
+      "disposition": "skipped",
+      "notes": "Deliberately NOT distilled as prose: candidate-trial governance (control arms, minimum samples, significance bars, promote-only-on-win) is CODE in TG — the flywheel's eval A/B and class gates (ADR-0012's model-generated-skill rejection; TG-475's mechanism). A prose restatement in the store plane would drift against the enforced mechanism — the batch 1 exec-safety shape."
+    },
+    {
+      "source_path": "docs/runbooks/repo-onboarding.md",
+      "disposition": "skipped",
+      "notes": "Predecessor-gateway plumbing: registering a new product repo into its dispatch (slot config, workflow dict mirrors, tracker project). Out of TG's domain; the mirrored-config-must-update-together caveat is carried by live-workflow-edit-safety's mirrored-sites rule."
+    },
+    {
+      "source_path": "docs/runbooks/rerank-service.md",
+      "disposition": "merged",
+      "target_name": "external-visibility-triage",
+      "notes": "Merged into external-visibility-triage: its durable judgment — a surviving fallback DOWNGRADES severity and must be stated with its measured quality cost; grade by residual capability, not component state — is that target's fallback rule. The GPU service's restart/cache/contention command sheet is estate plumbing and stripped."
+    },
+    {
+      "source_path": "docs/runbooks/risk-based-auto-approval.md",
+      "disposition": "skipped",
+      "notes": "Deliberately NOT distilled: the predecessor's risk-band/approval architecture (bands, never-auto floor, sentinel kill-switches, vote ledger) is the control shape that in TG is CODE — the risk classifier, op-class registry, mode chokepoint and never-auto floor — and ADR-0017 rules safety prose out of the store plane (enforced by absence), exactly the batch 1 exec-safety ruling."
+    },
+    {
+      "source_path": "docs/runbooks/scheduled-reboot-suppression.md",
+      "disposition": "distilled",
+      "target_name": "scheduled-event-suppression",
+      "class": "runbook",
+      "description": "Suppress intentional scheduled events with a conjunctive safety floor — never critical, behavioral confirmation, strict windows, fail-open, suppress-then-verify",
+      "notes": "The predecessor's matcher implementation (tables, crons, metric names, debug ladder) stripped. The safety design kept whole: conjunctive guards each failing OPEN to escalate; never-suppress-critical; observe-before-live behavioral confirmation; host-local-timezone window math; off-schedule instances are real incidents; suppress-then-verify with force-reopen and paging; ships dark behind an operator control with instant kill."
+    },
+    {
+      "source_path": "docs/runbooks/seaweedfs-cross-site-replication.md",
+      "disposition": "distilled",
+      "target_name": "diverged-replica-triage",
+      "class": "runbook",
+      "description": "Intermittent success through a load balancer means diverged replicas — read each replica, find the stalled checkpoint, search for siblings, treat backfill as separate work",
+      "notes": "Runbook class, tool-gated (cluster/storage read tools). Vendor commands, cluster contexts and IaC variable mechanics stripped. Kept: per-replica reads over the balanced endpoint (the incident's second, hidden defect was found only this way); the recurring failure SHAPE (persisted checkpoint against a garbage-collected log) and the search-for-siblings duty; diagnose-before-fixing between look-alike modes; the forward-fix vs backfill separation."
+    },
+    {
+      "source_path": "docs/runbooks/skill-versioning.md",
+      "disposition": "skipped",
+      "notes": "Predecessor prose-library governance (semver bump rules for its skill files). TG's artifact versioning belongs to the store plane and its governed write path (ADR-0017; this pipeline stamps 0.1.0-distilled) — a second versioning law living in store prose would drift against the owning mechanism."
+    },
+    {
+      "source_path": "docs/runbooks/spec-lint-failures.md",
+      "disposition": "skipped",
+      "notes": "Per-check remediation sheet for the predecessor's project-bootstrap spec validator. Software-development tooling outside TG's domain; TG's spec lattice has its own gates and their documentation lives with them."
+    },
+    {
+      "source_path": "docs/runbooks/synthetic-incident-canary.md",
+      "disposition": "distilled",
+      "target_name": "synthetic-probe-isolation",
+      "class": "runbook",
+      "description": "A pipeline canary earns trust by structural isolation — throwaway state, per-stage assertions, and a leak metric proving the isolation itself",
+      "notes": "Script paths, stage names and metric plumbing stripped. Kept: structural isolation over behavioral promises (throwaway store, no real actuation, synthetic artifacts structurally unable to satisfy real gates); the leak metric as a paged top-severity signal; per-stage grading with earliest-failure ownership; staleness/absent alerting on the canary itself; disable-until-leak-zero on any isolation regression."
+    },
+    {
+      "source_path": "docs/runbooks/teacher-agent.md",
+      "disposition": "skipped",
+      "notes": "Operations runbook for the predecessor's operator-education module (crons, dashboards, operator lifecycle) — the module TG does not have; pairs with the batch 2 teacher-agent specialist skip."
+    },
+    {
+      "source_path": "docs/runbooks/tunnel-failover.md",
+      "disposition": "distilled",
+      "target_name": "fault-injection-exercise",
+      "class": "runbook",
+      "description": "Deliberate fault injection with pre-verified backups, staged expectations, time-bound validation, dead-man rollback, and a blast-radius floor",
+      "notes": "Runbook class — drills are operator actuation, outside the agent's lane entirely. Tunnel inventories, device commands and provider names stripped. Kept: pre-verify the surviving path; written expected-behavior timelines; time-bound machine-checkable validation markers; recovery that clears protection-system grudges; dead-man auto-rollback; never touch the production-carrying transit layer. isp-degradation-response, combined-failure-response and dmz-container-recovery merge here."
+    },
+    {
+      "source_path": "docs/runbooks/upstream-bgp-failure.md",
+      "disposition": "distilled",
+      "target_name": "external-visibility-triage",
+      "class": "runbook",
+      "description": "Triage outside-observer claims about reachability — independent vantages, instrument health, self-inflicted check, severity by remaining redundancy",
+      "notes": "Runbook class, tool-gated (no external-routing or internet-visibility tools wired). Autonomous-system numbers, prefixes, provider names and exporter paths stripped. Kept: independent-vantage confirmation before trusting one observer; instrument-health and data-source sanity (a dead source makes your alerts noise); the did-we-cause-this self-check; severity graded by remaining redundancy; absorption windows for known observer churn. rerank-service merges its fallback-cost severity rule here."
+    },
+    {
+      "source_path": "https://www.cisco.com/c/en/us/support/docs/switches/catalyst-6500-series-switches/12027-53.html",
+      "disposition": "distilled",
+      "target_name": "cisco-interface-line-protocol-triage",
+      "class": "runbook",
+      "description": "Cisco IOS and ASA interface and line-protocol-down triage — read the status pair before believing a cable story, name the err-disable cause before clearing it",
+      "notes": "TG-85 (epic TG-78): newly authored content grounded directly in Cisco's own IOS/ASA documentation, NOT ported from predecessor prose — the predecessor's Cisco prose corpus is already fully accounted for elsewhere in this manifest (see cisco-asa-specialist, tunnel-failover). source_path names the primary vendor reference; the artifact's own Doc basis section lists every page grounding a specific command or claim. Covers interface/line-protocol-down and err-disable triage for both IOS and ASA; companion to firewall-triage-patterns (judgment layer) at the command layer."
+    },
+    {
+      "source_path": "https://www.cisco.com/c/en/us/support/docs/security/asa-5500-x-series-next-generation-firewalls/116388-technote-nat-00.html",
+      "disposition": "distilled",
+      "target_name": "cisco-acl-nat-triage",
+      "class": "runbook",
+      "description": "Cisco IOS and ASA ACL and NAT misconfiguration triage — hit counts over intuition, packet-tracer before touching a rule, implicit-deny and NAT-address gotchas",
+      "notes": "TG-85 (epic TG-78): newly authored, vendor-doc-grounded content, not predecessor-derived (see cisco-interface-line-protocol-triage's note on this manifest's provenance convention for this batch). Covers ACL and NAT misconfiguration triage on IOS and ASA, including packet-tracer as the decisive tool."
+    },
+    {
+      "source_path": "https://www.cisco.com/c/en/us/support/docs/ip/internet-key-exchange-ike/115934-technote-ikev2-00.html",
+      "disposition": "distilled",
+      "target_name": "cisco-asa-vpn-ipsec-triage",
+      "class": "runbook",
+      "description": "ASA site-to-site IPsec/IKEv2 tunnel-down triage — Phase 1 before Phase 2, encaps/decaps parity over a bare up flag, interesting traffic before blaming the peer",
+      "notes": "TG-85 (epic TG-78): newly authored, vendor-doc-grounded content, not predecessor-derived. Covers ASA site-to-site IPsec/IKEv2 tunnel-down triage at the command layer; firewall-triage-patterns (already in this manifest, distilled from cisco-asa-specialist) is the companion judgment layer this pack's delete-then-recreate and shun-table rules are consistent with."
+    },
+    {
+      "source_path": "https://www.cisco.com/c/en/us/support/docs/ip/border-gateway-protocol-bgp/13752-24.html",
+      "disposition": "distilled",
+      "target_name": "cisco-bgp-ospf-adjacency-triage",
+      "class": "runbook",
+      "description": "Cisco IOS and ASA BGP and OSPF adjacency-loss triage — read the neighbor state machine before guessing, MTU and timer mismatches over a fresh packet capture",
+      "notes": "TG-85 (epic TG-78): newly authored, vendor-doc-grounded content, not predecessor-derived. Covers BGP and OSPF adjacency-loss triage via the documented neighbor state machines on IOS and ASA routed mode."
+    },
+    {
+      "source_path": "https://www.cisco.com/c/en/us/support/docs/security/asa-5500-x-series-next-generation-firewalls/113185-asaperformance.html",
+      "disposition": "distilled",
+      "target_name": "cisco-high-cpu-memory-triage",
+      "class": "runbook",
+      "description": "Cisco IOS and ASA high-CPU and memory triage — attribute to a process or flood before a reload, interrupt versus process load, known crypto and DoS culprits",
+      "notes": "TG-85 (epic TG-78): newly authored, vendor-doc-grounded content, not predecessor-derived. Covers high-CPU and memory triage on IOS and ASA, including the interrupt/process split and ASA connection-flood attribution."
+    },
+    {
+      "source_path": "https://www.cisco.com/c/en/us/td/docs/security/asa/asa919/configuration/general/asa-919-general-config/ha-failover.html",
+      "disposition": "distilled",
+      "target_name": "cisco-asa-failover-context-triage",
+      "class": "runbook",
+      "description": "ASA failover-pair and multiple-context triage — detect split-brain before forcing a failover, config-sync direction, context-scoped commands from the right prompt",
+      "notes": "TG-85 (epic TG-78): newly authored, vendor-doc-grounded content, not predecessor-derived. Covers ASA Active/Standby failover and multiple-context triage, including split-brain detection; the two write commands it documents (failover role change) are named for diagnostic completeness only and are not part of any TG actuation surface."
+    },
+    {
+      "source_path": "https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/",
+      "disposition": "distilled",
+      "target_name": "k8s-pod-crashloop-oom-triage",
+      "class": "runbook",
+      "description": "Kubernetes CrashLoopBackOff and OOMKilled pod triage — exit code and Last State before a restart destroys the evidence, --previous logs first",
+      "notes": "TG-78 (batch 5, appended 2026-08-19): newly authored content grounded directly in Kubernetes' own upstream documentation (kubernetes.io), NOT ported from predecessor prose or distilled from the k8s-diagnostician agent — the predecessor's K8s judgment is already captured in k8s-alert-vetting (batch 2, distilled from .claude/agents/k8s-diagnostician.md) and the live compiled seed k8s-triage.md; this batch is the COMMAND layer those own the JUDGMENT layer for, the same split firewall-triage-patterns/cisco-*-triage established for Cisco (batch 4). source_path names the primary vendor reference; the artifact's own Doc basis section lists every page grounding a specific command or claim. Covers CrashLoopBackOff/OOMKilled pod triage — Last State/Reason/Exit Code, --previous logs, node-level OOMKilling events."
+    },
+    {
+      "source_path": "https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/",
+      "disposition": "distilled",
+      "target_name": "k8s-pod-pending-scheduling-triage",
+      "class": "runbook",
+      "description": "Kubernetes Pod Pending triage — read the scheduler's own FailedScheduling reason before adding nodes or raising requests",
+      "notes": "TG-78 (batch 5): newly authored, vendor-doc-grounded content, not predecessor-derived (see k8s-pod-crashloop-oom-triage's note on this manifest's provenance convention for this batch). Covers Pod Pending triage — FailedScheduling message reading, hard-vs-soft node affinity, taint/toleration effects, per-node request-vs-allocatable fit, and the volume-node-affinity-conflict handoff to storage triage."
+    },
+    {
+      "source_path": "https://kubernetes.io/docs/concepts/architecture/nodes/",
+      "disposition": "distilled",
+      "target_name": "k8s-node-notready-triage",
+      "class": "runbook",
+      "description": "Kubernetes node NotReady and kubelet triage — Unknown versus False, pressure conditions, cordon before any drain or reboot",
+      "notes": "TG-78 (batch 5): newly authored, vendor-doc-grounded content, not predecessor-derived (see k8s-pod-crashloop-oom-triage's note on this manifest's provenance convention for this batch). Covers node NotReady/kubelet triage — Ready Unknown vs False, node-controller heartbeat and auto-applied not-ready taint, pressure conditions, and kubectl debug node as the no-SSH path to kubelet's own log."
+    },
+    {
+      "source_path": "https://kubernetes.io/docs/concepts/storage/persistent-volumes/",
+      "disposition": "distilled",
+      "target_name": "k8s-pvc-storageclass-triage",
+      "class": "runbook",
+      "description": "Kubernetes PVC and StorageClass binding triage — WaitForFirstConsumer is not broken, default-class ambiguity, access-mode and capacity matching",
+      "notes": "TG-78 (batch 5): newly authored, vendor-doc-grounded content, not predecessor-derived (see k8s-pod-crashloop-oom-triage's note on this manifest's provenance convention for this batch). Covers PVC/PV binding and StorageClass triage — WaitForFirstConsumer deferred-binding-by-design, default-StorageClass ambiguity, capacity/access-mode matching, and the nodeName-bypasses-the-scheduler foot-gun."
+    },
+    {
+      "source_path": "https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/",
+      "disposition": "distilled",
+      "target_name": "k8s-service-ingress-dns-triage",
+      "class": "runbook",
+      "description": "Kubernetes Service, Ingress, and CoreDNS triage — work the DNS-to-Endpoints-to-Ingress chain in order, not the layer you suspect first",
+      "notes": "TG-78 (batch 5): newly authored, vendor-doc-grounded content, not predecessor-derived (see k8s-pod-crashloop-oom-triage's note on this manifest's provenance convention for this batch). Covers Service/Ingress/CoreDNS triage — the DNS/EndpointSlice/kube-proxy/Ingress-controller chain, selector and port/targetPort mismatches, readiness-vs-running exclusion from Endpoints, and Ingress controller-admission failures."
+    },
+    {
+      "source_path": "https://kubernetes.io/docs/reference/using-api/health-checks/",
+      "disposition": "distilled",
+      "target_name": "k8s-control-plane-degradation-triage",
+      "class": "runbook",
+      "description": "Kubernetes control-plane triage — separate an apiserver reachability fault from an etcd quorum loss, verbose readyz names which",
+      "notes": "TG-78 (batch 5): newly authored, vendor-doc-grounded content, not predecessor-derived (see k8s-pod-crashloop-oom-triage's note on this manifest's provenance convention for this batch). Covers apiserver/etcd control-plane degradation triage — /readyz?verbose per-check attribution, etcd quorum math and per-member health, and never touching multiple etcd members at once."
+    },
+    {
+      "source_path": "docs/postmortems/pve-nvme-boot-mirror-outage.md",
+      "disposition": "distilled",
+      "target_name": "proxmox-node-storage-triage",
+      "class": "runbook",
+      "description": "Proxmox node disk/storage triage — a degraded ZFS mirror is survivable; never remote-revive a wedged controller or reboot the host, plus the latent boot-loader and PCI-passthrough recovery traps",
+      "notes": "Distilled from a real SEV-1 postmortem: a remote sysfs/PCIe 'revive' of a wedged NVMe controller hung a serving hypervisor and took every guest down for 11h. All estate specifics (hostnames, drive serials, guest names, ticket ids, timestamps) stripped; kept the transferable failure mode + the two latent recovery traps (unsynced ESP across the mirror, address-pinned vfio-pci passthrough surviving a bus renumber)."
+    },
+    {
+      "source_path": "docs/postmortems/pve-pmxcfs-wedge-and-cororings.md",
+      "disposition": "distilled",
+      "target_name": "proxmox-cluster-quorum-triage",
+      "class": "runbook",
+      "description": "Proxmox cluster-plane triage — tell a benign member-count alarm from a pmxcfs wedge (high load, idle CPU, D-state) from a real quorum fault; restart pve-cluster, never reboot, to clear a wedge",
+      "notes": "Distilled from two real incidents: a pmxcfs FUSE-fs wedge that read as CPU saturation (load ~163 on idle cores = D-state pile-up; cleared by 'systemctl restart pve-cluster' with no guest impact, where a reboot drops every guest and pvestatd-alone stays wedged), and a cororings member-count monitor firing after a node was added (a threshold-config alarm). Estate specifics stripped."
+    },
+    {
+      "source_path": "docs/runbooks/pve-guest-lifecycle.md",
+      "disposition": "distilled",
+      "target_name": "proxmox-guest-lifecycle-triage",
+      "class": "runbook",
+      "description": "Proxmox guest-lifecycle triage — a stopped guest whose node and storage are healthy is a reversible start candidate; node-first, storage-first on a failed start, host-down is a node fault",
+      "notes": "Distilled from the estate's guest-down precedent and host-recovery autostart behaviour: node-health-FIRST, storage-first on a failed start, no host action to recover a guest, no single reboot op-class. Estate specifics stripped."
+    },
+    {
+      "source_path": "docs/postmortems/wan-pppoe-uplink-outage.md",
+      "disposition": "distilled",
+      "target_name": "wan-uplink-degradation-triage",
+      "class": "runbook",
+      "description": "WAN/ISP uplink triage — a line-up-but-no-IP uplink is a session/ISP fault upstream of the router (never restart downstream victims); two ISPs are not redundancy without verified failover parity",
+      "notes": "Distilled from a real 6h47m P1: a PPPoE session died (the modem/ONT stopped answering discovery) while the WAN interface stayed physically UP with no IP — total internet + cross-site VPN + tenant loss. The backup ISP was online but lacked crypto-map/NAT parity, so it could not auto-compensate (the SPOF behind 'two ISPs'). Recovery = the primary's session re-establishing (first traffic build via it), not the interface coming up. All estate specifics (ISP names, IPs, interface names, ONT model, tenant/hostnames) stripped."
+    }
+  ]
+}

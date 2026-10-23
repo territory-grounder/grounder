@@ -1,0 +1,48 @@
+{
+  "feature": "maintenance-window.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes (must name a test); pending = specified behavior whose implementation does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior, INV-22). Every scenario here drives the real modules/schedule/cronicle connector + core/schedule seam against an in-process fake Cronicle mirroring the live wire shapes.",
+  "scenarios": [
+    {
+      "name": "A maintenance window and scheduled jobs are derived from real scheduler events",
+      "req": "REQ-1901",
+      "status": "present",
+      "test": "spec/019-maintenance-window/acceptance/acceptance_test.go:TestMaintenanceWindowAcceptance"
+    },
+    {
+      "name": "A change-freeze overrides an overlapping maintenance window",
+      "req": "REQ-1904",
+      "status": "present",
+      "test": "spec/019-maintenance-window/acceptance/acceptance_test.go:TestMaintenanceWindowAcceptance"
+    },
+    {
+      "name": "Outside a sanctioned window the actuation is deferred to POLL_PAUSE",
+      "req": "REQ-1906",
+      "status": "present",
+      "test": "spec/019-maintenance-window/acceptance/acceptance_test.go:TestMaintenanceWindowAcceptance"
+    },
+    {
+      "name": "An unreadable schedule fails closed to outside the window",
+      "req": "REQ-1903",
+      "status": "present",
+      "test": "spec/019-maintenance-window/acceptance/acceptance_test.go:TestMaintenanceWindowAcceptance"
+    },
+    {
+      "name": "The connector re-reads each event by id and reflects an upstream change",
+      "req": "REQ-1900",
+      "status": "present",
+      "test": "spec/019-maintenance-window/acceptance/acceptance_test.go:TestMaintenanceWindowAcceptance"
+    },
+    {
+      "name": "The API key is a sealed SecretRef and a wrong key fails closed",
+      "req": "REQ-1907",
+      "status": "present",
+      "test": "spec/019-maintenance-window/acceptance/acceptance_test.go:TestMaintenanceWindowAcceptance"
+    },
+    {
+      "name": "The connector reads over a native HTTP client and actuates nothing",
+      "req": "REQ-1908",
+      "status": "present",
+      "test": "spec/019-maintenance-window/acceptance/acceptance_test.go:TestMaintenanceWindowAcceptance"
+    }
+  ]
+}

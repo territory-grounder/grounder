@@ -1,0 +1,101 @@
+{
+  "measured_at": "2026-10-23",
+  "git_sha": "7edea5cd4df5cebe64941b01b0cedde6ef9b94aa",
+  "runs": 3,
+  "n": 108,
+  "provenance": "AUTO-RE-ANCHORED on a RUBRIC VERSION CROSSING by the scheduled eval-drift trend-watch (TG-595): the first anchor under rubric \"2026-10-23.1\" — pooled mean of 3 on-box run(s) of main @ 7edea5cd4df5cebe64941b01b0cedde6ef9b94aa; deltas against the previous anchor measured the instrument, not the agent",
+  "individual_runs": [
+    {
+      "overall": 3.69,
+      "n": 36,
+      "note": "run1",
+      "dim_means": {
+        "appropriate_band": 3.47,
+        "correct_diagnosis": 3.75,
+        "diagnosis_grounded": 4.33,
+        "evidence_grounded": 3.81,
+        "falsifiable_prediction": 4,
+        "sensible_proposal": 3.44,
+        "trajectory_grounded": 4.51
+      }
+    },
+    {
+      "overall": 3.57,
+      "n": 36,
+      "note": "run2",
+      "dim_means": {
+        "appropriate_band": 3.31,
+        "correct_diagnosis": 3.5,
+        "diagnosis_grounded": 4,
+        "evidence_grounded": 3.67,
+        "falsifiable_prediction": 4,
+        "sensible_proposal": 3.36,
+        "trajectory_grounded": 4.4
+      }
+    },
+    {
+      "overall": 3.65,
+      "n": 36,
+      "note": "run3",
+      "dim_means": {
+        "appropriate_band": 3.39,
+        "correct_diagnosis": 3.67,
+        "diagnosis_grounded": 5,
+        "evidence_grounded": 3.64,
+        "falsifiable_prediction": 4,
+        "sensible_proposal": 3.56,
+        "trajectory_grounded": 4.4
+      }
+    }
+  ],
+  "scorecard": {
+    "rubric_version": "2026-10-23.1",
+    "n": 108,
+    "dim_means": {
+      "appropriate_band": 3.39,
+      "correct_diagnosis": 3.64,
+      "diagnosis_grounded": 4.44,
+      "evidence_grounded": 3.71,
+      "falsifiable_prediction": 4,
+      "sensible_proposal": 3.45,
+      "trajectory_grounded": 4.44
+    },
+    "overall": 3.64,
+    "judged": 0,
+    "errors": 0,
+    "proposal_rate": 0.12,
+    "prediction_rate": 0.12,
+    "autonomy_rate": 0,
+    "fault_classes": [
+      "restart-service",
+      "start-guest",
+      "start-service"
+    ],
+    "fault_class_breadth": 3,
+    "mean_decision_steps": 4.68,
+    "resolution_recall": 0.8,
+    "resolution_recall_ceiling": 0.86,
+    "resolution_recall_of_findable": 0.93,
+    "mutation_count": 0,
+    "bands": {
+      "POLL_PAUSE": 13,
+      "none": 95
+    },
+    "expected_propose_n": 24,
+    "proposal_recall": 0.54,
+    "labeled_standdown_n": 95,
+    "standdown_precision": 0.89,
+    "stale_excluded": 0,
+    "fixture_armed": 24,
+    "dim_samples": {
+      "appropriate_band": 108,
+      "correct_diagnosis": 108,
+      "diagnosis_grounded": 13,
+      "evidence_grounded": 108,
+      "falsifiable_prediction": 13,
+      "sensible_proposal": 108,
+      "trajectory_grounded": 105
+    },
+    "overall_formula": "fixed-denominator-v2"
+  }
+}

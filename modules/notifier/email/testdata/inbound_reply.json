@@ -1,0 +1,9 @@
+{
+  "from": "oncall@example.com",
+  "to": "grounder@example.com",
+  "subject": "Re: Grounder decision TG-9#restart",
+  "messageId": "<CADx4kq3v8s2n1@mail.example.com>",
+  "inReplyTo": "<grounder.TG-9-restart@example.com>",
+  "date": "Wed, 15 Jul 2026 15:07:22 -0400",
+  "body": "approve TG-9#restart\n\nOn Wed, Jul 15, 2026 at 3:04 PM Grounder <grounder@example.com> wrote:\n> restart web01; [REDACTED]\n> page [REDACTED] if it flaps\n"
+}

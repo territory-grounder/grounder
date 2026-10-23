@@ -1,0 +1,96 @@
+{
+  "measured_at": "2026-08-16",
+  "git_sha": "115e30833775e6ef477d40b527e1c020722cd0a8",
+  "runs": 3,
+  "n": 60,
+  "provenance": "AUTO-RE-ANCHORED past a STALE anchor by the scheduled eval-drift trend-watch: pooled mean of 3 on-box run(s) of main @ 115e30833775 (read-only, mutation OFF). This measurement REGRESSED vs the prior committed anchor, which was stale past 192h0m0s (or carried an unparseable date) — an invalid comparator whose delta cannot be told from drift or a model swap (TG-424). The delta was filed for review and the run exited non-zero: the regression is on record, not hidden by this re-anchor.",
+  "individual_runs": [
+    {
+      "overall": 4.3,
+      "n": 20,
+      "note": "run1",
+      "dim_means": {
+        "appropriate_band": 3.9,
+        "correct_diagnosis": 4.7,
+        "diagnosis_grounded": 3,
+        "evidence_grounded": 4.65,
+        "falsifiable_prediction": 4.33,
+        "sensible_proposal": 3.9
+      }
+    },
+    {
+      "overall": 4.21,
+      "n": 20,
+      "note": "run2",
+      "dim_means": {
+        "appropriate_band": 3.75,
+        "correct_diagnosis": 4.6,
+        "diagnosis_grounded": 3.67,
+        "evidence_grounded": 4.4,
+        "falsifiable_prediction": 4.5,
+        "sensible_proposal": 3.8
+      }
+    },
+    {
+      "overall": 4.31,
+      "n": 20,
+      "note": "run3",
+      "dim_means": {
+        "appropriate_band": 3.8,
+        "correct_diagnosis": 4.65,
+        "diagnosis_grounded": 4.33,
+        "evidence_grounded": 4.6,
+        "falsifiable_prediction": 4.67,
+        "sensible_proposal": 3.85
+      }
+    }
+  ],
+  "scorecard": {
+    "rubric_version": "2026-08-04.3",
+    "n": 60,
+    "dim_means": {
+      "appropriate_band": 3.82,
+      "correct_diagnosis": 4.65,
+      "diagnosis_grounded": 3.67,
+      "evidence_grounded": 4.55,
+      "falsifiable_prediction": 4.5,
+      "sensible_proposal": 3.85
+    },
+    "overall": 4.27,
+    "judged": 0,
+    "errors": 0,
+    "proposal_rate": 0.3,
+    "prediction_rate": 0.3,
+    "autonomy_rate": 0,
+    "fault_classes": [
+      "restart-service",
+      "start-guest",
+      "start-service"
+    ],
+    "fault_class_breadth": 3,
+    "mean_decision_steps": 6.03,
+    "resolution_recall": 0,
+    "resolution_recall_ceiling": 0,
+    "resolution_recall_of_findable": 0,
+    "mutation_count": 0,
+    "bands": {
+      "POLL_PAUSE": 18,
+      "none": 42
+    },
+    "expected_propose_n": 18,
+    "proposal_recall": 1,
+    "labeled_standdown_n": 42,
+    "standdown_precision": 1,
+    "stale_excluded": 0,
+    "fixture_armed": 18,
+    "dim_samples": {
+      "appropriate_band": 60,
+      "correct_diagnosis": 60,
+      "diagnosis_grounded": 18,
+      "evidence_grounded": 60,
+      "falsifiable_prediction": 18,
+      "sensible_proposal": 60
+    },
+    "overall_formula": "fixed-denominator-v2"
+  }
+}

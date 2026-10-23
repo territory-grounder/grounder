@@ -1,0 +1,301 @@
+{
+ "spec": "024-secret-plane",
+ "tasks": [
+  {
+   "id": "T-024-1",
+   "title": "Complete the OpenBao bao: migration of the ~20 plaintext business secrets (deploy-config only)",
+   "files_owned": [],
+   "deps": [],
+   "req_ids": [
+    "REQ-2403"
+   ],
+   "acceptance": {
+    "feature": "secret-plane.feature",
+    "scenarios": [
+     "A business secret migrates from env to a backend with an unchanged resolved value"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 1,
+    "max_wall_clock_minutes": 180
+   },
+   "notes": "No code. Flip each env:->bao: in deploy config one at a time, verify the resolved value is byte-identical (like netbox 2026-07-22). Live-secrets op — do carefully, per-secret verified.",
+   "status": "pending",
+   "status_evidence": "ESTATE WORK, not code (2026-08-23): the ~20 plaintext business secrets must be written INTO OpenBao and their refs re-pointed in deploy config on the box. Every code-side prerequisite is in place — the bao:/vw:/passbolt:/store: resolvers, the enforce-mode boot gate that refuses a plaintext business secret, the env-shape scan that catches an unenumerated one, and the tier selector that names the posture at boot. The remaining step is an operator-run migration against the live substrate."
+  },
+  {
+   "id": "T-024-2",
+   "title": "Complete the process SecretRef enumeration for the policy (deps.go -> full declared set + test)",
+   "files_owned": [
+    "cmd/grounder/deps.go"
+   ],
+   "deps": [],
+   "req_ids": [
+    "REQ-2402"
+   ],
+   "acceptance": {
+    "feature": "secret-plane.feature",
+    "scenarios": [
+     "Every process secret reference is enumerated for the policy"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 200,
+    "max_wall_clock_minutes": 120
+   },
+   "notes": "Read-side; a ref the gate can't see is a hole. Test asserts the enumerated set == the declared SecretRef fields. COORDINATION (2026-07-31): cmd/grounder/deps.go also received the one-line Proposals wiring (signature param + Deps literal) under spec/026 T-026-5's REQ-2607 composition fix — rebase over it; the SecretRef enumeration scope is untouched.",
+   "status": "completed",
+   "status_evidence": "Verified 2026-08-23: cmd/worker/main.go workerSecretEntries enumerates every declared process SecretRef (+ DeploymentSecretEntries for compound/undeclared-shape vars), drift-guarded by TestWorkerSecretEntriesCompleteness (source scan, green this run); the envshape scan (core/preflight/envshape*.go) additionally scans the ENTIRE environment so a ref the enumeration missed is still seen structurally — live boot log: \"188 var(s) scanned, 17 secret-shaped, 12 already policed by reference\". The pending status was stale."
+  },
+  {
+   "id": "T-024-3",
+   "title": "TG_SECRET_POLICY boot gate (off/warn/enforce) + permanent exemption set + tighten literal linter",
+   "files_owned": [
+    "core/preflight/secrets.go",
+    "core/config/config.go"
+   ],
+   "deps": [
+    "T-024-2"
+   ],
+   "req_ids": [
+    "REQ-2400",
+    "REQ-2401",
+    "REQ-2409"
+   ],
+   "acceptance": {
+    "feature": "secret-plane.feature",
+    "scenarios": [
+     "Enforce policy refuses to boot on a plaintext business secret",
+     "Off policy preserves pre-feature behavior",
+     "Warn policy logs each plaintext reference and continues",
+     "The permanent exemption set alone may remain plaintext under enforce",
+     "A hardcoded env default is a violation under enforce"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 350,
+    "max_wall_clock_minutes": 180
+   },
+   "notes": "The forcing function. Sibling to CheckSSHKeys. Ship default=off, then warn, then flip prod to enforce. Companion spec/016 amendment + lockstep restamp (touches core/config + core/preflight).",
+   "status": "completed",
+   "status_evidence": "Verified 2026-08-23: core/preflight/secretpolicy.go ParseSecretPolicy (off/warn/enforce, default off at both roots) + EnforceSecretPolicy + the closed exemption set (exemption_set_test: a business secret cannot exempt itself; every claimed exemption is in the closed set); oracles green this run incl. the enforce-fatal, off/warn-never-fatal and exemplar-citation killing-mutation tests. LIVE: prod worker boots with secret policy=enforce (boot log 2026-08-22). The pending status was stale."
+  },
+  {
+   "id": "T-024-4",
+   "title": "Secret-zero bootstrap Auth variants: FreeIPA cert/mTLS (primary, CA-rooted) + wrapped-AppRole (Compose) + k8s-auth (pod); retire on-disk token",
+   "files_owned": [
+    "core/credential/delivery.go"
+   ],
+   "deps": [
+    "T-024-3"
+   ],
+   "req_ids": [
+    "REQ-2407"
+   ],
+   "acceptance": {
+    "feature": "secret-plane.feature",
+    "scenarios": [
+     "The OpenBao token bootstraps without a durable on-disk secret"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 450,
+    "max_wall_clock_minutes": 210
+   },
+   "notes": "DELIVERY-path cert-auth SHIPPED (40250c8) + LIVE on dc1tg01 (WireDeliveryCert accepted, substrate ON, secrets resolve via the FreeIPA cert). NEGATIVE-CONTROL FINDING 2026-07-25: a SECOND OpenBao consumer — the credential-ENGINE source (spec/016, TG_OPENBAO_AUTH_METHOD=token) — still requires TG_OPENBAO_TOKEN_REF, so the on-disk token cannot be retired until it too uses cert-auth. See T-024-9. Also: the box docker-compose was stale (the failed disk-full deploy) so the cert env passthrough was hand-patched on the box; a clean redeploy reconciles it. ✅ DONE + VERIFIED LIVE 2026-07-25: negative control passed — worker resolves ALL OpenBao secrets via the FreeIPA cert alone with TG_OPENBAO_TOKEN_REF blanked. Token retired from the auth path. CORRECTION 2026-07-25: token NOT yet retired — verified only the WORKER; blanking the token broke litellm-secrets (tg-secretenv, a 3rd OpenBao consumer whose compose service lacks the cert env). Reverted to token-auth (stack healthy). Full retirement = T-024-10. [2026-07-25 RESOLVED via T-024-10: whole-stack negative control passed — all three OpenBao consumers authenticate by the FreeIPA cert with the token blanked; /secrets/tg-openbao-token deleted. The earlier 'token retired' claims in this note were premature (worker-only); the token is NOW genuinely retired stack-wide.]",
+   "status": "completed"
+  },
+  {
+   "id": "T-024-5",
+   "title": "modules/credsource/passbolt: passbolt: resolver (OpenPGP robot, native-Go)",
+   "files_owned": [
+    "modules/credsource/passbolt/passbolt.go",
+    "modules/credsource/passbolt/passbolt_test.go"
+   ],
+   "deps": [
+    "T-024-3"
+   ],
+   "req_ids": [
+    "REQ-2404",
+    "REQ-2406",
+    "REQ-2408"
+   ],
+   "acceptance": {
+    "feature": "secret-plane.feature",
+    "scenarios": [
+     "The Passbolt resolver retrieves a resource field via an OpenPGP robot identity",
+     "A new backend registers read-only at the scheme registry and fails closed"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 500,
+    "max_wall_clock_minutes": 210
+   },
+   "notes": "go-passbolt (pin+vendor), JWT preferred + GPGAuth fallback. SECOND-TIER; ref grammar passbolt:<resourceID>#<field>.",
+   "status": "completed",
+   "status_evidence": "Completed 2026-08-23: modules/credsource/passbolt — the passbolt: scheme in native Go over the MAINTAINED OpenPGP fork (github.com/ProtonMail/go-crypto, NOT the frozen x/crypto/openpgp that documents itself unsafe-by-design; this is a robot-identity security path). Two-stage GPGAuth proof-of-possession, session-cookie jar, then two GETs; both Passbolt secret shapes (bare password and the JSON object) handled, metadata fields from the resource record. Read-only and fail-closed on every direction incl. a public-key-only configuration and a key that will not unlock. Wired through wireCredentialDelivery (OFF unless TG_PASSBOLT_ADDR is set; env-parity-registered, compose-forwarded, .env.example documented), publishes a catalog Descriptor, and flips the tier selector row from NOT IMPLEMENTED to a live homelab-tier backend. Four oracle groups incl. a fake server that accepts stage 2 ONLY on the exact decrypted nonce, so a wrong key cannot log in."
+  },
+  {
+   "id": "T-024-6",
+   "title": "modules/credsource/vaultwarden: vw: resolver (native-Go Bitwarden crypto)",
+   "files_owned": [
+    "modules/credsource/vaultwarden/vaultwarden.go",
+    "modules/credsource/vaultwarden/vaultwarden_test.go"
+   ],
+   "deps": [
+    "T-024-3"
+   ],
+   "req_ids": [
+    "REQ-2404",
+    "REQ-2405",
+    "REQ-2408"
+   ],
+   "acceptance": {
+    "feature": "secret-plane.feature",
+    "scenarios": [
+     "The Vaultwarden resolver decrypts a vault item field in native Go",
+     "The homelab backends are labeled second-tier and are not the default"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 700,
+    "max_wall_clock_minutes": 300
+   },
+   "notes": "Password Manager API only (Secrets Manager is a NON-GOAL, unsupported by Vaultwarden). Native-Go Bitwarden E2E crypto (PBKDF2/Argon2id + AES-CBC-HMAC EtM). Highest crypto risk; SECOND-TIER; ref grammar vw:<collection>/<item>#<field>.",
+   "status": "completed",
+   "status_evidence": "Completed 2026-08-23: modules/credsource/vaultwarden — the vw: scheme in native Go (no bw CLI, no subprocess, distroless-safe): PBKDF2-SHA256 derivation pinned to the PUBLISHED known-answer vector, the labelled HKDF stretch to a distinct (enc,mac) pair, and AES-256-CBC + HMAC-SHA256 cipher strings MAC-verified in constant time BEFORE decryption, with validated PKCS#7. Read-only, fail-closed on every direction (unreachable, wrong password, unknown item, absent field, tampered ciphertext/iv/mac, unsupported type). Wired through wireCredentialDelivery (OFF unless TG_VAULTWARDEN_ADDR is set; env-parity-registered, compose-forwarded, .env.example documented), egress-metered like the OpenBao client, and it publishes a catalog Descriptor so the console generates its dialog. Four oracle groups incl. an end-to-end fake vault that asserts the master password never reaches the server."
+  },
+  {
+   "id": "T-024-7",
+   "title": "Homelab tier: DB-backed credsource (secrets in the DB, NEVER a .env/filesystem file; plaintext acceptable)",
+   "files_owned": [
+    "core/credential/"
+   ],
+   "deps": [
+    "T-024-3"
+   ],
+   "req_ids": [
+    "REQ-2405",
+    "REQ-2406"
+   ],
+   "acceptance": {
+    "feature": "secret-plane.feature",
+    "scenarios": [
+     "A homelab install stores secrets in the DB with no plaintext .env on the filesystem"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 300,
+    "max_wall_clock_minutes": 180
+   },
+   "notes": "Owner-corrected homelab tier (2026-07-25): NOT the file: token. Plaintext acceptable but the secret must live IN THE DB, off the filesystem. Reuse the sealed_secret store (encrypted, migration 0012) where a vault exists; add a plain DB credsource for no-vault installs. Minimize the one irreducible residual (the DB DSN) via Postgres peer/socket auth (=> zero filesystem secret) or a single DSN. See design Amendment 2026-07-25.",
+   "status": "pending",
+   "status_evidence": "PARTIAL as of 2026-08-23 (verified, not rebuilt): the MECHANISM the task asks for exists — secrets live IN THE DB via the sealed store (migration 0012 sealed_secret + core/seal + the store: scheme), registered in BOTH composition roots, with round-trip and fail-closed-on-wrong-key/tamper oracles. What is NOT true is the scenario as written (\"no plaintext .env on the filesystem\"): the DB DSN itself remains on the filesystem — the documented irreducible residual the exemption set covers, and TG-422 dyn: already leases its password half. Closing the scenario needs Postgres peer/socket auth, which is DEPLOYMENT work on the box, not code. Left pending deliberately rather than flipped on a mechanism that does not satisfy the sentence."
+  },
+  {
+   "id": "T-024-8",
+   "title": "Tiered backend selector: inform the user of each tier's assurance; pick best AVAILABLE (HSM/FreeIPA-cert/DB), never .env",
+   "files_owned": [
+    "core/preflight/secrettier.go",
+    "core/preflight/secrettier_test.go"
+   ],
+   "deps": [
+    "T-024-4",
+    "T-024-7"
+   ],
+   "req_ids": [
+    "REQ-2401"
+   ],
+   "acceptance": {
+    "feature": "secret-plane.feature",
+    "scenarios": [
+     "The backend selector labels each tier's assurance and never offers plaintext .env"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 250,
+    "max_wall_clock_minutes": 180
+   },
+   "notes": "At connect-time the settings page / tgctl presents the tiers with assurance labels (Enterprise-max=USB HSM; Enterprise=FreeIPA cert; Homelab=DB-store) and selects the best available. USB HSM (PKCS#11) tier is future, gated on the owner's hardware. See design Amendment 2026-07-25.",
+   "status": "completed",
+   "status_evidence": "Completed 2026-08-23: core/preflight/secrettier.go enumerates every backend by TIER (machine-identity > machine-token > homelab-vault > local-store), states for each the irreducible on-host credential it RELOCATES secret-zero to and what it does NOT provide (leases/scoping/revocation), recommends the strongest AVAILABLE one, and keeps OpenBao the primary recommendation per REQ-2408. It offers NO plaintext tier by construction — with nothing configured it says so rather than falling back — and distinguishes \"you configured it\" from \"this build can resolve it\" (passbolt reads NOT IMPLEMENTED until T-024-5). Wired at worker boot (reportSecretTiers) reading presence only, never a value, so the line is safe to log. Three oracle groups."
+  },
+  {
+   "id": "T-024-9",
+   "title": "Convert the credential-ENGINE OpenBao source to cert-auth (TG_OPENBAO_AUTH_METHOD=cert) — required to retire the on-disk token",
+   "files_owned": [
+    "cmd/worker/main.go",
+    "modules/credsource/vault/"
+   ],
+   "deps": [
+    "T-024-4"
+   ],
+   "req_ids": [
+    "REQ-2407"
+   ],
+   "acceptance": {
+    "live_verification": "VERIFIED 2026-07-27 on dc1tg01: TG_OPENBAO_CERT and TG_OPENBAO_CERT_ROLE are present in the deployed .env, so the credential engine authenticates to OpenBao by certificate. This is an estate-configuration fact and has no repo-testable surface; see the retrospective_gap."
+   },
+   "budget": {
+    "max_loc_delta": 150,
+    "max_wall_clock_minutes": 120
+   },
+   "notes": "The worker builds a SECOND OpenBao client — the estate/per-target credential SOURCE (spec/016), configured by TG_OPENBAO_AUTH_METHOD (token|approle|jwt). Add a 'cert' method (reuse vault.Cert) so this path also uses the FreeIPA identity. Only when BOTH the delivery AND the engine source use cert-auth can TG_OPENBAO_TOKEN_REF be removed. Verified-blocking via the 2026-07-25 negative control. CODE SHIPPED: modules/bootstrap credential.go cert case + cmd/worker forwards TG_OPENBAO_CERT/KEY/CERT_ROLE. Activate with TG_OPENBAO_AUTH_METHOD=cert then retire the token. ✅ DONE + VERIFIED LIVE 2026-07-25: negative control passed — worker resolves ALL OpenBao secrets via the FreeIPA cert alone with TG_OPENBAO_TOKEN_REF blanked. Token retired from the auth path. CORRECTION 2026-07-25: token NOT yet retired — verified only the WORKER; blanking the token broke litellm-secrets (tg-secretenv, a 3rd OpenBao consumer whose compose service lacks the cert env). Reverted to token-auth (stack healthy). Full retirement = T-024-10. [2026-07-25 RESOLVED via T-024-10: whole-stack negative control passed — all three OpenBao consumers authenticate by the FreeIPA cert with the token blanked; /secrets/tg-openbao-token deleted. The earlier 'token retired' claims in this note were premature (worker-only); the token is NOW genuinely retired stack-wide.]",
+   "status": "completed"
+  },
+  {
+   "id": "T-024-10",
+   "title": "Wire the cert env into ALL OpenBao-consuming compose services (litellm-secrets, grounder) so the token can be retired stack-wide",
+   "files_owned": [
+    "deploy/docker-compose.yml",
+    "cmd/grounder/main.go",
+    "cmd/tg-secretenv/main.go"
+   ],
+   "deps": [
+    "T-024-4",
+    "T-024-9"
+   ],
+   "req_ids": [
+    "REQ-2407"
+   ],
+   "acceptance": {
+    "pending": "To be written when the end-state is real: assert no OpenBao token reference remains in any service's environment AND each service resolves its secrets by certificate."
+   },
+   "budget": {
+    "max_loc_delta": 60,
+    "max_wall_clock_minutes": 90
+   },
+   "notes": "DONE + VERIFIED LIVE E2E 2026-07-25 (deploy b154328). cmd/grounder + cmd/tg-secretenv now select openbao.WireDeliveryCert when TG_OPENBAO_CERT/KEY are set (mirroring cmd/worker, token fallback preserved); deploy/docker-compose.yml forwards TG_OPENBAO_CERT/KEY/CERT_ROLE to BOTH the grounder and litellm-secrets services (both already mount ./secrets:/secrets:ro; grounder+worker run as nonroot 65532 which group-reads the 0640 key, litellm-secrets runs as root). On-box: set TG_OPENBAO_AUTH_METHOD=cert, then ran the WHOLE-STACK NEGATIVE CONTROL — blanked TG_OPENBAO_TOKEN_REF and force-recreated worker/grounder/litellm-secrets/litellm: ALL healthy on the FreeIPA cert ALONE (worker 'credential engine: registered source \"openbao\"' + delivery substrate ON + may_actuate=true + Restarts=0; grounder substrate ON; litellm-secrets resolved 5 secrets; litellm Up). THEN deleted /secrets/tg-openbao-token — stack still healthy, no active reference remains. The box .env is hand-maintained (not AWX-regenerated), so AUTH_METHOD=cert + empty TOKEN_REF persist across deploys. Rollback net retained: /srv/tg/deploy/secrets/tg-openbao-token.bak + .env.bak-preretire-*. This is the TRUE completion of T-024-4/T-024-9 (the prior 'token retired' claims were premature — verified only the worker; this verified all three consumers).",
+   "status": "pending",
+   "status_evidence": "PARTIAL (verified 2026-08-23): the cert env IS wired into every OpenBao-consuming service the task names — litellm-secrets, sidecar-secrets, grounder and worker all carry TG_OPENBAO_CERT/_KEY/_CERT_ROLE, and both cmd/grounder and cmd/tg-secretenv select WireDeliveryCert when they are set. worker-actuate deliberately does NOT: it uses AppRole, which is the ONLY bootstrap that gives one host two distinct identities (mTLS hands both worker containers the same host certificate and collapses the credential-plane split). What keeps this task open is its own acceptance bar — \"no OpenBao token reference remains in any service environment AND each service resolves by certificate\" — which the AppRole plane makes unreachable as literally written; closing it needs the end-state re-stated, an owner call."
+  },
+  {
+   "id": "T-024-11",
+   "title": "Shape-scan the real process environment so a raw credential nobody declared cannot boot green",
+   "files_owned": [
+    "core/preflight/envshape.go",
+    "core/preflight/deploymentsecrets.go",
+    "core/preflight/secretpolicy.go"
+   ],
+   "deps": [
+    "T-024-3"
+   ],
+   "req_ids": [
+    "REQ-2410"
+   ],
+   "acceptance": {
+    "feature": "secret-plane.feature",
+    "scenarios": [
+     "A raw credential in the process environment fails the boot under enforce"
+    ]
+   },
+   "budget": {
+    "max_loc_delta": 400,
+    "max_wall_clock_minutes": 180
+   },
+   "notes": "TG-284. The enumerated gate (REQ-2402) could only see what a caller declared, so the live worker booted green under enforce while holding LIBRENMS_GR_TOKEN (64 chars) and LIBRENMS_TOKEN (32 chars) raw in its own process env. CheckEnvShape walks os.Environ() and reports a variable whose NAME declares a credential while its VALUE carries no reference scheme. False positives are handled structurally (a raw value reached by a permanently exempt reference inherits that exemption; a raw value reached by a declared reference is reported once, under the reference) plus a 5-entry allowlist of names that hold no credential at all.",
+   "status": "completed",
+   "status_evidence": "Killing mutations executed 2026-08-04: (a) removing the violation append restores the pre-TG-284 blindness and TestRawSecretShapedEnvVarIsAViolation goes RED; (b) removing the allowlist check fails the boot over a key NAME, a PATH and the policy MODE; (c) emptying secretNameTokens is caught by the reach counters over 361 real deployment variables. Real-binary proof: worker and grounder -check exit 1 naming LIBRENMS_GR_TOKEN as \"raw value in process env\", and boot clean once the value is migrated to bao: and the plaintext variable deleted."
+  }
+ ]
+}

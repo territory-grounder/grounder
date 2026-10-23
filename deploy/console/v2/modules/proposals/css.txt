@@ -1,0 +1,51 @@
+/* PROPOSALS module (prop-) — the open-proposal-plane surface (spec/026 REQ-2607, epic TG-227/TG-228).
+   Reuses tokens, chips, tbl, wrapcard, sec, empty verbatim — no new palette. Read-only BY DESIGN: this
+   plane records fixes the agent named with no registered op-class; nothing here can execute or mutate. */
+.prop-intro{font-size:11.5px;line-height:1.55;color:var(--ink3);max-width:80ch;margin:0 2px 16px;}
+/* the table gets its OWN horizontal-scroll container so the page body never scrolls sideways. */
+.prop-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.prop-scroll table{min-width:860px;}
+/* free-form op_class pill — map-indigo (the AI plane): a name the agent coined, screened, never executable. */
+.prop-op{font-family:var(--mono);font-size:10.5px;padding:2px 8px;border-radius:999px;white-space:nowrap;
+  color:var(--map);border:1px solid color-mix(in srgb,var(--map) 45%,transparent);
+  background:color-mix(in srgb,var(--map) 9%,transparent);}
+/* the shadow chip every row carries — recorded, structurally unexecutable. */
+.prop-shadow{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+  padding:2px 7px;border-radius:4px;color:var(--ink3);border:1px solid var(--line2);white-space:nowrap;}
+.prop-undo{font-size:11px;color:var(--ink2);line-height:1.45;max-width:34ch;}
+.prop-rationale{font-size:11px;color:var(--ink2);line-height:1.45;max-width:44ch;}
+.prop-attr{font-family:var(--mono);font-size:10px;color:var(--ink3);white-space:nowrap;}
+
+/* TG-236 — the decision surface. Quiet by default: a shape list where everything shouts is a list
+   nobody scans, and the headline is the only element allowed to carry weight. */
+.prop-headline { margin:0 0 14px; padding:12px 14px; border-left:3px solid var(--map); background:var(--panel2); border-radius:3px; line-height:1.5; }
+.prop-headline b { font-size:15px; }
+.prop-shape-list { display:flex; flex-direction:column; gap:10px; }
+.prop-shape { border:1px solid var(--line); border-radius:4px; padding:11px 13px; background:var(--panel); }
+.prop-shape-h { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:7px; }
+.prop-count { font-size:12px; color:var(--dim); font-variant-numeric:tabular-nums; }
+.prop-q { display:flex; gap:9px; align-items:baseline; margin:3px 0; font-size:12.5px; line-height:1.45; }
+.prop-qn { flex:0 0 118px; color:var(--dim); font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+.prop-shape-f { display:flex; gap:14px; flex-wrap:wrap; margin-top:8px; padding-top:7px; border-top:1px solid var(--line); font-size:11px; color:var(--dim); }
+.prop-log { margin-top:16px; }
+.prop-log summary { cursor:pointer; font-size:12px; color:var(--dim); padding:6px 0; }
+/* The partial-page disclosure. Deliberately NOT an error tone — the data is correct, it is the
+   completeness that is bounded, and styling it as a failure would teach operators to dismiss it. */
+.prop-partial{margin:0 0 12px;padding:9px 12px;border:1px solid var(--line2);border-radius:var(--radius-s);
+  background:var(--g2);font:400 11.5px var(--sans);color:var(--ink2)}
+.prop-partial b{color:var(--ink);font-weight:600}
+
+/* TG-307 — the recorded-A2 signal on the review surface. Reuses the SAME danger token the #reasoning claim
+   block uses (var(--deviation)); amber (var(--partial)) for the softer "uncited" note; no new palette. */
+.prop-contra{margin:6px 0 8px;padding:8px 11px;border-left:3px solid var(--deviation);
+  background:color-mix(in srgb,var(--deviation) 8%,transparent);border-radius:3px;
+  font-size:12px;line-height:1.45;color:var(--ink2);}
+.prop-contra b{color:var(--deviation);font-weight:600;}
+.prop-diag{font-family:var(--mono);font-size:10px;white-space:nowrap;text-decoration:none;}
+.prop-diag-con{color:var(--deviation);font-weight:600;}
+a.prop-diag-con:hover,a.prop-diag-ok:hover{text-decoration:underline;}
+.prop-diag-unc{color:var(--partial);}
+.prop-diag-ok{color:var(--ink3);}
+/* the no-claim "—": the module's muted ink (var(--ink3), AA-passing), NOT the low-contrast --line2 border
+   token — --line2 stays a border color only (it fails the 4.5:1 text bar). */
+.prop-diag-none{color:var(--ink3);}

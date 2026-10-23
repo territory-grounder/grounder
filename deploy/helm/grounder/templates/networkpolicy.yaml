@@ -1,0 +1,137 @@
+{{/*
+  EGRESS ALLOWLIST — the Kubernetes half of the TG-160 network control.
+
+  WHY THIS FILE EXISTS. Before it, this chart shipped NO NetworkPolicy of any kind. Every pod in the
+  release — the worker running an LLM agent over untrusted alert content, Postgres, the Temporal UI —
+  could open a socket to anywhere the cluster CNI would carry it, and nothing in the tree said otherwise
+  while docs/THREAT-MODEL.md advertised an "egress" step in the interceptor chain. The compose stack got
+  its network split in the same change (deploy/docker-compose.yml); this is the same posture for k8s.
+
+  THIS IS THE CONTROL, not the Go-level meter that ships alongside it. A process that can execute code can
+  bypass its own http.RoundTripper; it cannot bypass the CNI. Everything in core/egress is defence in
+  depth ON TOP of this.
+
+  DEFAULT OFF (networkPolicy.enabled=false), and that is a deliberate reading of "no behaviour change for
+  existing deployments without a safe default". Turning this on makes egress DEFAULT-DENY for every pod in
+  the release; a release whose allow lists are empty keeps DNS and intra-release traffic and loses
+  everything else — which for the worker means no estate, no trackers, no notifiers, and for litellm means
+  no model providers. That is correct behaviour for default-deny and it is an outage if it arrives
+  unannounced, so it is opt-in and the operator declares the destinations first. Prefer:
+      1. enable in a staging release, read tg_egress_offallowlist_requests_total from the worker /metrics,
+      2. add every destination that shows up to networkPolicy.egress.<component>,
+      3. only then enable in production.
+
+  A NOTE ON WHAT A NetworkPolicy CANNOT DO. Rules select destinations by IP CIDR, not by DNS name. A
+  destination behind a rotating public IP (a SaaS notifier, a model provider) cannot be pinned narrowly
+  here — that is a property of the API, not of this chart. Where an estate has an egress proxy, allow only
+  the proxy and let it do name-based policy; where it does not, a wide CIDR here is still strictly better
+  than the "anywhere" this chart shipped before, and the in-process meter names the actual hosts.
+
+  REQUIRES a CNI that enforces NetworkPolicy (Calico, Cilium, Antrea, …). Under a CNI that ignores them —
+  flannel without a policy add-on — these objects apply cleanly and enforce NOTHING. That failure is
+  SILENT, so verify with a real connectivity test after enabling; do not read a successful `helm upgrade`
+  as evidence that egress is constrained.
+*/}}
+{{- if .Values.networkPolicy.enabled }}
+{{- $ns := .Release.Namespace }}
+---
+{{/* 1. DEFAULT DENY. Selects every pod in the release and permits no egress at all. Kubernetes unions
+      policies, so the allow policies below add back exactly what is declared and nothing else. */}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "grounder.componentName" (dict "root" . "component" "default-deny-egress") }}
+  labels:
+    {{- include "grounder.labels" . | nindent 4 }}
+  annotations:
+    territory-grounder/control: "TG-160 egress default-deny"
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "grounder.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: ["Egress"]
+  egress: []
+---
+{{/* 2. THE FLOOR every pod needs regardless of destination policy: DNS, and traffic to its own release.
+      Without the DNS rule a default-deny release cannot resolve its OWN service names and the whole
+      stack fails at startup rather than at the boundary this control is about. */}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "grounder.componentName" (dict "root" . "component" "egress-baseline") }}
+  labels:
+    {{- include "grounder.labels" . | nindent 4 }}
+  annotations:
+    territory-grounder/control: "TG-160 egress baseline (DNS + intra-release)"
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "grounder.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: ["Egress"]
+  egress:
+    # Cluster DNS.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.dns.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dns.podLabels | nindent 14 }}
+      ports:
+        - protocol: UDP
+          port: {{ .Values.networkPolicy.dns.port }}
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.dns.port }}
+    # East-west inside this release: worker→postgres, grounder→temporal, prometheus→/metrics, and so on.
+    # Same-namespace, same-release only — this is the k8s equivalent of the compose tg-backplane tier.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $ns }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ include "grounder.name" . }}
+              app.kubernetes.io/instance: {{ .Release.Name }}
+{{- range $component, $rules := .Values.networkPolicy.egress }}
+{{- if $rules }}
+---
+{{/* 3. PER-COMPONENT ALLOWLIST. One policy per workload that has declared off-cluster destinations, so
+      the worker's estate reach is not silently handed to Postgres. This mirrors the compose split, where
+      the grounder's egress need (OpenBao + LDAPS) is genuinely narrower than the worker's. */}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "grounder.componentName" (dict "root" $ "component" (printf "egress-%s" $component)) }}
+  labels:
+    {{- include "grounder.labels" $ | nindent 4 }}
+    {{- include "grounder.selectorLabels" (dict "root" $ "component" $component) | nindent 4 }}
+  annotations:
+    territory-grounder/control: "TG-160 egress allowlist"
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "grounder.selectorLabels" (dict "root" $ "component" $component) | nindent 6 }}
+  policyTypes: ["Egress"]
+  egress:
+  {{- range $rule := $rules }}
+    # {{ required (printf "networkPolicy.egress.%s: every allow rule needs a `why` naming what it reaches — an allowlist entry nobody can review is one nobody can revoke (TG-160)" $component) $rule.why }}
+    - to:
+      {{- range $cidr := (required (printf "networkPolicy.egress.%s: every allow rule needs `cidrs`" $component) $rule.cidrs) }}
+        - ipBlock:
+            cidr: {{ $cidr }}
+            {{- with $rule.except }}
+            except:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+      {{- end }}
+      ports:
+      {{- range $p := (required (printf "networkPolicy.egress.%s: every allow rule needs `ports` — an allow rule with no port is a rule to the whole host, which is not an allowlist" $component) $rule.ports) }}
+        - protocol: {{ $p.protocol | default "TCP" }}
+          port: {{ $p.port }}
+      {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

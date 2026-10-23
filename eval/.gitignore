@@ -1,0 +1,14 @@
+# Anchored (leading /) so ONLY the working files at eval/ root stay untracked — the committed,
+# append-only quality record under eval/history/ must never be swallowed by these names (Phase B6:
+# an untracked quality record is how a 12-day capability collapse left no versioned trace).
+/scorecard.json
+/sessions.json
+/REPORT.md
+/controls-scorecard.json
+/holdout-scorecard.json
+/out/
+# phase.json — the SESSION-phase wall-clock window each on-box run writes for the TG-204 tier A/B
+# (eval/tier-ab.sh reads it to attribute proxy telemetry). Per-run, machine-local, and regenerated every
+# arm: exactly the shape the anchored names above exist for. The COMMITTED tier-ab record is the archived
+# verdict under eval/history/, which the leading slashes here deliberately leave alone.
+/phase.json

@@ -1,0 +1,14 @@
+# trivy ignore list — read automatically by `trivy image` from the working directory (the trivy-image-scan
+# job runs at the repo root). EVERY entry carries an expiry and a tracker id; an expired entry re-reds the
+# gate by itself, so nothing here is a permanent hole. Entries are supply-chain findings in the PINNED
+# third-party gateway image for which NO fixed upstream image exists yet — not findings in TG's own code.
+#
+# GHSA-6q48-6c7w-9gw2 (CRITICAL): certifi bundles emSign root CAs whose intermediate keys were compromised;
+# fixed in certifi 2026.10.19. Found in ghcr.io/berriai/litellm (pinned 1.104.2 ships certifi 2026.4.22, and
+# the CURRENT main-stable 1.106.2 still ships 2026.4.22 — measured 2026-10-22), so a re-pin cannot clear it and
+# TG builds no derived gateway image today. Exposure: a trust-store entry, not code TG calls — exploitation
+# needs an attacker holding a mis-issued certificate from one of those intermediates AND a network position
+# to impersonate a model-provider endpoint to the gateway. Owner of the real fix (re-pin when upstream moves,
+# or the derived gateway image): TG-589. The expiry below is the deadline for THAT ticket — never extend it
+# without a measured re-check (the review of !1744 named exactly that failure).
+GHSA-6q48-6c7w-9gw2 exp:2026-11-21

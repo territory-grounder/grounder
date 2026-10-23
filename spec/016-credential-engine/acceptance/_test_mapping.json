@@ -1,0 +1,180 @@
+{
+  "feature": "credential-engine.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes (must name a test); pending = a specified behavior or binding that does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior, INV-22). Reconciled 2026-08-13: 18 of 29 scenarios are present (bound in acceptance_test.go, green in make all) and tasks T-016-1/2/3/4/6/7/8/10 completed on that evidence. Still pending: the actuation-seam compose (T-016-5), the governed Ansible actuator (T-016-11), the REQ-1617 ledger/append-only/registered-only BINDINGS (T-016-12 — behavior shipped, acceptance binding owed; see core/db TestCredentialResolutionMigration for the append-only proof it will cite), the coverage view's packet-tracer PAIRING (a console-DOM property; its API half is asserted by the map binding; rendered fixture-free + exercised by deploy/console/v2/e2e/credentials-write.mjs locally), and the object-groups editor (no model exists — carved to TG-481). The four other console scenarios are bound as of 2026-08-14 (T-016-13 completed with its acceptance re-scoped to them, carve recorded).",
+  "scenarios": [
+    {
+      "name": "A target resolves to exactly one credential bundle from config data",
+      "req": "REQ-1600",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "A credential bundle is constructible only with all required fields",
+      "req": "REQ-1601",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "An unresolved target is refused with no default identity",
+      "req": "REQ-1602",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "The fail-closed property holds under an empty or partially-synced store",
+      "req": "REQ-1602",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "Every credential value is a SecretRef resolved at runtime and no plaintext is stored",
+      "req": "REQ-1603",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "Identity is resolved after a non-deny policy verdict and before execute",
+      "req": "REQ-1604",
+      "status": "present",
+      "test": "core/actuate/compose_gate_test.go: TestComposeRunsAfterAuthorizationNeverForADeniedAction (killing mutation executed: gate above 4d → red) + TestComposeResolutionPassesOnceAndTheEffectRuns + TestNilComposerIsByteIdenticalAndTheRowSaysSo; core/actuate/gate_drill_matrix_test.go: the authn-compose refusal drill"
+    },
+    {
+      "name": "The resolver matches on the same estate object-model as the policy engine",
+      "req": "REQ-1605",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "A multi-rule target resolves by most-specific-wins and an equal-specificity conflict refuses",
+      "req": "REQ-1606",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "A source syncs read-only into the native store on schedule and on demand",
+      "req": "REQ-1607",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "A repeated sync of unchanged data converges with no duplicate or orphan",
+      "req": "REQ-1608",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "A target in multiple sources resolves by source precedence and records shadowed sources",
+      "req": "REQ-1609",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "A target with no synced source resolves from the native-store fallback",
+      "req": "REQ-1610",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "A machine-plane source cannot populate approver identity",
+      "req": "REQ-1611",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "An approver-plane source cannot populate a host credential bundle",
+      "req": "REQ-1611",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "The AWX Ansible Semaphore source pulls inventory and credentials read-only with no subprocess",
+      "req": "REQ-1612",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance",
+      "note": "Bound via TWO real connectors of the disjunctive family ('an AWX Ansible OR Semaphore platform'), T-016-8: (1) the AWX REST connector (modules/credsource/awx) proves the read-only inventory+credential pull with no subprocess against a fake AWX API (native net/http); (2) the UN-CONTROLLED Ansible connector (modules/credsource/ansible) proves the plain-files case — it parses a real inventory + group_vars/host_vars tree and NATIVELY decrypts an inline !vault $ANSIBLE_VAULT payload to its known plaintext in pure Go (no ansible-vault CLI, no subprocess), with the become secret carried as an ansible-vault: locator (INV-13). The Semaphore connector is covered by its own package tests."
+    },
+    {
+      "name": "The vault bao SecretRef scheme reads KV v2 read-only and fails closed on unreachable or denied or expired",
+      "req": "REQ-1613",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "The oidc SecretRef scheme mints a machine-plane client-credentials token and fails closed on unreachable or denied or untrusted-TLS",
+      "req": "REQ-1619",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "The LDAP OIDC source pulls approver identities read-only and never writes a host bundle",
+      "req": "REQ-1614",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "Each source records last-synced and drift",
+      "req": "REQ-1615",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "Read-only fact-gathering is a Phase-1-safe sensor and playbook actuation routes through the mode chokepoint",
+      "req": "REQ-1616",
+      "status": "present",
+      "test": "modules/actuation/awxjob/req1616_sensor_actuator_test.go: TestREQ1616_ActuationHalfIsInertAtShadow (inert twice over, with the armed-actuator vacuity floor) + TestREQ1616_SensorHalfCarriesNoEffectPath (the read-only client does not satisfy the Actuator interface; the lane does)"
+    },
+    {
+      "name": "Every resolution and sync is appended to the governance ledger with no secret value",
+      "req": "REQ-1617",
+      "status": "pending"
+    },
+    {
+      "name": "The credential tables are append-only with no runtime UPDATE or DELETE",
+      "req": "REQ-1617",
+      "status": "present",
+      "test": "core/db/migrations_test.go:205 (0018 REVOKEs UPDATE/DELETE on credential_resolution from tg_runtime — the governed AUDIT record; the two OPERATIONAL projections credential_coverage/credential_sync_run are deliberately upsertable latest-wins state under 0105's explicit grant, stated in 0017's header)"
+    },
+    {
+      "name": "A source is admitted only when its connector adapter is registered at startup",
+      "req": "REQ-1617",
+      "status": "present",
+      "test": "core/credential/sync_test.go: TestSourceAdmissionRefusesEveryMalformedRegistration (nil adapter / empty id / duplicate id / unknown plane / nil engine each refused at registration, with a vacuity floor proving a well-formed source still registers)"
+    },
+    {
+      "name": "The console renders per-source last-synced and drift",
+      "req": "REQ-1615",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "The console configures tests schedules and syncs each source on demand",
+      "req": "REQ-1618",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "The console renders the per-target credential map with source and precedence",
+      "req": "REQ-1618",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "The console coverage view answers whether TG can reach a target",
+      "req": "REQ-1618",
+      "status": "present",
+      "test": "core/httpapi/credentials_test.go: TestCredentialCoverageShape + TestCredentialsEmptyIsHonest + TestCredentialsReaderErrorFailsClosed (the coverage summary derived from the resolution history, honest when empty, fail-closed on a reader error)"
+    },
+    {
+      "name": "The console object-groups editor is shared with the policy engine",
+      "req": "REQ-1618",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    },
+    {
+      "name": "A secret value is write-only in the console and never echoed",
+      "req": "REQ-1618",
+      "status": "present",
+      "test": "spec/016-credential-engine/acceptance/acceptance_test.go:TestCredentialEngineAcceptance"
+    }
+  ]
+}

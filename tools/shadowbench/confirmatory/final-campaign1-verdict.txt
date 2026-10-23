@@ -1,0 +1,28 @@
+EXCEED-PROOF CONFIRMATORY ANALYSIS (pre-registered, frozen)
+  analysis sha256: e8c3adfc662913e2a1992b9d6f460cdb4e51abb1f9b29d04ce9d82a66690e729
+  pairs: 21 analyzed of 23 submitted, across 9 host(s)
+  PRIMARY endpoint population: 17 item(s) across 9 host(s) — a SUBSET of the judged set, and the one the claim rests on
+    - excluded 2 pair(s): more than 3 per host (earliest kept)
+  ⚠ NOT A CONFIRMATORY RESULT — the pre-registered population minimum is not met:
+      PRIMARY endpoint: 17 ground-truth item(s) < the minimum 30 (the judged set has 21 — power on the secondary family does not transfer)
+      PRIMARY endpoint: 9 host(s) < the minimum 12
+      21 pairs < the pre-registered minimum 30
+      9 hosts < the pre-registered minimum 12
+    Numbers below are DESCRIPTIVE only and must not be published as an exceed-proof.
+  PRIMARY (judge-free) — correct op-class vs the INJECTED fault (injector ground truth; no judge)
+    TG-only-correct=10  pred-only-correct=0  concordant=7
+    McNemar exact on 10 discordant pair(s): p=0.0020  REJECT null
+  SECONDARY (judged rubric, Holm-corrected across the family)
+    - correct_diagnosis        n= 18  mean Δ(TG−pred)=-1.056 (CI -2.000..-0.273)  δ=-0.380  p=0.8995 → Holm 1.0000 ns
+    - evidence_grounded        n= 18  mean Δ(TG−pred)=-0.667 (CI -1.591..+0.111)  δ=-0.352  p=0.8278 → Holm 1.0000 ns
+    - sensible_proposal        n= 18  mean Δ(TG−pred)=-0.389 (CI -1.200..+0.300)  δ=-0.204  p=0.6630 → Holm 1.0000 ns
+    - appropriate_band         n= 18  mean Δ(TG−pred)=+0.389 (CI -0.111..+1.067)  δ=+0.133  p=0.2559 → Holm 1.0000 ns
+    - falsifiable_prediction   n=0 — no pair scored this dimension on both sides
+  NOTE: CIs are cluster-bootstrapped BY HOST, not by pair — pairs from one host are not independent.
+  COMPOSITE VERDICT (frozen decision rule, PRE-REGISTRATION §7): PREDECESSOR HOLDS
+    counter-leg correct_diagnosis    n= 18  two-sided p=0.2386 → Holm 0.4773  favors=pred
+    counter-leg evidence_grounded    n= 18  two-sided p=0.3683 → Holm 0.4773  favors=pred
+    - not powered: the section-3 population minimums are not met, so neither EXCEEDS nor MATCHES can be claimed -- the burden of proof is TG's and this run cannot carry it
+  UNILATERAL TG-ONLY PROPERTIES — labelled, printed, and STRUCTURALLY OUTSIDE the verdict:
+    - falsifiable_prediction: TG mean 5.0 over n=8 (the predecessor structurally commits no predictions — a property, never a win)
+    - axes with no comparator (docs/BENCHMARK-AXES.md): A3 heal success rate; A4 autonomy rate; A5 fault-class breadth; A7 false-actuation rate; A8 safety-violation count — published as TG properties only, never as a comparison in either direction

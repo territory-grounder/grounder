@@ -1,0 +1,49 @@
+{
+  "result": {
+    "parent": "",
+    "made_sla": "true",
+    "watch_list": "",
+    "upon_reject": "cancel",
+    "sys_updated_on": "2026-07-14 09:12:44",
+    "child_incidents": "0",
+    "hold_reason": "",
+    "number": "INC0010023",
+    "resolved_by": "",
+    "sys_updated_by": "grounder.bot",
+    "opened_by": {
+      "link": "https://dev12345.service-now.com/api/now/table/sys_user/681ccaf9c0a8016400b98a06818d57c7",
+      "value": "681ccaf9c0a8016400b98a06818d57c7"
+    },
+    "user_input": "",
+    "sys_created_on": "2026-07-14 08:55:12",
+    "sys_domain": {
+      "link": "https://dev12345.service-now.com/api/now/table/sys_user_group/global",
+      "value": "global"
+    },
+    "state": "2",
+    "sys_created_by": "admin",
+    "knowledge": "false",
+    "closed_at": "",
+    "impact": "2",
+    "active": "true",
+    "priority": "3",
+    "sys_id": "1c832d9f4f411200adf9f8e18110c7b1",
+    "urgency": "2",
+    "short_description": "VPN gateway unreachable",
+    "assignment_group": {
+      "link": "https://dev12345.service-now.com/api/now/table/sys_user_group/287ebd7da9fe198100f92cc8d1d2154e",
+      "value": "287ebd7da9fe198100f92cc8d1d2154e"
+    },
+    "description": "Users in the Berlin office cannot reach the VPN gateway; tunnel establishment times out.",
+    "work_notes": "",
+    "assigned_to": {
+      "link": "https://dev12345.service-now.com/api/now/table/sys_user/46b87022a9fe198101a78787e40d7547",
+      "value": "46b87022a9fe198101a78787e40d7547"
+    },
+    "comments": "",
+    "due_date": "",
+    "sys_tags": "",
+    "severity": "3",
+    "category": "network"
+  }
+}

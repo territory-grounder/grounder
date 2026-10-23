@@ -1,0 +1,27 @@
+-- 0084: record WHICH durable recovery transition closed a triage session (TG-387).
+--
+-- THE DEFECT THIS CLOSES. ingest_transition (0034) is an isolated append-only ledger of the provider's own
+-- recovery assertions, with NO foreign key and nothing reconciling it back to session_triage. Until now a
+-- recovery only closed the incident's still-open work through a LIVE workflow — the vote-wait obsolete recheck
+-- (temporal/runner/workflow.go, RecoveredSince over ingest_transition) and the clear-confirm belt. Both run
+-- only while the session's workflow is still resident and polling; once it has timed out, completed, or lost
+-- its worker to a restart, an arriving recovery reconciles NOTHING. Measured on prod 2026-08-06: 156 rows
+-- stayed confirmed_clear=false and 133 sat frozen in failed:investigate an hour after their incident had
+-- recovered, and a stale POLL_PAUSE proposal sat open ~12h heading for a `timeout` while its guest was back up.
+--
+-- The reconciler (core/db.TransitionLogStore.reconcileRecovery) makes a captured recovery a first-class
+-- TERMINAL signal at INGEST time, independent of any live workflow: it closes the still-open triage sessions
+-- and obsoletes the still-open proposals for the recovery's (host, alert_rule) family. This column is its
+-- audit link — the id of the ingest_transition row that closed the session, so a confirmed_clear set by a
+-- reconciled recovery is distinguishable from one set by the workflow's own clear-observe loop (which leaves
+-- it NULL). NULL therefore carries two honest, distinct facts a reader must keep apart: a session that
+-- predates this migration, and a session cleared by the ordinary in-workflow path.
+--
+-- Additive, nullable, defaulted-NULL — backward-compatible exactly like mutated/confirmed_clear (0039) and
+-- degraded_capabilities (0082). It is a bigint reference to ingest_transition.id BY VALUE (no FK constraint):
+-- ingest_transition is append-only evidence whose rows are never deleted, so the id is stable, and a plain
+-- column keeps this migration a pure additive ALTER that cannot fail on a cross-table lock or a REFERENCES
+-- grant. OBSERVABILITY ONLY — closed_by_transition_id re-enters no gate (INV-08); it annotates a decision
+-- record, it does not author one.
+ALTER TABLE session_triage
+    ADD COLUMN closed_by_transition_id bigint;

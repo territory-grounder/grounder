@@ -1,0 +1,24 @@
+{
+  "actor_attribution": {
+    "mapping": [
+      { "id": "authorized-coordinate", "taxonomy": "attributed-authorized", "disposition": "stand-down-coordinate" },
+      { "id": "self-noop", "taxonomy": "attributed-self", "disposition": "self-noop" },
+      { "id": "unattributable-base", "taxonomy": "unattributable", "disposition": "ladder-unchanged" },
+      { "id": "suspicious-escalate", "taxonomy": "attributed-suspicious", "disposition": "security-escalate" },
+      { "id": "authorized-test-heal", "taxonomy": "authorized-test", "disposition": "ladder-unchanged" }
+    ],
+    "sanctioned_principals": [
+      { "id": "estate-admins", "domain": "pve", "actors": ["root@REPLACE-realm"] }
+    ],
+    "carve_outs": [
+      {
+        "id": "test-pool",
+        "domain": "pve",
+        "actors": ["root@REPLACE-realm"],
+        "hosts": ["REPLACE-with-your-test-pool-guest-hostnames"],
+        "valid_from": "2026-01-01T00:00:00Z",
+        "valid_until": "2026-12-31T00:00:00Z"
+      }
+    ]
+  }
+}

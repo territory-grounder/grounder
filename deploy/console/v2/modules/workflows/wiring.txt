@@ -1,0 +1,8 @@
+views.workflows = wfView;
+VIEW_META.workflows = ["Workflows", "AI sessions as live, replayable typed runs — every step, tool call, gate and verdict"];
+FACETS.workflows = [["all","All"],["live","Live"],["gated","Gated / floored"],["verified","Verified"]];
+// Nav: place in the OPERATE group, REPLACING the old "Sessions" entry (optionally keep the route alive: views.sessions = wfView;)
+// Badge: uses data-badge="wf_live"; in the shell's badge refresher add:
+//   $$('[data-badge="wf_live"]').forEach(el => el.textContent = WF_RUNS.filter(r => r.live).length);
+// Live-sim: wfView owns its own 1s interval (clock tick + run advance every 6s, reduceMotion-guarded); it self-clears when the view's root leaves the DOM, so route() needs no teardown hook.
+// Facet changes should re-invoke route('workflows') (standard SPA behavior) — wfView re-reads facetState.workflows on render.

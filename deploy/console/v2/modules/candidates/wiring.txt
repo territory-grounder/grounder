@@ -1,0 +1,2 @@
+views.candidates = ocView;
+VIEW_META.candidates = ["Earned classes", "capability candidates the estate proposed for itself — you read the dossier and type the command; the ladder is climbed, never granted (spec/028 · TG-230)"];

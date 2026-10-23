@@ -1,0 +1,5 @@
+*
+!.gitignore
+# The committed Phase-1 precedent seed (TG-125): the ONLY tracked file in this dir. Everything else the
+# worker writes here at runtime (the maintained corpus, .tmp rewrites, the semantic index) stays ignored.
+!corpus.seed.json

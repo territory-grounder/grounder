@@ -1,0 +1,8 @@
+{
+  "default": {
+    "band_mode": "respect"
+  },
+  "rules": [
+    { "id": "bare-allow-all", "verdict": "auto", "match": { "host_glob": "*" } }
+  ]
+}

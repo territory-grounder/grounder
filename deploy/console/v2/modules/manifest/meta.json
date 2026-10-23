@@ -1,0 +1,16 @@
+{
+ "nav": {
+  "group": "RECORD",
+  "label": "World model",
+  "view_key": "manifest",
+  "badge": "manifest",
+  "icon_svg_inner": "<rect x=\"2.5\" y=\"2.5\" width=\"11\" height=\"11\" rx=\"1\"/><path d=\"M2.5 6.2h11M6.2 6.2v7.3\"/><path d=\"M8.4 9.6l1.4 1.4 2.2-2.6\"/>"
+ },
+ "view_meta": [
+  "World model",
+  "the auto-drafted estate manifest — discovery proposes, you adopt; an adopted entry becomes an allowlist source (spec/027 · TG-229)."
+ ],
+ "purpose": "MANIFEST surface (record domain, epic TG-227/TG-229, spec/027 REQ-2703): the REVIEW-not-AUTHOR window onto the auto-drafted world model. Discovery enumerates what the estate actually runs (systemd units, docker containers, guests, hosts) and drafts each as a reviewable entry with provenance and confidence; this view renders the granted-versus-proposed diff and exposes exactly three closed verbs — adopt, reject, retire — each behind an operator session and a mandatory rationale, executing through the audited worldmodel.Transition chokepoint (ledger row BEFORE row update). An adopted entry becomes an allowlist SOURCE; the leaf default-deny gates that enforce the allowlist are byte-untouched by this plane, so what moves is the AUTHORSHIP of the grant (from hand-typed env vars to reviewed adoption), never the enforcement point.",
+ "notes": "There is deliberately NO create control and no endpoint behind one (paradigm rule 9, CONSTITUTION.md:237): discovery is the only author of rows. A control that let an operator type a target into existence would rebuild the configuration project this plane exists to remove. Honesty contract: NO fixture — a fabricated row here would be a fabricated ACTUATION TARGET one click from being granted; every value is fetched live via the guarded liveGet contract. 503 renders an honest unavailable state, an empty spine an honest empty state ('discovery has not drafted anything yet'), never an invented estate. The rail badge shows the REAL draft count from the API and stays em-dash until one exists. Review controls are data-keyed off the SERVER-computed caller_can_act and rendered DISABLED (not hidden) for a read-only caller — hiding them would leave an operator wondering where the queue went; enabling them would promise an action the server will refuse. Each row carries the server-computed 'grants' chip answering whether adopting it materializes anything at all, computed from the SAME function that builds the allowlist union so the label can never drift from the effect.",
+ "verified": "assemble.py rebuild byte-clean; node --check on the extracted bundle passes; hash-route #manifest registers; loading/unavailable/empty/populated/read-only states exercised against a stubbed API via Playwright (e2e/manifest-review.mjs) incl. the no-create-control and disabled-when-caller-cannot-act assertions."
+}

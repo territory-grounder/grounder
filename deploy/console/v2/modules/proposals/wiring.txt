@@ -1,0 +1,2 @@
+views.proposals = propView;
+VIEW_META.proposals = ["Proposals", "shadow proposals — free-form fixes the agent named with no registered op-class; recorded and screened, structurally unexecutable (spec/026 · TG-228)"];

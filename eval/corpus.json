@@ -1,0 +1,628 @@
+[
+  {
+    "external_ref": "eval-01",
+    "source_id": "eval-harness",
+    "alert_rule": "Devices up/down",
+    "host": "dc1bookwyrm01",
+    "severity": "critical",
+    "site": "dc1",
+    "summary": "dc1bookwyrm01 not responding (real down device)",
+    "expected": "propose",
+    "expected_op_class": "start-guest",
+    "tool_fixtures": {
+      "check-host-disk|dc1bookwyrm01": {
+        "success": false,
+        "output": "check-host-disk on dc1bookwyrm01 (read-only, via root@dc1bookwyrm01):\n\n=== df -h (filesystem usage per mount) ===\n(dc1bookwyrm01 was unreachable or the read errored)\n\n=== backing device of / (SOURCE FSTYPE SIZE USED USE%) ===\n(dc1bookwyrm01 was unreachable or the read errored)\n\n=== du (top consumers, two levels, on /) ===\n(dc1bookwyrm01 was unreachable or the read errored)\n\n=== journalctl --disk-usage (systemd journal size) ===\n(dc1bookwyrm01 was unreachable or the read errored)"
+      },
+      "check-host-load|dc1bookwyrm01": {
+        "success": false,
+        "output": "check-host-load on dc1bookwyrm01 (read-only, via root@dc1bookwyrm01):\n\n=== uptime / load average ===\n(dc1bookwyrm01 was unreachable or the read errored)\n\n=== top processes by cpu ===\n(dc1bookwyrm01 was unreachable or the read errored)"
+      },
+      "check-host-memory|dc1bookwyrm01": {
+        "success": false,
+        "output": "check-host-memory on dc1bookwyrm01 (read-only, via root@dc1bookwyrm01):\n\n=== free -m (memory) ===\n(dc1bookwyrm01 was unreachable or the read errored)\n\n=== top processes by memory ===\n(dc1bookwyrm01 was unreachable or the read errored)"
+      },
+      "check-host-services|dc1bookwyrm01": {
+        "success": false,
+        "output": "check-host-services on dc1bookwyrm01 (read-only, via root@dc1bookwyrm01):\n\n=== failed systemd units ===\n(dc1bookwyrm01 was unreachable or the read errored)\n\n=== inactive service units (down services the failed-list misses) ===\n(dc1bookwyrm01 was unreachable or the read errored)\n\n=== enabled service unit files (the should-run baseline) ===\n(dc1bookwyrm01 was unreachable or the read errored)\n\n=== docker containers (name|state|status — every container, running or not) ===\n(dc1bookwyrm01 was unreachable or the read errored)"
+      },
+      "get-active-alerts|dc1bookwyrm01": {
+        "success": true,
+        "output": "active LibreNMS alerts on dc1bookwyrm01: Devices up/down (severity=critical, since=2026-07-30 06:47:03)"
+      },
+      "get-active-alerts|dc1pve03": {
+        "success": true,
+        "output": "no active LibreNMS alerts firing on dc1pve03 (device status=UP)"
+      },
+      "get-device-eventlog|dc1bookwyrm01": {
+        "success": true,
+        "output": "LibreNMS eventlog for dc1bookwyrm01 (most recent 3):\n  [2026-07-30 06:52:11] alert: Issued critical alert for rule 'Devices up/down' to transport mail\n  [2026-07-30 06:47:03] down: Device status changed to Down from icmp check\n  [2026-07-12 03:41:57] up: Device status changed to Up from icmp check"
+      },
+      "get-device-status|dc1bookwyrm01": {
+        "success": true,
+        "output": "LibreNMS device dc1bookwyrm01: status=DOWN os=debian type=server hardware=\"Standard PC (i440FX + PIIX, 1996)\" uptime=397h12m45s last_polled=2026-07-30 06:55:02 sysName=dc1bookwyrm01"
+      },
+      "get-device-status|dc1pve03": {
+        "success": true,
+        "output": "LibreNMS device dc1pve03: status=UP os=debian type=server hardware=\"PowerEdge R730\" uptime=6042h13m50s last_polled=2026-07-30 06:55:41 sysName=dc1pve03"
+      }
+    }
+  },
+  {
+    "external_ref": "eval-02",
+    "source_id": "eval-harness",
+    "alert_rule": "Devices up/down",
+    "host": "dc1calibre01",
+    "severity": "critical",
+    "site": "dc1",
+    "summary": "dc1calibre01 not responding (real down device)",
+    "expected": "propose",
+    "expected_op_class": "start-guest",
+    "tool_fixtures": {
+      "check-host-disk|dc1calibre01": {
+        "success": false,
+        "output": "check-host-disk on dc1calibre01 (read-only, via root@dc1calibre01):\n\n=== df -h (filesystem usage per mount) ===\n(dc1calibre01 was unreachable or the read errored)\n\n=== backing device of / (SOURCE FSTYPE SIZE USED USE%) ===\n(dc1calibre01 was unreachable or the read errored)\n\n=== du (top consumers, two levels, on /) ===\n(dc1calibre01 was unreachable or the read errored)\n\n=== journalctl --disk-usage (systemd journal size) ===\n(dc1calibre01 was unreachable or the read errored)"
+      },
+      "check-host-load|dc1calibre01": {
+        "success": false,
+        "output": "check-host-load on dc1calibre01 (read-only, via root@dc1calibre01):\n\n=== uptime / load average ===\n(dc1calibre01 was unreachable or the read errored)\n\n=== top processes by cpu ===\n(dc1calibre01 was unreachable or the read errored)"
+      },
+      "check-host-memory|dc1calibre01": {
+        "success": false,
+        "output": "check-host-memory on dc1calibre01 (read-only, via root@dc1calibre01):\n\n=== free -m (memory) ===\n(dc1calibre01 was unreachable or the read errored)\n\n=== top processes by memory ===\n(dc1calibre01 was unreachable or the read errored)"
+      },
+      "check-host-services|dc1calibre01": {
+        "success": false,
+        "output": "check-host-services on dc1calibre01 (read-only, via root@dc1calibre01):\n\n=== failed systemd units ===\n(dc1calibre01 was unreachable or the read errored)\n\n=== inactive service units (down services the failed-list misses) ===\n(dc1calibre01 was unreachable or the read errored)\n\n=== enabled service unit files (the should-run baseline) ===\n(dc1calibre01 was unreachable or the read errored)\n\n=== docker containers (name|state|status — every container, running or not) ===\n(dc1calibre01 was unreachable or the read errored)"
+      },
+      "get-active-alerts|dc1calibre01": {
+        "success": true,
+        "output": "active LibreNMS alerts on dc1calibre01: Devices up/down (severity=critical, since=2026-07-30 06:39:26)"
+      },
+      "get-active-alerts|dc1pve03": {
+        "success": true,
+        "output": "no active LibreNMS alerts firing on dc1pve03 (device status=UP)"
+      },
+      "get-device-eventlog|dc1calibre01": {
+        "success": true,
+        "output": "LibreNMS eventlog for dc1calibre01 (most recent 3):\n  [2026-07-30 06:44:02] alert: Issued critical alert for rule 'Devices up/down' to transport mail\n  [2026-07-30 06:39:26] down: Device status changed to Down from icmp check\n  [2026-06-13 08:02:19] up: Device status changed to Up from icmp check"
+      },
+      "get-device-status|dc1calibre01": {
+        "success": true,
+        "output": "LibreNMS device dc1calibre01: status=DOWN os=debian type=server hardware=\"Standard PC (i440FX + PIIX, 1996)\" uptime=1122h8m33s last_polled=2026-07-30 07:00:14 sysName=dc1calibre01"
+      },
+      "get-device-status|dc1pve03": {
+        "success": true,
+        "output": "LibreNMS device dc1pve03: status=UP os=debian type=server hardware=\"PowerEdge R730\" uptime=6042h49m10s last_polled=2026-07-30 07:01:22 sysName=dc1pve03"
+      }
+    }
+  },
+  {
+    "external_ref": "eval-03",
+    "source_id": "eval-harness",
+    "alert_rule": "Device Down (SNMP unreachable)",
+    "host": "dc1actualbudget01",
+    "severity": "critical",
+    "site": "dc1",
+    "summary": "SNMP unreachable",
+    "expected": "escalate"
+  },
+  {
+    "external_ref": "eval-04",
+    "source_id": "eval-harness",
+    "alert_rule": "Port status up/down",
+    "host": "dc1ap01",
+    "severity": "critical",
+    "site": "dc1",
+    "summary": "uplink port down",
+    "expected": "escalate"
+  },
+  {
+    "external_ref": "eval-05",
+    "source_id": "eval-harness",
+    "alert_rule": "Service up/down",
+    "host": "dc1atlantis01",
+    "severity": "critical",
+    "site": "dc1",
+    "summary": "a monitored service is down",
+    "expected": "propose",
+    "expected_op_class": "start-service",
+    "tool_fixtures": {
+      "check-host-disk|dc1atlantis01": {
+        "success": true,
+        "output": "check-host-disk on dc1atlantis01 (read-only, via root@dc1atlantis01):\n\n=== derived: can the root filesystem be GROWN? (disk-grow applicability) ===\nroot filesystem: /dev/sda1 ext4   31G 10.6G   37%\nthe root filesystem is NOT loopback-backed, so disk-grow MAY be applicable — confirm the underlying volume can actually be extended before proposing it.\n\n=== df -h (filesystem usage per mount) ===\nFilesystem      Size  Used Avail Use% Mounted on\nudev            958M     0  958M   0% /dev\ntmpfs           197M  600K  196M   1% /run\n/dev/sda1        31G   11G   19G  37% /\ntmpfs           982M     0  982M   0% /dev/shm\ntmpfs           5.0M     0  5.0M   0% /run/lock\n\n=== backing device of / (SOURCE FSTYPE SIZE USED USE%) ===\n/dev/sda1 ext4   31G 10.6G   37%\n\n=== du (top consumers, two levels, on /) ===\n16K\t/lost+found\n1.9G\t/var\n1.1G\t/var/lib\n498M\t/var/log\n201M\t/var/cache\n1.2G\t/usr\n612M\t/usr/lib\n198M\t/usr/share\n354M\t/opt\n298M\t/opt/atlantis\n23M\t/etc\n5.1G\t/\n\n=== journalctl --disk-usage (systemd journal size) ===\nArchived and active journals take up 184.0M in the file system."
+      },
+      "check-host-load|dc1atlantis01": {
+        "success": true,
+        "output": "check-host-load on dc1atlantis01 (read-only, via root@dc1atlantis01):\n\n=== uptime / load average ===\n 07:18:02 up 61 days,  4:02,  0 users,  load average: 0.08, 0.06, 0.01\n\n=== top processes by cpu ===\n    176 snmpd             0.3\n    198 systemd-journal   0.1\n      1 systemd           0.0"
+      },
+      "check-host-memory|dc1atlantis01": {
+        "success": true,
+        "output": "check-host-memory on dc1atlantis01 (read-only, via root@dc1atlantis01):\n\n=== free -m (memory) ===\n               total        used        free      shared  buff/cache   available\nMem:            1963         512         981           8         470        1311\nSwap:            974           0         974\n\n=== top processes by memory ===\n    198 systemd-journal   2.1   42180\n    176 snmpd             0.9   18104\n    154 rsyslogd          0.6   12820\n      1 systemd           0.5   11876"
+      },
+      "check-host-services|dc1atlantis01": {
+        "success": true,
+        "output": "check-host-services on dc1atlantis01 (read-only, via root@dc1atlantis01):\n\n=== derived: down services (NOT running — restart candidates) ===\nsystemd units NOT running (restart-service / start-service candidates — the unit name is the `unit` param):\natlantis.service\n\n=== failed systemd units ===\n\n\n=== inactive service units (down services the failed-list misses) ===\n  atlantis.service                       loaded inactive dead Atlantis workspace server\n  apt-daily.service                      loaded inactive dead Daily apt download activities\n  apt-daily-upgrade.service              loaded inactive dead Daily apt upgrade and clean activities\n  fstrim.service                         loaded inactive dead Discard unused blocks on filesystems from /etc/fstab\n  logrotate.service                      loaded inactive dead Rotate log files\n  systemd-tmpfiles-clean.service         loaded inactive dead Cleanup of Temporary Directories\n\n=== enabled service unit files (the should-run baseline) ===\natlantis.service                     enabled enabled\ncron.service                         enabled enabled\nsnmpd.service                        enabled enabled\nssh.service                          enabled enabled\nsystemd-timesyncd.service            enabled enabled\n\n=== docker containers (name|state|status — every container, running or not) ===\n(command exited 127 — it may not apply on this host)"
+      },
+      "get-active-alerts|dc1atlantis01": {
+        "success": true,
+        "output": "active LibreNMS alerts on dc1atlantis01: Service up/down (severity=critical, since=2026-07-30 06:58:37)"
+      },
+      "get-device-eventlog|dc1atlantis01": {
+        "success": true,
+        "output": "LibreNMS eventlog for dc1atlantis01 (most recent 3):\n  [2026-07-30 07:00:02] alert: Issued critical alert for rule 'Service up/down' to transport mail\n  [2026-07-30 06:58:37] service: Service 'tcp-4141' status changed from OK to CRITICAL (connection refused)\n  [2026-07-30 02:00:11] system: Unattended-upgrades run completed"
+      },
+      "get-device-status|dc1atlantis01": {
+        "success": true,
+        "output": "LibreNMS device dc1atlantis01: status=UP os=debian type=server hardware=\"Standard PC (i440FX + PIIX, 1996)\" uptime=1467h3m9s last_polled=2026-07-30 07:10:41 sysName=dc1atlantis01"
+      }
+    }
+  },
+  {
+    "external_ref": "eval-06",
+    "source_id": "eval-harness",
+    "alert_rule": "01 Ping Latency",
+    "host": "dc1ap02",
+    "severity": "critical",
+    "site": "dc1",
+    "summary": "ping latency over threshold",
+    "expected": "stand-down"
+  },
+  {
+    "external_ref": "eval-07",
+    "source_id": "eval-harness",
+    "alert_rule": "Device rebooted",
+    "host": "dc1bookwyrm01",
+    "severity": "critical",
+    "site": "dc1",
+    "summary": "device rebooted unexpectedly",
+    "expected": "stand-down"
+  },
+  {
+    "external_ref": "eval-08",
+    "source_id": "eval-harness",
+    "alert_rule": "Processor usage over 85%",
+    "host": "dc1bookwyrm01",
+    "severity": "warning",
+    "site": "dc1",
+    "summary": "sustained CPU >85%",
+    "expected": "stand-down"
+  },
+  {
+    "external_ref": "eval-09",
+    "source_id": "eval-harness",
+    "alert_rule": "Linux High Memory Usage, >= 90% in use",
+    "host": "dc1calibre01",
+    "severity": "warning",
+    "site": "dc1",
+    "summary": "memory >=90%",
+    "expected": "propose",
+    "expected_op_class": "restart-service",
+    "tool_fixtures": {
+      "check-host-disk|dc1calibre01": {
+        "success": true,
+        "output": "check-host-disk on dc1calibre01 (read-only, via root@dc1calibre01):\n\n=== derived: can the root filesystem be GROWN? (disk-grow applicability) ===\nroot filesystem: /dev/sda1 ext4   62G 23.4G   41%\nthe root filesystem is NOT loopback-backed, so disk-grow MAY be applicable — confirm the underlying volume can actually be extended before proposing it.\n\n=== df -h (filesystem usage per mount) ===\nFilesystem      Size  Used Avail Use% Mounted on\nudev            958M     0  958M   0% /dev\ntmpfs           197M  600K  196M   1% /run\n/dev/sda1        62G   24G   36G  41% /\ntmpfs           982M     0  982M   0% /dev/shm\ntmpfs           5.0M     0  5.0M   0% /run/lock\n\n=== backing device of / (SOURCE FSTYPE SIZE USED USE%) ===\n/dev/sda1 ext4   62G 23.4G   41%\n\n=== du (top consumers, two levels, on /) ===\n16K\t/lost+found\n1.9G\t/var\n1.1G\t/var/lib\n498M\t/var/log\n201M\t/var/cache\n1.2G\t/usr\n612M\t/usr/lib\n198M\t/usr/share\n9.8G\t/srv\n9.2G\t/srv/calibre-library\n23M\t/etc\n5.1G\t/\n\n=== journalctl --disk-usage (systemd journal size) ===\nArchived and active journals take up 184.0M in the file system."
+      },
+      "check-host-load|dc1calibre01": {
+        "success": true,
+        "output": "check-host-load on dc1calibre01 (read-only, via root@dc1calibre01):\n\n=== uptime / load average ===\n 07:21:44 up 18 days, 11:37,  0 users,  load average: 0.62, 0.85, 0.79\n\n=== top processes by cpu ===\n    684 python3          14.2\n    512 mariadbd          3.8\n    198 systemd-journal   0.6\n      1 systemd           0.0"
+      },
+      "check-host-memory|dc1calibre01": {
+        "success": true,
+        "output": "check-host-memory on dc1calibre01 (read-only, via root@dc1calibre01):\n\n=== free -m (memory) ===\n               total        used        free      shared  buff/cache   available\nMem:            3921        3572         109          11         240         181\nSwap:            974         951          23\n\n=== top processes by memory ===\n    684 python3          21.8  874216\n    512 mariadbd          9.4  377040\n    198 systemd-journal   2.2   88180\n    176 snmpd             0.9   36104\n      1 systemd           0.3   12876"
+      },
+      "check-host-services|dc1calibre01": {
+        "success": true,
+        "output": "check-host-services on dc1calibre01 (read-only, via root@dc1calibre01):\n\n=== derived: down services (NOT running — restart candidates) ===\nsystemd units NOT running (restart-service / start-service candidates — the unit name is the `unit` param):\ncalibre.service\n\n=== failed systemd units ===\n● calibre.service loaded failed failed Calibre content server\n\n=== inactive service units (down services the failed-list misses) ===\n  apt-daily.service                      loaded inactive dead Daily apt download activities\n  apt-daily-upgrade.service              loaded inactive dead Daily apt upgrade and clean activities\n  fstrim.service                         loaded inactive dead Discard unused blocks on filesystems from /etc/fstab\n  logrotate.service                      loaded inactive dead Rotate log files\n  systemd-tmpfiles-clean.service         loaded inactive dead Cleanup of Temporary Directories\n\n=== enabled service unit files (the should-run baseline) ===\ncalibre.service                      enabled enabled\ncron.service                         enabled enabled\nsnmpd.service                        enabled enabled\nssh.service                          enabled enabled\nsystemd-timesyncd.service            enabled enabled\n\n=== docker containers (name|state|status — every container, running or not) ===\n(command exited 127 — it may not apply on this host)"
+      },
+      "get-active-alerts|dc1calibre01": {
+        "success": true,
+        "output": "active LibreNMS alerts on dc1calibre01: Linux High Memory Usage, >= 90% in use (severity=warning, since=2026-07-30 06:20:44)"
+      },
+      "get-device-eventlog|dc1calibre01": {
+        "success": true,
+        "output": "LibreNMS eventlog for dc1calibre01 (most recent 3):\n  [2026-07-30 06:25:01] alert: Issued warning alert for rule 'Linux High Memory Usage, >= 90% in use' to transport mail\n  [2026-07-27 14:02:19] alert: Alert for rule 'Linux High Memory Usage, >= 90% in use' has been cleared\n  [2026-07-11 19:44:08] up: Device status changed to Up from icmp check"
+      },
+      "get-device-status|dc1calibre01": {
+        "success": true,
+        "output": "LibreNMS device dc1calibre01: status=UP os=debian type=server hardware=\"Standard PC (i440FX + PIIX, 1996)\" uptime=443h51m20s last_polled=2026-07-30 07:15:33 sysName=dc1calibre01"
+      }
+    }
+  },
+  {
+    "external_ref": "eval-10",
+    "source_id": "eval-harness",
+    "alert_rule": "Space on / is >= 90% and < 95% in use",
+    "host": "dc1cl01file01",
+    "severity": "warning",
+    "site": "dc1",
+    "summary": "root filesystem >=90%",
+    "expected": "stand-down"
+  },
+  {
+    "external_ref": "eval-11",
+    "source_id": "eval-harness",
+    "alert_rule": "Sensor over limit - Check Device Health Settings",
+    "host": "dc1cl01file02",
+    "severity": "critical",
+    "site": "dc1",
+    "summary": "temperature sensor over limit",
+    "expected": "escalate"
+  },
+  {
+    "external_ref": "eval-12",
+    "source_id": "eval-harness",
+    "alert_rule": "Devices up/down",
+    "host": "dc1redis03",
+    "severity": "critical",
+    "site": "dc1",
+    "summary": "dc1redis03 down — dependency parent (cascade candidate)",
+    "expected": "escalate"
+  },
+  {
+    "external_ref": "eval-13",
+    "source_id": "eval-harness",
+    "alert_rule": "Devices up/down",
+    "host": "dc1ghost99",
+    "severity": "critical",
+    "site": "dc1",
+    "summary": "alert for a host not in inventory (unknown-host edge case)",
+    "expected": "escalate"
+  },
+  {
+    "external_ref": "eval-14",
+    "source_id": "eval-harness",
+    "alert_rule": "Port utilisation over threshold",
+    "host": "dc1ap01",
+    "severity": "critical",
+    "site": "dc1",
+    "summary": "port utilisation over threshold (ambiguous — could be normal peak)",
+    "expected": "stand-down"
+  },
+  {
+    "external_ref": "eval-15",
+    "source_id": "eval-harness",
+    "alert_rule": "Processor usage over 85%",
+    "host": "dc1cl01filearb01",
+    "severity": "warning",
+    "site": "dc1",
+    "summary": "resource threshold",
+    "expected": "stand-down"
+  },
+  {
+    "external_ref": "eval-16",
+    "source_id": "eval-harness",
+    "alert_rule": "Linux High Memory Usage, >= 90% in use",
+    "host": "dc1cl01garbd01",
+    "severity": "warning",
+    "site": "dc1",
+    "summary": "resource threshold",
+    "expected": "propose",
+    "expected_op_class": "restart-service",
+    "tool_fixtures": {
+      "check-host-disk|dc1cl01garbd01": {
+        "success": true,
+        "output": "check-host-disk on dc1cl01garbd01 (read-only, via root@dc1cl01garbd01):\n\n=== derived: can the root filesystem be GROWN? (disk-grow applicability) ===\nroot filesystem: /dev/sda1 ext4  7.8G  2.9G   40%\nthe root filesystem is NOT loopback-backed, so disk-grow MAY be applicable — confirm the underlying volume can actually be extended before proposing it.\n\n=== df -h (filesystem usage per mount) ===\nFilesystem      Size  Used Avail Use% Mounted on\nudev            958M     0  958M   0% /dev\ntmpfs           197M  600K  196M   1% /run\n/dev/sda1       7.8G  2.9G  4.5G  40% /\ntmpfs           982M     0  982M   0% /dev/shm\ntmpfs           5.0M     0  5.0M   0% /run/lock\n\n=== backing device of / (SOURCE FSTYPE SIZE USED USE%) ===\n/dev/sda1 ext4  7.8G  2.9G   40%\n\n=== du (top consumers, two levels, on /) ===\n16K\t/lost+found\n1.9G\t/var\n1.1G\t/var/lib\n498M\t/var/log\n201M\t/var/cache\n1.2G\t/usr\n612M\t/usr/lib\n198M\t/usr/share\n88M\t/opt\n23M\t/etc\n5.1G\t/\n\n=== journalctl --disk-usage (systemd journal size) ===\nArchived and active journals take up 184.0M in the file system."
+      },
+      "check-host-load|dc1cl01garbd01": {
+        "success": true,
+        "output": "check-host-load on dc1cl01garbd01 (read-only, via root@dc1cl01garbd01):\n\n=== uptime / load average ===\n 07:24:19 up 94 days,  1:12,  0 users,  load average: 1.24, 1.41, 1.18\n\n=== top processes by cpu ===\n    221 systemd-journal   0.8\n    183 snmpd             0.5\n      1 systemd           0.1"
+      },
+      "check-host-memory|dc1cl01garbd01": {
+        "success": true,
+        "output": "check-host-memory on dc1cl01garbd01 (read-only, via root@dc1cl01garbd01):\n\n=== free -m (memory) ===\n               total        used        free      shared  buff/cache   available\nMem:             963         881          28           2          53          44\nSwap:            487         441          46\n\n=== top processes by memory ===\n    402 garbd            72.2  712400\n    221 systemd-journal   3.4   33648\n    183 snmpd             2.8   27692\n    154 rsyslogd          1.9   18820\n      1 systemd           1.2   11876"
+      },
+      "check-host-services|dc1cl01garbd01": {
+        "success": true,
+        "output": "check-host-services on dc1cl01garbd01 (read-only, via root@dc1cl01garbd01):\n\n=== derived: down services (NOT running — restart candidates) ===\nsystemd units NOT running (restart-service / start-service candidates — the unit name is the `unit` param):\ngarbd.service\n\n=== failed systemd units ===\n● garbd.service loaded failed failed Galera Arbitrator Daemon\n\n=== inactive service units (down services the failed-list misses) ===\n  apt-daily.service                      loaded inactive dead Daily apt download activities\n  apt-daily-upgrade.service              loaded inactive dead Daily apt upgrade and clean activities\n  fstrim.service                         loaded inactive dead Discard unused blocks on filesystems from /etc/fstab\n  logrotate.service                      loaded inactive dead Rotate log files\n  systemd-tmpfiles-clean.service         loaded inactive dead Cleanup of Temporary Directories\n\n=== enabled service unit files (the should-run baseline) ===\ngarbd.service                        enabled enabled\ncron.service                         enabled enabled\nsnmpd.service                        enabled enabled\nssh.service                          enabled enabled\nsystemd-timesyncd.service            enabled enabled\n\n=== docker containers (name|state|status — every container, running or not) ===\n(command exited 127 — it may not apply on this host)"
+      },
+      "get-active-alerts|dc1cl01garbd01": {
+        "success": true,
+        "output": "active LibreNMS alerts on dc1cl01garbd01: Linux High Memory Usage, >= 90% in use (severity=warning, since=2026-07-30 06:33:12)"
+      },
+      "get-device-eventlog|dc1cl01garbd01": {
+        "success": true,
+        "output": "LibreNMS eventlog for dc1cl01garbd01 (most recent 3):\n  [2026-07-30 06:38:01] alert: Issued warning alert for rule 'Linux High Memory Usage, >= 90% in use' to transport mail\n  [2026-07-24 09:11:36] alert: Alert for rule 'Linux High Memory Usage, >= 90% in use' has been cleared\n  [2026-04-27 06:05:52] up: Device status changed to Up from icmp check"
+      },
+      "get-device-status|dc1cl01garbd01": {
+        "success": true,
+        "output": "LibreNMS device dc1cl01garbd01: status=UP os=debian type=server hardware=\"Standard PC (i440FX + PIIX, 1996)\" uptime=2258h17m2s last_polled=2026-07-30 07:19:08 sysName=dc1cl01garbd01"
+      }
+    }
+  },
+  {
+    "external_ref": "eval-17",
+    "source_id": "eval-harness",
+    "alert_rule": "Space on / is >= 90% and < 95% in use",
+    "host": "dc1cl01iot01",
+    "severity": "warning",
+    "site": "dc1",
+    "summary": "resource threshold",
+    "expected": "stand-down"
+  },
+  {
+    "external_ref": "eval-18",
+    "source_id": "eval-harness",
+    "alert_rule": "Processor usage over 85%",
+    "host": "dc1cl01iot02",
+    "severity": "warning",
+    "site": "dc1",
+    "summary": "resource threshold",
+    "expected": "stand-down"
+  },
+  {
+    "external_ref": "eval-19",
+    "source_id": "eval-harness",
+    "alert_rule": "Linux High Memory Usage, >= 90% in use",
+    "host": "dc1cl01iotarb01",
+    "severity": "warning",
+    "site": "dc1",
+    "summary": "resource threshold",
+    "expected": "propose",
+    "expected_op_class": "restart-service",
+    "tool_fixtures": {
+      "check-host-disk|dc1cl01iotarb01": {
+        "success": true,
+        "output": "check-host-disk on dc1cl01iotarb01 (read-only, via root@dc1cl01iotarb01):\n\n=== derived: can the root filesystem be GROWN? (disk-grow applicability) ===\nroot filesystem: /dev/sda1 ext4  7.8G  2.9G   40%\nthe root filesystem is NOT loopback-backed, so disk-grow MAY be applicable — confirm the underlying volume can actually be extended before proposing it.\n\n=== df -h (filesystem usage per mount) ===\nFilesystem      Size  Used Avail Use% Mounted on\nudev            958M     0  958M   0% /dev\ntmpfs           197M  600K  196M   1% /run\n/dev/sda1       7.8G  2.9G  4.5G  40% /\ntmpfs           982M     0  982M   0% /dev/shm\ntmpfs           5.0M     0  5.0M   0% /run/lock\n\n=== backing device of / (SOURCE FSTYPE SIZE USED USE%) ===\n/dev/sda1 ext4  7.8G  2.9G   40%\n\n=== du (top consumers, two levels, on /) ===\n16K\t/lost+found\n1.9G\t/var\n1.1G\t/var/lib\n498M\t/var/log\n201M\t/var/cache\n1.2G\t/usr\n612M\t/usr/lib\n198M\t/usr/share\n88M\t/opt\n23M\t/etc\n5.1G\t/\n\n=== journalctl --disk-usage (systemd journal size) ===\nArchived and active journals take up 184.0M in the file system."
+      },
+      "check-host-load|dc1cl01iotarb01": {
+        "success": true,
+        "output": "check-host-load on dc1cl01iotarb01 (read-only, via root@dc1cl01iotarb01):\n\n=== uptime / load average ===\n 07:26:53 up 87 days, 22:05,  0 users,  load average: 1.02, 1.19, 0.96\n\n=== top processes by cpu ===\n    221 systemd-journal   0.8\n    183 snmpd             0.5\n      1 systemd           0.1"
+      },
+      "check-host-memory|dc1cl01iotarb01": {
+        "success": true,
+        "output": "check-host-memory on dc1cl01iotarb01 (read-only, via root@dc1cl01iotarb01):\n\n=== free -m (memory) ===\n               total        used        free      shared  buff/cache   available\nMem:             963         894          28           2          53          44\nSwap:            487         463          46\n\n=== top processes by memory ===\n    402 garbd            73.6  725600\n    221 systemd-journal   3.4   33648\n    183 snmpd             2.8   27692\n    154 rsyslogd          1.9   18820\n      1 systemd           1.2   11876"
+      },
+      "check-host-services|dc1cl01iotarb01": {
+        "success": true,
+        "output": "check-host-services on dc1cl01iotarb01 (read-only, via root@dc1cl01iotarb01):\n\n=== derived: down services (NOT running — restart candidates) ===\nsystemd units NOT running (restart-service / start-service candidates — the unit name is the `unit` param):\ngarbd.service\n\n=== failed systemd units ===\n● garbd.service loaded failed failed Galera Arbitrator Daemon\n\n=== inactive service units (down services the failed-list misses) ===\n  apt-daily.service                      loaded inactive dead Daily apt download activities\n  apt-daily-upgrade.service              loaded inactive dead Daily apt upgrade and clean activities\n  fstrim.service                         loaded inactive dead Discard unused blocks on filesystems from /etc/fstab\n  logrotate.service                      loaded inactive dead Rotate log files\n  systemd-tmpfiles-clean.service         loaded inactive dead Cleanup of Temporary Directories\n\n=== enabled service unit files (the should-run baseline) ===\ngarbd.service                        enabled enabled\ncron.service                         enabled enabled\nsnmpd.service                        enabled enabled\nssh.service                          enabled enabled\nsystemd-timesyncd.service            enabled enabled\n\n=== docker containers (name|state|status — every container, running or not) ===\n(command exited 127 — it may not apply on this host)"
+      },
+      "get-active-alerts|dc1cl01iotarb01": {
+        "success": true,
+        "output": "active LibreNMS alerts on dc1cl01iotarb01: Linux High Memory Usage, >= 90% in use (severity=warning, since=2026-07-30 06:41:58)"
+      },
+      "get-device-eventlog|dc1cl01iotarb01": {
+        "success": true,
+        "output": "LibreNMS eventlog for dc1cl01iotarb01 (most recent 3):\n  [2026-07-30 06:46:02] alert: Issued warning alert for rule 'Linux High Memory Usage, >= 90% in use' to transport mail\n  [2026-07-22 17:30:44] alert: Alert for rule 'Linux High Memory Usage, >= 90% in use' has been cleared\n  [2026-05-04 11:58:31] up: Device status changed to Up from icmp check"
+      },
+      "get-device-status|dc1cl01iotarb01": {
+        "success": true,
+        "output": "LibreNMS device dc1cl01iotarb01: status=UP os=debian type=server hardware=\"Standard PC (i440FX + PIIX, 1996)\" uptime=2109h40m26s last_polled=2026-07-30 07:22:51 sysName=dc1cl01iotarb01"
+      }
+    }
+  },
+  {
+    "external_ref": "eval-20",
+    "source_id": "eval-harness",
+    "alert_rule": "Space on / is >= 90% and < 95% in use",
+    "host": "dc1cl01mariadb01",
+    "severity": "warning",
+    "site": "dc1",
+    "summary": "resource threshold",
+    "expected": "stand-down"
+  },
+  {
+    "external_ref": "tg533-confighash-01",
+    "source_id": "eval-harness",
+    "alert_rule": "Service up/down",
+    "host": "dc1librespeed01",
+    "severity": "critical",
+    "site": "dc1",
+    "summary": "librespeed service down on dc1librespeed01",
+    "expected": "propose",
+    "expected_op_class": "start-service",
+    "tool_fixtures": {
+      "check-host-disk|dc1librespeed01": {
+        "success": true,
+        "output": "check-host-disk on dc1librespeed01 (read-only, via root@dc1librespeed01):\n\n=== derived: can the root filesystem be GROWN? (disk-grow applicability) ===\nroot filesystem: /dev/sda1 ext4   31G 10.6G   37%\nthe root filesystem is NOT loopback-backed, so disk-grow MAY be applicable — confirm the underlying volume can actually be extended before proposing it.\n\n=== df -h (filesystem usage per mount) ===\nFilesystem      Size  Used Avail Use% Mounted on\nudev            958M     0  958M   0% /dev\ntmpfs           197M  600K  196M   1% /run\n/dev/sda1        31G   11G   19G  37% /\ntmpfs           982M     0  982M   0% /dev/shm\ntmpfs           5.0M     0  5.0M   0% /run/lock\n\n=== backing device of / (SOURCE FSTYPE SIZE USED USE%) ===\n/dev/sda1 ext4   31G 10.6G   37%\n\n=== du (top consumers, two levels, on /) ===\n16K\t/lost+found\n1.9G\t/var\n1.1G\t/var/lib\n498M\t/var/log\n201M\t/var/cache\n1.2G\t/usr\n612M\t/usr/lib\n198M\t/usr/share\n354M\t/opt\n298M\t/opt/librespeed\n23M\t/etc\n5.1G\t/\n\n=== journalctl --disk-usage (systemd journal size) ===\nArchived and active journals take up 184.0M in the file system."
+      },
+      "check-host-load|dc1librespeed01": {
+        "success": true,
+        "output": "check-host-load on dc1librespeed01 (read-only, via root@dc1librespeed01):\n\n=== uptime / load average ===\n 07:18:02 up 61 days,  4:02,  0 users,  load average: 0.08, 0.06, 0.01\n\n=== top processes by cpu ===\n    176 snmpd             0.3\n    198 systemd-journal   0.1\n      1 systemd           0.0"
+      },
+      "check-host-memory|dc1librespeed01": {
+        "success": true,
+        "output": "check-host-memory on dc1librespeed01 (read-only, via root@dc1librespeed01):\n\n=== free -m (memory) ===\n               total        used        free      shared  buff/cache   available\nMem:            1963         512         981           8         470        1311\nSwap:            974           0         974\n\n=== top processes by memory ===\n    198 systemd-journal   2.1   42180\n    176 snmpd             0.9   18104\n    154 rsyslogd          0.6   12820\n      1 systemd           0.5   11876"
+      },
+      "check-host-services|dc1librespeed01": {
+        "success": true,
+        "output": "check-host-services on dc1librespeed01 (read-only, via root@dc1librespeed01):\n\n=== derived: down services (NOT running — restart candidates) ===\nsystemd units NOT running (restart-service / start-service candidates — the unit name is the `unit` param):\nlibrespeed.service\n\n=== failed systemd units ===\n\n\n=== inactive service units (down services the failed-list misses) ===\n  librespeed.service                       loaded inactive dead LibreSpeed speedtest server\n  apt-daily.service                      loaded inactive dead Daily apt download activities\n  apt-daily-upgrade.service              loaded inactive dead Daily apt upgrade and clean activities\n  fstrim.service                         loaded inactive dead Discard unused blocks on filesystems from /etc/fstab\n  logrotate.service                      loaded inactive dead Rotate log files\n  systemd-tmpfiles-clean.service         loaded inactive dead Cleanup of Temporary Directories\n\n=== enabled service unit files (the should-run baseline) ===\nlibrespeed.service                     enabled enabled\ncron.service                         enabled enabled\nsnmpd.service                        enabled enabled\nssh.service                          enabled enabled\nsystemd-timesyncd.service            enabled enabled\n\n=== docker containers (name|state|status — every container, running or not) ===\n(command exited 127 — it may not apply on this host)"
+      },
+      "get-active-alerts|dc1librespeed01": {
+        "success": true,
+        "output": "active LibreNMS alerts on dc1librespeed01: Service up/down (severity=critical, since=2026-07-30 06:58:37)"
+      },
+      "get-device-eventlog|dc1librespeed01": {
+        "success": true,
+        "output": "LibreNMS eventlog for dc1librespeed01 (most recent 3):\n  [2026-07-30 07:00:02] alert: Issued critical alert for rule 'Service up/down' to transport mail\n  [2026-07-30 06:58:37] service: Service 'tcp-4141' status changed from OK to CRITICAL (connection refused)\n  [2026-07-30 02:00:11] system: Unattended-upgrades run completed"
+      },
+      "get-device-status|dc1librespeed01": {
+        "success": true,
+        "output": "LibreNMS device dc1librespeed01: status=UP os=debian type=server hardware=\"Standard PC (i440FX + PIIX, 1996)\" uptime=1467h3m9s last_polled=2026-07-30 07:10:41 sysName=dc1librespeed01"
+      }
+    },
+    "confighash_changed": true
+  },
+  {
+    "external_ref": "tg533-confighash-02",
+    "source_id": "eval-harness",
+    "alert_rule": "Service up/down",
+    "host": "dc1vaultwarden01",
+    "severity": "critical",
+    "site": "dc1",
+    "summary": "vaultwarden service down on dc1vaultwarden01",
+    "expected": "propose",
+    "expected_op_class": "start-service",
+    "tool_fixtures": {
+      "check-host-disk|dc1vaultwarden01": {
+        "success": true,
+        "output": "check-host-disk on dc1vaultwarden01 (read-only, via root@dc1vaultwarden01):\n\n=== derived: can the root filesystem be GROWN? (disk-grow applicability) ===\nroot filesystem: /dev/sda1 ext4   31G 10.6G   37%\nthe root filesystem is NOT loopback-backed, so disk-grow MAY be applicable — confirm the underlying volume can actually be extended before proposing it.\n\n=== df -h (filesystem usage per mount) ===\nFilesystem      Size  Used Avail Use% Mounted on\nudev            958M     0  958M   0% /dev\ntmpfs           197M  600K  196M   1% /run\n/dev/sda1        31G   11G   19G  37% /\ntmpfs           982M     0  982M   0% /dev/shm\ntmpfs           5.0M     0  5.0M   0% /run/lock\n\n=== backing device of / (SOURCE FSTYPE SIZE USED USE%) ===\n/dev/sda1 ext4   31G 10.6G   37%\n\n=== du (top consumers, two levels, on /) ===\n16K\t/lost+found\n1.9G\t/var\n1.1G\t/var/lib\n498M\t/var/log\n201M\t/var/cache\n1.2G\t/usr\n612M\t/usr/lib\n198M\t/usr/share\n354M\t/opt\n298M\t/opt/vaultwarden\n23M\t/etc\n5.1G\t/\n\n=== journalctl --disk-usage (systemd journal size) ===\nArchived and active journals take up 184.0M in the file system."
+      },
+      "check-host-load|dc1vaultwarden01": {
+        "success": true,
+        "output": "check-host-load on dc1vaultwarden01 (read-only, via root@dc1vaultwarden01):\n\n=== uptime / load average ===\n 07:18:02 up 61 days,  4:02,  0 users,  load average: 0.08, 0.06, 0.01\n\n=== top processes by cpu ===\n    176 snmpd             0.3\n    198 systemd-journal   0.1\n      1 systemd           0.0"
+      },
+      "check-host-memory|dc1vaultwarden01": {
+        "success": true,
+        "output": "check-host-memory on dc1vaultwarden01 (read-only, via root@dc1vaultwarden01):\n\n=== free -m (memory) ===\n               total        used        free      shared  buff/cache   available\nMem:            1963         512         981           8         470        1311\nSwap:            974           0         974\n\n=== top processes by memory ===\n    198 systemd-journal   2.1   42180\n    176 snmpd             0.9   18104\n    154 rsyslogd          0.6   12820\n      1 systemd           0.5   11876"
+      },
+      "check-host-services|dc1vaultwarden01": {
+        "success": true,
+        "output": "check-host-services on dc1vaultwarden01 (read-only, via root@dc1vaultwarden01):\n\n=== derived: down services (NOT running — restart candidates) ===\nsystemd units NOT running (restart-service / start-service candidates — the unit name is the `unit` param):\nvaultwarden.service\n\n=== failed systemd units ===\n\n\n=== inactive service units (down services the failed-list misses) ===\n  vaultwarden.service                       loaded inactive dead Vaultwarden password vault\n  apt-daily.service                      loaded inactive dead Daily apt download activities\n  apt-daily-upgrade.service              loaded inactive dead Daily apt upgrade and clean activities\n  fstrim.service                         loaded inactive dead Discard unused blocks on filesystems from /etc/fstab\n  logrotate.service                      loaded inactive dead Rotate log files\n  systemd-tmpfiles-clean.service         loaded inactive dead Cleanup of Temporary Directories\n\n=== enabled service unit files (the should-run baseline) ===\nvaultwarden.service                     enabled enabled\ncron.service                         enabled enabled\nsnmpd.service                        enabled enabled\nssh.service                          enabled enabled\nsystemd-timesyncd.service            enabled enabled\n\n=== docker containers (name|state|status — every container, running or not) ===\n(command exited 127 — it may not apply on this host)"
+      },
+      "get-active-alerts|dc1vaultwarden01": {
+        "success": true,
+        "output": "active LibreNMS alerts on dc1vaultwarden01: Service up/down (severity=critical, since=2026-07-30 06:58:37)"
+      },
+      "get-device-eventlog|dc1vaultwarden01": {
+        "success": true,
+        "output": "LibreNMS eventlog for dc1vaultwarden01 (most recent 3):\n  [2026-07-30 07:00:02] alert: Issued critical alert for rule 'Service up/down' to transport mail\n  [2026-07-30 06:58:37] service: Service 'tcp-4141' status changed from OK to CRITICAL (connection refused)\n  [2026-07-30 02:00:11] system: Unattended-upgrades run completed"
+      },
+      "get-device-status|dc1vaultwarden01": {
+        "success": true,
+        "output": "LibreNMS device dc1vaultwarden01: status=UP os=debian type=server hardware=\"Standard PC (i440FX + PIIX, 1996)\" uptime=1467h3m9s last_polled=2026-07-30 07:10:41 sysName=dc1vaultwarden01"
+      }
+    },
+    "confighash_changed": false
+  },
+  {
+    "external_ref": "tg85-cisco-01",
+    "source_id": "eval-harness",
+    "alert_rule": "ASABindingDrift",
+    "host": "dc1fw01",
+    "severity": "warning",
+    "site": "dc1",
+    "summary": "ASA running-config fingerprint drifted from the golden baseline on dc1fw01",
+    "expected": "escalate"
+  },
+  {
+    "external_ref": "tg85-cisco-02",
+    "source_id": "eval-harness",
+    "alert_rule": "ASATunnelDown",
+    "host": "dc2fw01",
+    "severity": "critical",
+    "site": "dc2",
+    "summary": "site-to-site IPsec tunnel down on dc2fw01",
+    "expected": "escalate"
+  },
+  {
+    "external_ref": "tg78-node-01",
+    "source_id": "eval-harness",
+    "alert_rule": "Device Down (SNMP unreachable)",
+    "host": "dc1pve02",
+    "severity": "critical",
+    "site": "dc1",
+    "summary": "dc1pve02 not responding (SNMP unreachable)",
+    "expected": "escalate"
+  },
+  {
+    "external_ref": "tg78-cluster-01",
+    "source_id": "eval-harness",
+    "alert_rule": "Service up/down",
+    "host": "dc1pve03",
+    "severity": "critical",
+    "site": "dc1",
+    "summary": "service cororings (Check the current corosync links) DOWN on dc1pve03",
+    "expected": "escalate"
+  },
+  {
+    "external_ref": "tg78-storage-01",
+    "source_id": "eval-harness",
+    "alert_rule": "Space on / is >= 90% and < 95% in use",
+    "host": "dc1pve01",
+    "severity": "warning",
+    "site": "dc1",
+    "summary": "root filesystem >=90%",
+    "expected": "escalate"
+  },
+  {
+    "external_ref": "tg78-k8s-01",
+    "source_id": "eval-harness",
+    "alert_rule": "KubePodNotReady",
+    "host": "velero-ui-687565868b-57tld",
+    "severity": "warning",
+    "site": "dc1",
+    "summary": "Pod velero-ui-687565868b-57tld has been in a non-ready state for longer than 15 minutes.",
+    "expected": "escalate"
+  },
+  {
+    "external_ref": "tg78-k8s-02",
+    "source_id": "eval-harness",
+    "alert_rule": "KubeNodeReadinessFlapping",
+    "host": "dc1k8s-node04",
+    "severity": "warning",
+    "site": "dc1",
+    "summary": "The readiness status of node dc1k8s-node04 has changed several times in the last 15 minutes.",
+    "expected": "escalate"
+  },
+  {
+    "external_ref": "tg78-k8s-03",
+    "source_id": "eval-harness",
+    "alert_rule": "CiliumAgentNotReady",
+    "host": "dc1k8s-node02",
+    "severity": "critical",
+    "site": "dc1",
+    "summary": "cilium agent on dc1k8s-node02 is not ready",
+    "expected": "escalate"
+  },
+  {
+    "external_ref": "tg78-pve-storage-01",
+    "source_id": "eval-harness",
+    "alert_rule": "Proxmox node ZFS pool degraded",
+    "host": "dc1pve01",
+    "severity": "critical",
+    "site": "dc1",
+    "summary": "dc1pve01: rpool DEGRADED — mirror member nvme1n1p3 FAULTED; `zpool status` errors: No known data errors; every guest on the node still serving. Degraded-redundancy, not loss of service.",
+    "expected": "escalate"
+  },
+  {
+    "external_ref": "tg78-pve-cluster-01",
+    "source_id": "eval-harness",
+    "alert_rule": "Proxmox cluster quorum lost",
+    "host": "dc1pve02",
+    "severity": "critical",
+    "site": "dc1",
+    "summary": "dc1pve02: corosync lost quorum (2 of 4 nodes visible); cluster-plane fault. Guests already running stay up read-only; no guest action fixes quorum.",
+    "expected": "escalate"
+  },
+  {
+    "external_ref": "tg-linux-01",
+    "source_id": "librenms-dc1",
+    "alert_rule": "Space-on-/-is-90-and-95-in-use",
+    "host": "dc1cloudbeaver01",
+    "severity": "warning",
+    "site": "dc1",
+    "summary": "-- ALERT -- dc1cloudbeaver01 -  Space on / is >= 90% and < 95% in use  - Warning Alert",
+    "expected": "stand-down"
+  },
+  {
+    "external_ref": "tg-linux-02",
+    "source_id": "librenms-dc1",
+    "alert_rule": "Service-up/down",
+    "host": "dc1nc02",
+    "severity": "critical",
+    "site": "dc1",
+    "summary": "-- ALERT -- dc1nc02 -  Service up/down  - Critical Alert",
+    "expected": "stand-down"
+  },
+  {
+    "external_ref": "tg-linux-03",
+    "source_id": "librenms-dc1",
+    "alert_rule": "Linux-High-Memory-Usage-90-in-use",
+    "host": "dc1gpu01",
+    "severity": "warning",
+    "site": "dc1",
+    "summary": "-- ALERT -- dc1gpu01 -  Linux High Memory Usage, >= 90% in use  - Warning Alert",
+    "expected": "stand-down"
+  },
+  {
+    "external_ref": "tg-storage-01",
+    "source_id": "librenms-dc1",
+    "alert_rule": "Sensor over limit - Check Device Health Settings",
+    "host": "dc1syno01",
+    "severity": "warning",
+    "site": "dc1",
+    "summary": "-- ALERT -- dc1syno01 -  Sensor over limit - Check Device Health Settings  - Warning Alert",
+    "expected": "escalate"
+  }
+]

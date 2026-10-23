@@ -1,0 +1,28 @@
+-- 0101 — optimistic-concurrency version token on policy_graduation (TG-146 S3/S4).
+--
+-- policy_graduation persisted per-op-class earned-autonomy ladder state under a BLIND last-writer-wins upsert
+-- (core/db/policy_graduation_store.go Save) while the in-process Ladder cached each class on first touch and
+-- never reloaded it (core/policy/graduation.go stateLocked). Together those two gaps let a MULTI-worker
+-- deployment resurrect withdrawn autonomy: worker A durably DEMOTES a class (a verified deviation dropped it
+-- auto->approve), but worker B still holds a warm `auto` cache, and B's next blind write clobbers A's demotion
+-- back to `auto` — the class re-acts on evidence that it does NOT work. Latent today (a single worker; and the
+-- durable mutation breaker @threshold=1 force-Shadows every sibling on any deviation), but a correctness hole
+-- the multi-worker canary opens (TG-146 S3/S4, parent TG-130).
+--
+-- `version` is the compare-and-set token the guarded upsert checks: a writer reads it with the row, and its
+-- UPDATE lands only WHERE version = <the value it read>, bumping it by one — so a stale writer matches zero
+-- rows and is told to reload+re-decide instead of clobbering. This MIRRORS the durable mutation breaker's
+-- cross-process CAS (mutation_breaker_state, migration 0021), which guards on its `state` predicate; a ladder
+-- has bidirectional transitions (promote up, demote down, counter climbs), so a monotonic version generalizes
+-- that single-state guard. A writer that passes version 0 performs an UNCONDITIONAL upsert — a genuinely-new
+-- class's first write, or the ratify verb's authoritative reset-to-approve (temporal/opclassratify), which must
+-- WIN over inherited trust rather than be CAS-rejected; a positive version is a true compare-and-set.
+--
+-- Existing rows adopt version 1 (NOT NULL DEFAULT). The stored value is always >= 1 — the store never writes
+-- version 0 (0 is only the in-hand "unconditional/fresh" sentinel, never persisted). The 0067
+-- promotion-requires-credit trigger is unaffected: it keys on `level` rank, never on version, and a
+-- metadata-only ADD COLUMN with a constant default rewrites no rows and fires no row trigger.
+--
+-- Plane: BOTH is already declared on this table (migration 0060) and is unchanged — the version column rides
+-- the same row, carries no secret and no untrusted content (a monotonic integer).
+ALTER TABLE policy_graduation ADD COLUMN version bigint NOT NULL DEFAULT 1 CHECK (version >= 1);

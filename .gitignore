@@ -1,0 +1,86 @@
+# Binaries / build output
+/bin/
+/dist/
+/worker
+/grounder
+/tg-secretenv
+*.exe
+*.out
+*.test
+.pytest_cache/
+
+# Go
+/vendor/
+*.prof
+coverage.out
+coverage.html
+
+# Environment / secrets — never commit real values
+.env
+deploy/.env
+*.local
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# Runtime
+*.log
+
+# shadowbench runtime artifacts
+tools/shadowbench/__pycache__/
+tools/shadowbench/scorecard.jsonl
+# campaign (TG-84) run outputs: manifest data, watch logs, per-run scorecards — data, not code.
+tools/shadowbench/out/
+
+# --- Claude Code: track shared harness config (.claude/agents, .claude/README.md, .claude/settings.json)
+#     but never the per-clone RUNTIME scratch (these were previously only in the local, uncommitted
+#     .git/info/exclude). The github-sync mirror strips the whole .claude/ tree regardless (denylist step).
+.claude/scheduled_tasks.lock
+.claude/scheduled_tasks.json
+.claude/routines/.state/
+.claude/worktrees/
+# claim-before-touch session-hygiene locks (TG-81) live under .claude/worktrees/.claims/. The line above
+# already excludes them; this explicit rule keeps a claim from EVER reaching a commit even if that parent
+# is one day narrowed (the frontend/dist un-ignore below is why we now anchor these belt-and-suspenders).
+.claude/worktrees/.claims/
+.claude/checkpoints/
+.claude/mailbox/
+.claude/agent-registry.json
+.claude/agent-memory-local
+.claude/first-run
+.claude/assistant-daemon-state.json
+guardallow
+
+# Local build/analysis artifacts that keep getting swept up by `git add -A`. They are large, they are
+# not source, and gitleaks flags benchmark payloads inside them as generic API keys.
+/evalgate
+/judgecal
+/diagscore
+tools/shadowbench/*.bak
+tools/shadowbench/*.quarantined-*.jsonl
+tools/shadowbench/scorecard.quarantined-oldcode.jsonl
+
+# --- JavaScript dependency trees and build output, unanchored on purpose (TG-257).
+#
+# ADR-0015 deleted the unreachable React frontend/. The commit that did it ("one console — delete the
+# unreachable React frontend/", 4b0e9763 in !765) ALSO deleted the ignore rules that had been hiding that
+# build's output — so frontend/ went from 52 tracked files to 6,706, of which 6,647 were node_modules, and
+# 98.5 MB of dependency tree sat on main for four days. Every clone and CI checkout carried it.
+#
+# These are unanchored (no leading slash) precisely because the rules they replace were not: /dist/ above
+# matches only the repository root and never covered frontend/dist. deploy/tracked_tree_test.go is the
+# part that survives someone deleting these lines again, which is exactly how this happened.
+node_modules/
+frontend/dist/
+
+# Rust build artifacts from running the sidecar's own test suite locally
+deploy/claude-proxy/target/
+# Local TLS material for the sidecar/claude-proxy. TG-414 deleted the tls/.gitignore that had protected
+# proxy.key when it retired the off-box scaffolding; keep the (never-committed) private key out of the
+# public mirror and out of `git add -A`. deploy/tracked_tree_test.go guards against re-tracking.
+deploy/claude-proxy/tls/
+/estatedoc-ingest

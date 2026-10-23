@@ -1,0 +1,277 @@
+# LiteLLM model-gateway config — the provider fallback ladder as configuration.
+# CI-guarded: the `litellm-config` job (.gitlab-ci.yml) validates the model ladder + that every router
+# fallback reference resolves on change, so a dangling fallback (silent broken failover) cannot land on main.
+# Provenance: [corrections] operator priority Kimi K3 → DeepSeek → Mistral → z.ai ·
+# [R] paradigm-rules 3, 6 (model-agnostic; per-org policy). Keys arrive as env references (INV-13).
+#
+# The Go side (adapters/model) only selects a model NAME ("primary"); LiteLLM maps it down the ladder
+# and handles retries, rate-limits, and per-org budgets. Priority order (operator-chosen):
+#   1) Kimi K3  2) DeepSeek  3) Mistral  4) z.ai
+# Anthropic/OpenAI/Grok were REMOVED 2026-07-19: their keys (ANTHROPIC/OPENAI/XAI_API_KEY) were blank on
+# the box, so they were keyless dead rungs that could never serve. Re-add with real keys if a paid
+# external fallback is ever wanted; until then the ladder reflects only models that can actually respond.
+#
+# NOTE on kimi-k3 (Moonshot): a thinking-ONLY reasoning model. It REJECTS any temperature != 1 with HTTP 400
+# "invalid temperature: only 1 is allowed for this model" — NOT a 429 overload (that earlier belief was WRONG,
+# disproven by direct upstream tests 2026-07-19). Global drop_params:true does NOT fix it: it strips UNSUPPORTED
+# params, but temperature is a SUPPORTED param with an out-of-range value, so temperature=0 from a caller
+# (e.g. the eval judge) passes straight through and 400s the whole call -> fail-over. The per-model
+# additional_drop_params on "primary" below strips the fixed sampling params so kimi uses its server defaults;
+# it also needs reasoning_effort=max, and the native moonshot/ provider (not openai/ passthrough).
+
+model_list:
+  # BRAIN ROUTING. Owner decision 2026-07-31 (e2e-verified) ran TG SINGLE-BRAIN on Claude Opus 5 via the
+  # tg-claude-proxy (deploy/claude-proxy/, Max subscription, $0 marginal) — the first live triage on it
+  # read PVE actor evidence (root@pam vzstop) and correctly required human confirm, a depth the Mistral
+  # loop never showed. 2026-08-08: opus-cc's Max sub hit its 7-day limit (resets 2026-08-12), so primary
+  # and fast were swapped to Mistral Large as a stopgap. Unlike the single-brain era, primary/fast now
+  # carry an INDEPENDENT-vendor fallback rung (-> fallback-deepseek, see router_settings): a Mistral
+  # outage or guardrail refusal fails over to DeepSeek rather than taking out the whole triage brain
+  # (TG-293 — the fallback ladder is real and its keys are provisioned, no longer advertised-but-empty).
+  # opus-cc stays reserved for the model-identical head-to-head and is deliberately in NO fallback chain.
+  # Revert to single-brain opus-cc: repoint primary/fast to openai/opus-cc and drop the fallbacks: block
+  # (litellm-config.yaml.bak-preopus on the box / git history here).
+  - model_name: primary
+    litellm_params:
+      model: azure/gpt-4.1  # 2026-08-22: owner directive — primary/fast move to the Azure Foundry rail (MS-for-Startups credit-funded endpoint group; deployments e2e-verified by owner 2026-08-22). gpt-4.1 (regional Standard, 100K TPM) takes primary — the judgment/synthesis callers; the higher-TPM mini takes "fast". Replaces the 08-18 litellm01/Opus route, which now serves the JUDGE instead (see "judge" below).
+      api_base: https://territory-grounder.cognitiveservices.azure.com  # public cloud endpoint, committed like api.z.ai — not an estate coordinate
+      api_key: os.environ/AZURE_API_KEY  # delivered bao:secret/data/tg/litellm#azure_api_key via TG_AZURE_KEY_REF (litellm-secrets init)
+      api_version: "2025-01-01-preview"
+  # "fast" is the AGENT-LOOP model. The read-only investigate loop makes MANY LLM calls (up to 10 cycles),
+  # so it needs LOW LATENCY + tool-calling — not the reasoning-heavy "primary" ladder. An eval run found
+  # triage stalling for tens of minutes on primary (the kimi-429 fail-over tax + deepseek-v4-pro reasoning
+  # on every cycle). Mistral Large is ~1s and tool-capable; it falls over to the strong reasoners only if
+  # it is down. The strong "primary" ladder stays the default for judgment/synthesis callers.
+  - model_name: fast
+    litellm_params:
+      model: azure/gpt-5.4-mini  # 2026-08-22: owner directive — Azure Foundry rail. The mini (EU Data Zone, 250K TPM) takes the many-call agent loop: the highest TPM headroom and lowest latency of the two Azure chat deployments.
+      api_base: https://territory-grounder.cognitiveservices.azure.com
+      api_key: os.environ/AZURE_API_KEY
+      api_version: "2025-01-01-preview"
+  # "opus-cc" — Claude Opus 5 via the tg-claude-proxy, now ON THIS BOX at TG_SIDECAR_BASE (TG-413;
+  # it used to be dc1claude01:8095, which is the agent's dev workstation) — deploy/claude-proxy/,
+  # an OpenAI-compatible completion proxy over the operator's Max SUBSCRIPTION (no per-token spend).
+  # Purpose: the MODEL-IDENTICAL head-to-head (campaign #2) — point the agent tier here and both
+  # systems run the same brain (predecessor already runs claude-opus-5 via Claude Code). The sidecar
+  # is a PURE completion endpoint: all CLI tools disallowed, strict empty MCP; TG's loop keeps all
+  # agency. In NO fallback chain — selecting it is always a deliberate, §6-disclosed act.
+  - model_name: opus-cc
+    litellm_params:
+      model: openai/claude-cc-opus
+      api_base: os.environ/TG_LITELLM01_BASE
+      api_key: os.environ/TG_LITELLM01_KEY
+  # ARM ALIASES for the TG-204 three-arm model-tier A/B. ADDITIVE ON PURPOSE: `fast` and `primary` are
+  # production routing for the live agent loop, and repointing them to run an experiment would change
+  # triage behaviour as a side effect of measuring it. These are separate names reaching the SAME proxy,
+  # which since 2026-08-04 serves a different model per request — so one proxy, one subscription, and
+  # genuinely different brains per arm. Before that change all three arms collapsed onto opus-cc and the
+  # experiment would have measured one arm three times.
+  - model_name: arm-haiku
+    litellm_params:
+      model: openai/claude-cc-haiku
+      api_base: os.environ/TG_LITELLM01_BASE
+      api_key: os.environ/TG_LITELLM01_KEY
+  - model_name: arm-opus
+    litellm_params:
+      model: openai/claude-cc-opus
+      api_base: os.environ/TG_LITELLM01_BASE
+      api_key: os.environ/TG_LITELLM01_KEY
+  # "judge" is the DEDICATED shadowbench-judge alias (2026-07-31, judge/contestant isolation).
+  # 2026-08-22 owner directive: judge = Claude Opus 5 via the litellm01 lane (the route primary/fast
+  # just vacated for Azure). Judge/contestant isolation HOLDS against the live brain — the contestant
+  # runs Azure GPT, the referee Anthropic Opus — and deepseek is freed to be purely the fallback rung
+  # (it re-enters the primary/fast chains, which the 07-31 isolation had forbidden while deepseek WAS
+  # the judge). CAVEAT for campaign #3: arm-opus/opus-cc/forensic-ir share this brain, so a
+  # model-identical head-to-head on the opus arm would be scored by its own model — a §6 disclosure
+  # (and ideally a judge repoint) is owed for that campaign, not for live triage. Still NO fallback
+  # for the judge: if the litellm01 lane is down the judge fails LOUDLY (judge_unavailable, excluded
+  # per §3) instead of silently drifting models.
+  # 2026-08-31 (TG-556 ROUND 4): the content-policy rescue rungs fallback-cc-sonnet/-fable share this
+  # lane and model FAMILY — a rescued contestant session is Anthropic-brained under an Anthropic judge.
+  # Disclosed on TG-556; the coverage rule (tg78-pve-guest-02 out of the corpus) rides on it.
+  - model_name: judge
+    litellm_params:
+      model: openai/claude-cc-opus
+      api_base: os.environ/TG_LITELLM01_BASE
+      api_key: os.environ/TG_LITELLM01_KEY
+  - model_name: fallback-deepseek
+    litellm_params:
+      model: deepseek/deepseek-v4-pro            # 2) DeepSeek V4 Pro — frontier reasoner (862B); replaces deepseek-chat (=v4-flash, deprecates 2026-07-24)
+      api_key: os.environ/DEEPSEEK_API_KEY
+  - model_name: fallback-mistral
+    litellm_params:
+      model: mistral/mistral-large-latest        # 3) Mistral — latest flagship (Large)
+      api_key: os.environ/MISTRAL_API_KEY
+  - model_name: fallback-zai
+    litellm_params:
+      model: zai/glm-5.2                          # 4) z.ai GLM (native zai/ provider). NOTE 2026-07-19: the z.ai
+      api_base: https://api.z.ai/api/paas/v4      # account returns 1113 "Insufficient balance" on ALL GLM models
+      api_key: os.environ/ZAI_API_KEY             # (auth + /models OK) -> serves only once the account is recharged.
+  # TG-556 ROUND 4 (2026-08-31, owner-ruled "wire sonnet/fable"): the Claude rescue rungs — Sonnet 5 and
+  # Fable 5 over the SAME Max-sub proxy lane as judge/opus-cc (litellm01 maps claude-cc-sonnet|fable to
+  # separate per-model pools on the proxy; e2e-verified before wiring: served_model claude-sonnet-5 /
+  # claude-fable-5 through TG's own key). They are the standing content-policy rescue AND (ROUND 5) the
+  # general 429/5xx failover — owner-ruled, not contingent on the provider rungs' state; any OTHER
+  # selection stays a deliberate, §6-disclosed act like opus-cc. (The provider rungs above are
+  # balance-dead as of 2026-08-31; a funded one serves as the second general rung, nothing more.) Sonnet is the workhorse (preserves the judge's Opus capacity pool); Fable is the second
+  # cap pool behind it (see router_settings). The owner accepted the recorded caveats: the lane 429s on the
+  # sub's weekly limit (exhausted 08-08 and 08-18); a rescued session shares the judge's model FAMILY (see
+  # the content_policy_fallbacks ROUND 4 note); and the sub is shared with the predecessor until cutover.
+  - model_name: fallback-cc-sonnet
+    litellm_params:
+      model: openai/claude-cc-sonnet
+      api_base: os.environ/TG_LITELLM01_BASE
+      api_key: os.environ/TG_LITELLM01_KEY
+  - model_name: fallback-cc-fable
+    litellm_params:
+      model: openai/claude-cc-fable
+      api_base: os.environ/TG_LITELLM01_BASE
+      api_key: os.environ/TG_LITELLM01_KEY
+  # --- EMBEDDINGS (semantic retrieval plane, spec/012 REQ-1110): the worker calls /v1/embeddings with
+  # TG_EMBED_MODEL; LiteLLM proxies it OpenAI-compatibly. Uncomment ONE entry, set TG_EMBED_MODEL to its
+  # model_name (e.g. embed-nomic), and keep TG_EMBED_DIM equal to the migrated column: vector(768) —
+  # nomic-embed-text is 768-dim. A different-dimension model needs a new migration first (boot refuses a
+  # mismatch). Left commented so the active ladder above is unchanged until an operator opts in.
+  #
+  # Local-first (Ollama on the estate — no API key, no data leaves the network). ARMED 2026-07-31
+  # (TG-211): nomic-embed-text was already served by the estate's Ollama host for the predecessor;
+  # TG now embeds against the same local model. api_base is the deploy-set Ollama endpoint
+  # (TG_OLLAMA_BASE, e.g. http://dc1gpu01:11434 — host-networked Ollama on the GPU node).
+  - model_name: embed-nomic
+    litellm_params:
+      model: ollama/nomic-embed-text               # 768-dim, matches migration 0013's vector(768)
+      api_base: os.environ/TG_OLLAMA_BASE          # deploy-set (box .env), never an estate literal here
+  #
+  # Forensic IR analysis (TG-168): cmd/forensic -analyze routes here to extract IOCs + separate real impact
+  # from decoy activity over a reconstructed cross-incident timeline. TG-511/168 (2026-08-18): was local-first
+  # (ollama/gpt-oss:20b on the GPU node) but the embeddings/rerank-only GPU rule forbids a 20b there and the
+  # 3090 Ti is saturated by the owner's media stack, so this is REPOINTED to opus-cc (Max-sub sidecar).
+  # DATA-LOCALITY CHANGE: the forensic corpus now leaves the network to the owner's Anthropic Max sub, no longer
+  # local Ollama (owner grant 2026-08-18: any provider). ADDITIVE: it changes no existing route (primary/fast/
+  # judge/fallback-* untouched). Set TG_FORENSIC_MODEL=forensic-ir to arm -analyze; embed-nomic stays local.
+  - model_name: forensic-ir
+    litellm_params:
+      model: openai/claude-cc-opus  # 2026-08-18 (TG-168): MOVED to dc1litellm01 (claude-cc-opus, no weekly cap) per owner ruling — the compose-internal sidecar's Max-sub weekly cap was EXHAUSTED and 429'd every -analyze call (proven live: forensic timeline ran e2e, model call returned "You've hit your weekly limit"). Now matches arm-opus. forensic-ir was the last sidecar model, so the litellm model channel is now litellm01 (dev env; not TLS-guarded per owner ruling 2026-08-18).
+      api_base: os.environ/TG_LITELLM01_BASE
+      api_key: os.environ/TG_LITELLM01_KEY
+  #
+  # API alternative (Mistral; 1024-dim — requires a vector(1024) migration BEFORE use + TG_EMBED_DIM=1024):
+  # - model_name: embed-mistral
+  #   litellm_params:
+  #     model: mistral/mistral-embed
+  #     api_key: os.environ/MISTRAL_API_KEY
+
+# The auto-fallback ladder: a call to "primary" fails over on error/rate-limit/outage, in order.
+router_settings:
+  # JUDGE ISOLATION (2026-07-31; re-based 2026-08-22): the judge's brain is now Opus via litellm01 and
+  # the live contestant runs Azure GPT — different vendors, no shared chain. deepseek-v4-pro is no
+  # longer the judge's model, so its presence in the primary/fast fallback chains stopped being an
+  # isolation breach. "judge" itself has no fallback rung: a judge outage is loud, never a model drift.
+  fallbacks:
+    # ROUND 5 (2026-08-31, owner: "we do have so many models available"): the Claude lane also backs the
+    # GENERAL 429/5xx/outage chains — an Azure bad day fails over to Sonnet instead of dying on a payment
+    # wall (all three provider rungs are balance-dead on EVERY endpoint, coding-plan lanes included —
+    # probed 2026-08-31, evidence on TG-556). Sonnet FIRST because live beats dead; the dead provider rung
+    # stays SECOND so a future top-up auto-heals into service with no config change — but no top-up is
+    # requested any more: the Claude lane is the standing failover, owner-ruled.
+    - primary: [fallback-cc-sonnet, fallback-deepseek]
+    - fast: [fallback-cc-sonnet, fallback-deepseek]
+    # The rescue lane's own safety net (TG-556 ROUND 4): when the cc-sonnet RESCUE itself fails, LiteLLM
+    # looks up the fallbacks of the FAILED group (the ROUND 2 mechanic, used deliberately this time) — so a
+    # weekly-cap 429 on Sonnet hands the rescued prompt to Fable's separate cap pool instead of dying on
+    # the first 429. General-error chain on purpose: it catches cap/outage shapes, not just content-policy.
+    # NO entry routes from this lane back into Azure — the rescue graph stays acyclic by construction.
+    - fallback-cc-sonnet: [fallback-cc-fable]
+  # content_policy_fallbacks (TG-548): a ContentPolicyViolationError from Azure's content filter is an HTTP
+  # 400, and the general `fallbacks` above do NOT catch it (that chain handles rate-limit/timeout/5xx, not a
+  # content-policy 400) — so a filtered triage prompt propagated the 400 and the investigation died with NO
+  # triage (worker-1 2026-08-26 14:24, caller runner:librenms-dc1-185828). This is LiteLLM's dedicated
+  # path for content-policy rejections: route the filtered prompt to the non-Azure deepseek rung — a
+  # provider, NOT the judge (openai/claude-cc-opus), so no judge-isolation breach. Strictly better than the
+  # current behaviour: a lost incident now gets triaged on deepseek instead of dropped.
+  # TG-556 (2026-08-30): every provider rung went payment-dead simultaneously (deepseek "Insufficient
+  # Balance", mistral 402, z.ai "recharge") while an Azure prompt-shield false positive pinned one eval
+  # session — so the rescue below fired into a dead rung and the 400 propagated, aborting the full gate
+  # 4/4 across six hours. The SECOND rung is the other-Azure-DEPLOYMENT rail ("fast"/gpt-5.4-mini, and
+  # "primary" for fast's own chain): content filters and the prompt-shield classifier state are
+  # per-deployment, so a borderline trip on one deployment routinely passes the other — probed live
+  # (the same texts 200 on primary after 4.1's full-prompt trip). Same-vendor is deliberate and safe
+  # here: both are already contestant rails (no judge-isolation change), it costs nothing while the
+  # provider rungs await a top-up, and a rescued session beats a dropped incident (the TG-548 doctrine,
+  # now with a rung that answers). The provider rungs stay FIRST so an independent vendor resumes
+  # primacy the moment one is funded.
+  # ROUND 2 (same day): the dead first rung POISONS the chain — on the rescue's own failure LiteLLM
+  # looks up fallbacks FOR the failed rescue group ("No fallback model group found for
+  # fallback-deepseek") instead of continuing this list, so [dead-provider, live-rung] still 400s.
+  # Until a provider is funded the content-policy chain goes STRAIGHT to the live cross-deployment
+  # rescue; restore fallback-deepseek to the FRONT of these lists when the wallet action lands (the
+  # general `fallbacks` above deliberately keeps it for 429/5xx, where a dead rung merely delays).
+  # ROUND 3 (same day): the symmetric reverse edge (fast→primary) AMPLIFIED a
+  # both-deployments trip into a ping-pong — 1,870 ContentPolicyViolationErrors in 25 minutes while
+  # Azure's rolled classifier flagged the same composed prompt on BOTH deployments. One directed edge
+  # only: a primary trip gets its one cross-deployment chance; a fast trip fails honestly. The funded
+  # provider rung (see the [R3] board entry) remains the real rescue and goes back at the front here.
+  # ROUND 4 (2026-08-31, owner-ruled "wire sonnet/fable" — TG-556): the rescue leaves Azure entirely.
+  # Both deployments' content-policy trips go to fallback-cc-sonnet (Claude, Max-sub lane), which — unlike
+  # ROUND 3's cross-deployment edge — also catches a BOTH-deployments trip (the tg78-pve-guest-02 shape),
+  # and gives fast a rescue again where ROUND 3 had to remove it: no edge from the Claude lane re-enters
+  # Azure, so the graph is acyclic and a trip gets bounded hops (sonnet → fable via the `fallbacks` net
+  # above, then an honest failure). §6/eval caveat: a rescued session runs an Anthropic brain and is
+  # scored by the Anthropic judge (same family) — tg78-pve-guest-02 therefore stays OUT of the eval
+  # corpus (its re-add is TG-78 scope, family-bias caveat recorded). ROUND 5 note: no top-up is requested
+  # any more — the Claude lane is the standing rescue by owner ruling; a provider rung, if ever funded,
+  # auto-heals as the second GENERAL rung and is re-fronted here only by a deliberate change.
+  content_policy_fallbacks:
+    - primary: [fallback-cc-sonnet]
+    - fast: [fallback-cc-sonnet]
+    # Review finding (2026-08-31): a content-policy rejection ON the rescue rung itself consults THIS
+    # table for the failed group (the ROUND-2 mechanic), not the general `fallbacks` — without this row a
+    # Claude-side refusal would dead-end at sonnet exactly the way the dead deepseek rung did. Same
+    # target as the cap net: still acyclic, still bounded (fable, then honest failure).
+    - fallback-cc-sonnet: [fallback-cc-fable]
+  # num_retries 0: an overloaded kimi-k3 (429 on nearly every call) must fail over to the next rung
+  # IMMEDIATELY rather than burn seconds retrying the same dead primary — the fallback ladder is the
+  # robustness mechanism, retrying a rate-limited deployment is not. This removes the ~9s/call kimi tax.
+  num_retries: 0
+  # ★ DO NOT SET allowed_fails (TG-392). It is not a tuning knob here — it selects which COOLDOWN
+  # ALGORITHM the router uses, and the two differ in whether they protect a single-endpoint model group.
+  #
+  # litellm/router_utils/cooldown_handlers.py:_should_cooldown_deployment takes the v2 (current) branch
+  # only when `allowed_fails_policy is None AND _is_allowed_fails_set_on_router() is False`, and that
+  # helper returns True whenever `router.allowed_fails != litellm.allowed_fails`. Executed in the running
+  # container: litellm.allowed_fails defaults to 3, so the `allowed_fails: 1` that had sat here since the
+  # Phase-0 scaffold made 1 != 3 -> the LEGACY v1 branch.
+  #
+  # v2 gates BOTH cooldown rules on `not is_single_deployment_model_group`. v1 has NO such guard: it is
+  # `updated_fails > allowed_fails` with the fail-counter TTL = cooldown_time = 5s. `primary` IS a
+  # single-deployment group, so the SECOND failure within 5s blanked the entire model group with a 429
+  # for every caller in the process — the protection LiteLLM ships for exactly this topology, opted out of.
+  #
+  # Measured 2026-08-06 02:58: two sidecar 503s at :24, then four LiteLLM-origin 429s at :26/:27/:28/:29
+  # ("No deployments available ... cooldown_list=['ed6830...']" — LiteLLM's own list, not the provider's),
+  # then `circuit "model-primary" OPEN` at :30. The sidecar was serving 200s throughout that window
+  # (hour 02: 82x200, 2x503, 4x429). TG's own breaker counts rate_limit as trip-worthy, so LiteLLM's
+  # synthetic 429s tripped it — a self-inflicted outage from two transient upstream blips.
+  #
+  # Leaving the key ABSENT rather than writing `allowed_fails: 3` is deliberate: unset reads
+  # litellm.allowed_fails at construction (verified: unset -> 3), so it tracks the default. A hardcoded 3
+  # would silently fall back to the v1 branch the day upstream changes that default.
+
+litellm_settings:
+  # TG-319: forward the OpenAI `user` to the model backend. LiteLLM drops the top-level `user` before a
+  # custom-api_base upstream (it keeps it only for its own budgeting); this hook copies it into `extra_body`,
+  # which LiteLLM forwards untouched, so tg-claude-proxy logs a non-empty `caller`. See litellm-forward-user.py
+  # (mounted at /etc/litellm/forward_user.py; PYTHONPATH=/etc/litellm makes it importable).
+  callbacks: ["forward_user.forward_user_instance"]
+  drop_params: true
+  # Per-org budgets/quotas are attached via the "user" field TG sends per request. THAT WORKS — LiteLLM
+  # sees `user` before it builds the upstream payload, so budgeting and quota accounting are unaffected.
+  #
+  # What does NOT survive is the field reaching the model backend. Measured 2026-08-05 against the live
+  # sidecar (TG-319): a direct call logs `"caller":"runner:…"`, the same call through this gateway logs
+  # `"caller":""` — with drop_params true AND false, and with forward_client_headers_to_llm_api on. So the
+  # drop is inside LiteLLM's openai-compatible passthrough and is not reachable from either flag.
+  #
+  # Stated here because the line above, alone, reads as "the field survives the whole path" — and anything
+  # trying to attribute a completion at the proxy to the session that caused it (per-session cost, the
+  # TG-204 arm isolation) will find `caller` empty and no explanation.

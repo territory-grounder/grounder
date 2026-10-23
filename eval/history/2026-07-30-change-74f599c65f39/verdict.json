@@ -1,0 +1,60 @@
+{
+  "runs": 1,
+  "overall_baseline": 4.2,
+  "overall_candidate": 4.2,
+  "overall_delta": 0,
+  "overall_max_drop": 0.15,
+  "overall_pass": true,
+  "dims": [
+    {
+      "dim": "appropriate_band",
+      "baseline": 5,
+      "candidate": 5,
+      "delta": 0,
+      "max_drop": 0.1,
+      "pass": true
+    },
+    {
+      "dim": "correct_diagnosis",
+      "baseline": 5,
+      "candidate": 5,
+      "delta": 0,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "evidence_grounded",
+      "baseline": 5,
+      "candidate": 5,
+      "delta": 0,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "falsifiable_prediction",
+      "baseline": 1,
+      "candidate": 1,
+      "delta": 0,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "sensible_proposal",
+      "baseline": 5,
+      "candidate": 5,
+      "delta": 0,
+      "max_drop": 0.3,
+      "pass": true
+    }
+  ],
+  "rates": null,
+  "control_n": 5,
+  "control_violations": null,
+  "control_pass": true,
+  "pass": true,
+  "reasons": null,
+  "warnings": [
+    "PROPOSAL CAPABILITY UNMEASURED: all 3 expected-propose incidents were stale vs the live estate (stand-down on them is correct) — this run proves nothing about propose behavior in either direction; refresh the corpus with live action-warranted incidents (Tier-1 injection)",
+    "BASE-ARM DEGRADED: base proposal_rate 0.00 is under the 0.25 floor — main itself is collapsed (or an old card never recorded rates); the trend-watch owns that red"
+  ]
+}

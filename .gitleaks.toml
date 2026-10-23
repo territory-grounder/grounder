@@ -1,0 +1,68 @@
+title = "Territory Grounder gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "obvious placeholders, secret references, and docs (no real secrets)"
+regexes = [
+  '''change-me[-a-z]*''',        # .env.example placeholders
+  '''os\.environ/[A-Z_]+''',     # litellm-config.yaml env references
+  '''env:[A-Z_]+''',             # secret references
+  '''file:/[A-Za-z0-9/_.-]+''',
+  '''proxmox/AWX/k8s''',         # false-positive: a code comment listing actuation lanes (no secret), core/credential/plane_split.go
+  # YouTrack issue keys. The tracker's project prefixes are long uppercase-alphanumeric strings, so an issue
+  # id like IFRNLLEI01PRD-1843 trips the generic-api-key rule on entropy alone (measured 3.73). These are
+  # PUBLIC identifiers that appear in commit messages, MR descriptions and benchmark evidence — never
+  # credentials. Anchored to the exact issue-key shape rather than allowlisting a file, so a real secret
+  # sitting next to an issue id in the same line is still caught.
+  '''\b(IFRNLLEI01PRD|IFRGRSKG01PRD|TG|AGORA|CUBEOS|OMOIKANE)-[0-9]{1,6}\b''',
+]
+# ONE DEAD COMMIT, allowlisted by SHA rather than by path.
+#
+# 9f33b839 was a superseded push on a branch that no longer exists and is not an ancestor of main. It
+# accidentally carried two large shadowbench scorecard artifacts (`git add -A` swept them in), and every
+# `incident_key` in those payloads is a content hash that trips generic-api-key on entropy — 904 findings,
+# none of them a secret.
+#
+# GitLab keeps refs to commits a merge request has referenced, so the runner still fetches this object and
+# scans it on EVERY branch, including ones whose history has never contained it. Deleting the branch and
+# then the merge request did not clear it; only project housekeeping would, and that is a repo-wide GC on
+# the instance rather than a change to this project's code.
+#
+# It is pinned to the COMMIT deliberately. Allowlisting the file path instead would blind the scanner to
+# that path forever, for a real secret as much as for a benchmark hash — a permanent hole opened to hide a
+# transient mistake. A commit is immutable and already in the past, so this exempts exactly what happened
+# and nothing that can happen next. The artifacts are now in .gitignore so the mistake cannot recur; when
+# housekeeping eventually collects the object, this block can simply be deleted.
+#
+# 7a2ce0c7 is the SAME SHAPE, one day later, and is recorded here rather than quietly appended because the
+# repetition is the interesting part. It was a superseded attempt at the mirror fix (the branch is deleted
+# and it is not an ancestor of main). Its lint-forbidden comment QUOTED the two synthetic fixtures GitHub
+# had NOT blocked, to explain why the new check is scoped to the Twilio shape alone — and quoting a
+# GitLab-PAT-shaped fixture outside a *_test.go path is exactly what the path allowlist below does not
+# cover. The tree was corrected within minutes (the fixtures are now described, not quoted), but the
+# object survives on the merge request's ref, so every later branch scans it.
+#
+# Same discipline as above: pinned to the COMMIT, never the path. Allowlisting scripts/ would blind the
+# scanner to the directory that holds the gates themselves, forever, to hide a mistake that lasted minutes.
+#
+# 74089a17 is the SAME SHAPE again (TG-5, 2026-08-22). It was the first push of the shared fuzz corpus
+# (core/fuzzcorpus/fuzzcorpus.go), whose Secrets class carried a synthetic `password: <value>` seed as a
+# CONTIGUOUS literal to exercise the redaction path — generic-api-key fired on it. The current commit
+# assembles every such seed from fragments so no contiguous secret-shape remains (verified: gitleaks clean
+# on the working tree), but the superseded commit survives on the merge request's ref, so every later branch
+# scans it — the peer's own MR pipeline redded on this object before the amend. fuzzcorpus.go is library
+# code the tests import, NOT a *_test.go path, so the path allowlist below does not cover it (deliberately —
+# a real secret in library code must still red). Pinned to the COMMIT: the live file is clean, and this
+# exempts exactly the one dead object, nothing that can happen next.
+commits = [
+  "9f33b839740a4c7978c5ac4170ea5bd7ddfefc89",
+  "7a2ce0c75510d96c5262dd32035087d3666cc981",
+  "74089a1766fd16642c483c172f631bd1de614b79",
+]
+paths = [
+  '''docs/.*''',
+  '''deploy/\.env\.example''',
+  '''.*_test\.go''',             # test fixtures use throwaway secrets
+]

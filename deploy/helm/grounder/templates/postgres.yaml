@@ -1,0 +1,119 @@
+{{/*
+Application Postgres + pgvector with the two least-privilege roles (spec/009 REQ-905 / INV-16).
+
+Parity with the compose `postgres` service + `postgres-init/00-roles.sh`:
+  tg_migration — DDL owner, used only by the startup migration Job.
+  tg_runtime   — DML ONLY, not a table owner → FORCE ROW LEVEL SECURITY applies.
+All passwords arrive by Secret env reference (spec/009 REQ-904 / INV-13), never as literals.
+*/}}
+{{- $pg := include "grounder.componentName" (dict "root" . "component" "postgres") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $pg }}-init
+  labels:
+    {{- include "grounder.labels" . | nindent 4 }}
+data:
+  # Mounted into /docker-entrypoint-initdb.d — the same role model the compose profile installs.
+  00-roles.sh: |
+    #!/bin/bash
+    set -euo pipefail
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname {{ .Values.postgres.database }} <<-SQL
+      CREATE EXTENSION IF NOT EXISTS vector;
+      CREATE ROLE tg_migration LOGIN PASSWORD '${TG_MIGRATION_PASSWORD}';
+      CREATE ROLE tg_runtime   LOGIN PASSWORD '${TG_RUNTIME_PASSWORD}';
+      GRANT ALL ON SCHEMA public TO tg_migration;
+      GRANT USAGE ON SCHEMA public TO tg_runtime;
+      ALTER DEFAULT PRIVILEGES FOR ROLE tg_migration IN SCHEMA public
+        GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO tg_runtime;
+      ALTER DEFAULT PRIVILEGES FOR ROLE tg_migration IN SCHEMA public
+        GRANT USAGE, SELECT ON SEQUENCES TO tg_runtime;
+    SQL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $pg }}
+  labels:
+    {{- include "grounder.labels" . | nindent 4 }}
+    {{- include "grounder.selectorLabels" (dict "root" . "component" "postgres") | nindent 4 }}
+spec:
+  # ClusterIP only — never on a default Ingress (spec/009 REQ-909).
+  type: ClusterIP
+  selector:
+    {{- include "grounder.selectorLabels" (dict "root" . "component" "postgres") | nindent 4 }}
+  ports:
+    - name: postgres
+      port: {{ .Values.postgres.port }}
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $pg }}
+  labels:
+    {{- include "grounder.labels" . | nindent 4 }}
+    {{- include "grounder.selectorLabels" (dict "root" . "component" "postgres") | nindent 4 }}
+spec:
+  serviceName: {{ $pg }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "grounder.selectorLabels" (dict "root" . "component" "postgres") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "grounder.labels" . | nindent 8 }}
+        {{- include "grounder.selectorLabels" (dict "root" . "component" "postgres") | nindent 8 }}
+    spec:
+      containers:
+        - name: postgres
+          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+          imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+          ports:
+            - name: postgres
+              containerPort: {{ .Values.postgres.port }}
+          env:
+            - name: POSTGRES_DB
+              value: {{ .Values.postgres.database | quote }}
+            - name: POSTGRES_USER
+              value: {{ .Values.postgres.superuser | quote }}
+            # passwords by Secret reference, never literals (spec/009 REQ-904 / INV-13)
+            {{- include "grounder.secretEnv" (dict "root" . "name" "POSTGRES_PASSWORD" "key" .Values.secrets.keys.pgSuperuserPassword) | nindent 12 }}
+            {{- include "grounder.secretEnv" (dict "root" . "name" "TG_MIGRATION_PASSWORD" "key" .Values.secrets.keys.tgMigrationPassword) | nindent 12 }}
+            {{- include "grounder.secretEnv" (dict "root" . "name" "TG_RUNTIME_PASSWORD" "key" .Values.secrets.keys.tgRuntimePassword) | nindent 12 }}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.postgres.superuser | quote }}, "-d", {{ .Values.postgres.database | quote }}]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            {{- if .Values.postgres.init.createRoles }}
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+            {{- end }}
+      volumes:
+        {{- if .Values.postgres.init.createRoles }}
+        - name: init
+          configMap:
+            name: {{ $pg }}-init
+            defaultMode: 0555
+        {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.postgres.storage.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storage.size }}

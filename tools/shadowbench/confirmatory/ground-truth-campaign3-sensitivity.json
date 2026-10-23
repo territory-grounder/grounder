@@ -1,0 +1,226 @@
+{
+ "2026-08-26|pair|IFRNLLEI01PRD-2709|librenms-dc1-185406": {
+  "fault_id": 1461,
+  "host": "dc1whiteboard01",
+  "injector_class": "device-down",
+  "pred_correct": false,
+  "tg_correct": true
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2709|librenms-dc1-185885": {
+  "fault_id": 1577,
+  "host": "dc1whiteboard01",
+  "injector_class": "disk-fill",
+  "pred_correct": true,
+  "tg_correct": true
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2710|librenms-dc1-185412": {
+  "fault_id": 1462,
+  "host": "dc1cloudbeaver01",
+  "injector_class": "service-down",
+  "pred_correct": false,
+  "tg_correct": false
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2710|librenms-dc1-185821": {
+  "fault_id": 1559,
+  "host": "dc1cloudbeaver01",
+  "injector_class": "service-down",
+  "pred_correct": false,
+  "tg_correct": false
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2710|librenms-dc1-185853": {
+  "fault_id": 1567,
+  "host": "dc1cloudbeaver01",
+  "injector_class": "service-down",
+  "pred_correct": false,
+  "tg_correct": false
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2711|librenms-dc1-185410": {
+  "fault_id": 1463,
+  "host": "dc1openarchiver01",
+  "injector_class": "device-down",
+  "pred_correct": false,
+  "tg_correct": false
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2711|librenms-dc1-185511": {
+  "fault_id": 1484,
+  "host": "dc1openarchiver01",
+  "injector_class": "disk-fill",
+  "pred_correct": true,
+  "tg_correct": true
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2711|librenms-dc1-185943": {
+  "fault_id": 1590,
+  "host": "dc1openarchiver01",
+  "injector_class": "device-down",
+  "pred_correct": false,
+  "tg_correct": true
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2711|tg-liveness-dc1openarchiver01-1787750126": {
+  "fault_id": 1549,
+  "host": "dc1openarchiver01",
+  "injector_class": "device-down",
+  "pred_correct": false,
+  "tg_correct": true
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2713|librenms-dc1-185929": {
+  "fault_id": 1587,
+  "host": "dc1mealie01",
+  "injector_class": "service-down",
+  "pred_correct": false,
+  "tg_correct": false
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2714|librenms-dc1-185866": {
+  "fault_id": 1573,
+  "host": "dc1openwebui01",
+  "injector_class": "service-down",
+  "pred_correct": false,
+  "tg_correct": false
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2714|librenms-dc1-185902": {
+  "fault_id": 1582,
+  "host": "dc1reactive01",
+  "injector_class": "device-down",
+  "pred_correct": false,
+  "tg_correct": true
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2714|tg-liveness-dc1reactive01-1787747872": {
+  "fault_id": 1537,
+  "host": "dc1perplexica01",
+  "injector_class": "device-down",
+  "pred_correct": false,
+  "tg_correct": false
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2714|tg-liveness-dc1reactive01-1787762072": {
+  "fault_id": 1593,
+  "host": "dc1reactive01",
+  "injector_class": "device-down",
+  "pred_correct": false,
+  "tg_correct": false
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2715|librenms-dc1-185818": {
+  "fault_id": 1558,
+  "host": "dc1ghostfolio01",
+  "injector_class": "container-down",
+  "pred_correct": false,
+  "tg_correct": false
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2715|librenms-dc1-185869": {
+  "fault_id": 1572,
+  "host": "dc1ghostfolio01",
+  "injector_class": "container-down",
+  "pred_correct": false,
+  "tg_correct": false
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2715|librenms-dc1-185916": {
+  "fault_id": 1583,
+  "host": "dc1ghostfolio01",
+  "injector_class": "container-down",
+  "pred_correct": false,
+  "tg_correct": false
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2716|librenms-dc1-185425": {
+  "fault_id": 1467,
+  "host": "dc1actualbudget01",
+  "injector_class": "container-down",
+  "pred_correct": false,
+  "tg_correct": false
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2716|librenms-dc1-185876": {
+  "fault_id": 1575,
+  "host": "dc1actualbudget01",
+  "injector_class": "disk-fill",
+  "pred_correct": true,
+  "tg_correct": true
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2716|librenms-dc1-185917": {
+  "fault_id": 1586,
+  "host": "dc1actualbudget01",
+  "injector_class": "disk-fill",
+  "pred_correct": true,
+  "tg_correct": true
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2717|librenms-dc1-185828": {
+  "fault_id": 1562,
+  "host": "dc1openwebui01",
+  "injector_class": "service-down",
+  "pred_correct": true,
+  "tg_correct": false
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2717|librenms-dc1-185915": {
+  "fault_id": 1584,
+  "host": "dc1openwebui01",
+  "injector_class": "service-down",
+  "pred_correct": true,
+  "tg_correct": false
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2717|tg-liveness-dc1openwebui01-1787755301": {
+  "fault_id": 1568,
+  "host": "dc1openwebui01",
+  "injector_class": "device-down",
+  "pred_correct": false,
+  "tg_correct": false
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2719|tg-liveness-dc1sftpgo01-1787723745": {
+  "fault_id": 1449,
+  "host": "dc1sftpgo01",
+  "injector_class": "device-down",
+  "pred_correct": false,
+  "tg_correct": true
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2725|tg-liveness-dc1perplexica01-1787732923": {
+  "fault_id": 1483,
+  "host": "dc1perplexica01",
+  "injector_class": "device-down",
+  "pred_correct": false,
+  "tg_correct": false
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2726|librenms-dc1-185468": {
+  "fault_id": 1475,
+  "host": "dc1linkwarden02",
+  "injector_class": "device-down",
+  "pred_correct": false,
+  "tg_correct": false
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2726|librenms-dc1-185822": {
+  "fault_id": 1560,
+  "host": "dc1linkwarden02",
+  "injector_class": "device-down",
+  "pred_correct": false,
+  "tg_correct": true
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2726|tg-liveness-dc1linkwarden02-1787722116": {
+  "fault_id": 1444,
+  "host": "dc1linkwarden02",
+  "injector_class": "device-down",
+  "pred_correct": false,
+  "tg_correct": true
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2729|tg-liveness-dc1excalidraw01-1787731443": {
+  "fault_id": 1477,
+  "host": "dc1excalidraw01",
+  "injector_class": "device-down",
+  "pred_correct": false,
+  "tg_correct": true
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2735|librenms-dc1-185879": {
+  "fault_id": 1574,
+  "host": "dc1wallos01",
+  "injector_class": "device-down",
+  "pred_correct": false,
+  "tg_correct": false
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2735|tg-liveness-dc1wallos01-1787726039": {
+  "fault_id": 1457,
+  "host": "dc1wallos01",
+  "injector_class": "device-down",
+  "pred_correct": false,
+  "tg_correct": false
+ },
+ "2026-08-26|pair|IFRNLLEI01PRD-2735|tg-liveness-dc1wallos01-1787759849": {
+  "fault_id": 1585,
+  "host": "dc1wallos01",
+  "injector_class": "device-down",
+  "pred_correct": false,
+  "tg_correct": false
+ }
+}

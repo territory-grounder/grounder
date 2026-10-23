@@ -1,0 +1,17 @@
+{
+  "feature": "agent-loop.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes (must name a test); pending = specified behavior whose implementation does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior, INV-22). All scenarios drive the real agent package with a scripted in-memory model.",
+  "scenarios": [
+    { "name": "The agent drives a read-only tool then emits a proposal via ParseProposal", "req": "REQ-1001", "status": "present", "test": "TestAgentLoopAcceptance" },
+    { "name": "A write tool is structurally withheld from the agent", "req": "REQ-1003", "status": "present", "test": "TestAgentLoopAcceptance" },
+    { "name": "A low-confidence turn stops and routes to a poll", "req": "REQ-1002", "status": "present", "test": "TestAgentLoopAcceptance" },
+    { "name": "A mid-confidence proposal escalates to a human poll", "req": "REQ-1002", "status": "present", "test": "TestAgentLoopAcceptance" },
+    { "name": "An unparseable model output fails closed with no second grammar", "req": "REQ-1005", "status": "present", "test": "TestAgentLoopAcceptance" },
+    { "name": "An injection tool name is never executed", "req": "REQ-1001", "status": "present", "test": "TestAgentLoopAcceptance" },
+    { "name": "The cycle hard-halt limit bounds the loop", "req": "REQ-1004", "status": "present", "test": "TestAgentLoopAcceptance" },
+    { "name": "A tool publishes an ACI schema that renders into the preamble and screens bad arguments", "req": "REQ-1009", "status": "present", "test": "TestAgentLoopAcceptance" },
+    { "name": "A tool error is recoverable and does not abort the session", "req": "REQ-1010", "status": "present", "test": "TestAgentLoopAcceptance" },
+    { "name": "A model thought is recorded as data and never routes dispatch", "req": "REQ-1011", "status": "present", "test": "TestAgentLoopAcceptance" },
+    { "name": "A hostile tool result is neutralized in the observation while a benign result and its id pass byte-clean", "req": "REQ-1012", "status": "present", "test": "TestAgentLoopAcceptance" }
+  ]
+}

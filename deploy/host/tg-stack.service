@@ -1,0 +1,37 @@
+# tg-stack.service — bring the Territory Grounder compose stack up at boot (TG-565).
+#
+# WHY: on 2026-09-16 the host rebooted and TG stayed down for 57h with nothing noticing. Restart policies
+# alone (docker-compose.yml `restart: unless-stopped`) do not cure it: dockerd starts the long-running
+# containers but ignores depends_on, and the one-shot inits that write the secret drops to /dev/shm — which a
+# reboot wipes — only run under a compose `up`. Without this unit litellm and the sidecar crash-loop on a
+# missing env file (the sidecar did, for two days). This unit IS that `up`, once per boot.
+#
+# RETRIES UNTIL IT CONVERGES: the inits resolve their secrets from OpenBao, which may boot slower than this
+# host. They fail closed, `up` exits non-zero, and systemd retries every 30s with no start limit.
+#
+# INSTALL: the deploy playbook copies deploy/ to /srv/tg/deploy and installs this file to
+# /etc/systemd/system/tg-stack.service + enables it on every deploy (it does not start it — the deploy's own
+# `up -d` already converged the stack). By hand: install it there, `systemctl daemon-reload`,
+# `systemctl enable tg-stack.service`. deploy/restart_policy_test.go pins this file's shape.
+#
+# A deliberate stop that must survive a reboot: `systemctl disable tg-stack.service` first — `docker compose
+# stop` alone is undone by the next boot's `up`.
+
+[Unit]
+Description=Territory Grounder compose stack (docker compose up -d at boot; TG-565)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/srv/tg/deploy
+ExecStart=/usr/bin/docker compose --env-file .env -f docker-compose.yml up -d
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target

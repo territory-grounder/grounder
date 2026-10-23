@@ -1,0 +1,35 @@
+{
+  "measured_at": "2026-08-04",
+  "git_sha": "98a320241c85c8fc6ab983183be5367298b426f7",
+  "gateway": "http://127.0.0.1:4010",
+  "note": "TG-204 arm-distinctness PREFLIGHT — one completion per tier alias, no corpus run",
+  "arms": [
+    {
+      "name": "ARM-CONTROL",
+      "investigate_tier": "fast",
+      "decide_tier": "primary",
+      "scorecard": "",
+      "start": "2026-08-04T22:06:58.368Z",
+      "end": "2026-08-04T22:07:02.966Z",
+      "caller_prefix": ""
+    },
+    {
+      "name": "ARM-STRONG",
+      "investigate_tier": "primary",
+      "decide_tier": "primary",
+      "scorecard": "",
+      "start": "2026-08-04T22:07:03.970Z",
+      "end": "2026-08-04T22:07:05.622Z",
+      "caller_prefix": ""
+    },
+    {
+      "name": "ARM-CHEAP",
+      "investigate_tier": "fast",
+      "decide_tier": "fast",
+      "scorecard": "",
+      "start": "2026-08-04T22:07:06.624Z",
+      "end": "2026-08-04T22:07:08.442Z",
+      "caller_prefix": ""
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "_comment": "tier2 --dry-run FIXTURE (TG-72): one agentic predecessor incident for the same fake guest, shaped like extract_predecessor.py --json output.",
+  "incidents": [
+    {
+      "incidentKey": "FX-1234",
+      "session": "fx-sess-1",
+      "host": "gp-alpha01",
+      "agentic": true,
+      "blockedInvestigations": 0,
+      "couldGround": true,
+      "action": "SEMI_AUTO",
+      "issue": "Infrastructure alert: gp-alpha01 - Service up/down",
+      "alertCategory": "availability",
+      "rationale": "fakeapp.service is inactive on gp-alpha01 and the disk climb traces to the application's own log file. Single most-likely cause: the stopped unit. Remediate via systemctl restart fakeapp; the disk symptom is derivative and gets no separate remedy.",
+      "outcome": "band=SEMI_AUTO; auto_approved=0; judge_score=?/5; judge_action=?",
+      "reasoningExcerpt": "Investigated the alert pair on gp-alpha01: the unit is down, the guest is up, root usage is rising because app.log keeps growing without rotation. Attributing to the stopped unit as the one actionable cause.",
+      "firstTs": "2026-08-14T10:04:30+00:00"
+    }
+  ]
+}
