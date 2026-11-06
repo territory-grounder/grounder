@@ -1,0 +1,90 @@
+{
+  "feature": "secret-plane.feature",
+  "note": "Honest coverage frontier. status: present=a runnable step drives real code (must name a test); pending=specified behavior not yet built; retrospective_gap=shipped without a driving test (must be zero, INV-22). All PENDING: spec/024 is the design gate; scenarios bind as tasks T-024-1..6 land. INC-1 (complete the bao: migration) is deploy-config only and verified operationally, not by a unit test.",
+  "scenarios": [
+    {
+      "name": "Enforce policy refuses to boot on a plaintext business secret",
+      "req": "REQ-2400",
+      "status": "present",
+      "test": "core/preflight/secretpolicy_test.go: TestEnforceSecretPolicy (enforce fatals on a violation; clean report passes) + TestDeploymentSecretEntriesPoliceTheUndeclaredCredentials (three live plaintext credentials red under enforce)"
+    },
+    {
+      "name": "Off policy preserves pre-feature behavior",
+      "req": "REQ-2400",
+      "status": "present",
+      "test": "core/preflight/secretpolicy_test.go: TestEnforceSecretPolicy (the off arm returns nil for a report carrying violations, so a plaintext reference boots exactly as it did before the feature) + TestParseSecretPolicy (an unset/unknown value parses to off, the behaviour-preserving default both composition roots pass in)"
+    },
+    {
+      "name": "Warn policy logs each plaintext reference and continues",
+      "req": "REQ-2400",
+      "status": "present",
+      "test": "core/preflight/secretpolicy_test.go: TestEnforceSecretPolicy (warn never fatal; caller logs rep.Violations — live boot line shows the per-scan output)"
+    },
+    {
+      "name": "The permanent exemption set alone may remain plaintext under enforce",
+      "req": "REQ-2401",
+      "status": "present",
+      "test": "core/preflight/exemption_set_test.go: TestABusinessSecretCannotExemptItself / TestTheRealExemptionsAreStillHonoured / TestEveryExemptionTheBinariesClaimIsInTheClosedSet / TestTheClosedSetIsSmallAndReasoned"
+    },
+    {
+      "name": "Every process secret reference is enumerated for the policy",
+      "req": "REQ-2402",
+      "status": "present",
+      "test": "cmd/worker/secretpolicy_test.go: TestWorkerSecretEntriesCompleteness (source-scan drift guard over workerSecretEntries) + core/preflight/deploymentsecrets_test.go: TestDeploymentSecretEntriesPoliceTheUndeclaredCredentials"
+    },
+    {
+      "name": "A business secret migrates from env to a backend with an unchanged resolved value",
+      "req": "REQ-2403",
+      "status": "pending",
+      "test": ""
+    },
+    {
+      "name": "A new backend registers read-only at the scheme registry and fails closed",
+      "req": "REQ-2404",
+      "status": "present",
+      "test": "modules/credsource/vaultwarden/vaultwarden_test.go: TestNewValidatesAndRegistrationIsNilSafe (a nil client unregisters the scheme; every vw: ref then fails closed) + the WireDelivery substrate-OFF path"
+    },
+    {
+      "name": "The Vaultwarden resolver decrypts a vault item field in native Go",
+      "req": "REQ-2405",
+      "status": "present",
+      "test": "modules/credsource/vaultwarden/vaultwarden_test.go: TestResolveRefEndToEndAndFailClosed (prelogin→login→sync→decrypt over a fake vault; the master password never reaches the server) + TestCipherStringsAuthenticateBeforeTheyDecrypt + TestKeyDerivationMatchesThePublishedVector"
+    },
+    {
+      "name": "The Passbolt resolver retrieves a resource field via an OpenPGP robot identity",
+      "req": "REQ-2406",
+      "status": "present",
+      "test": "modules/credsource/passbolt/passbolt_test.go: TestGPGAuthProvesPossessionAndResolvesEndToEnd (login→resources→secret→field, both storage shapes) + TestAWrongRobotKeyCannotCompleteTheHandshake (proof of possession) + TestFailClosedDirections"
+    },
+    {
+      "name": "The OpenBao token bootstraps without a durable on-disk secret",
+      "req": "REQ-2407",
+      "status": "present",
+      "test": "modules/credsource/vault/wrappedapprole_test.go: TestWrappedAppRoleResolvesEndToEnd (a response-wrapped, single-use SecretID delivered to a memory-backed path is unwrapped at boot — nothing durable on disk) + TestWrappedAppRoleFailsClosedOnSpentToken + TestWrappedAppRoleFailsClosedOnEmptyWrapToken; the mTLS variant is covered by modules/credsource/vault/vault_test.go TestCertAuthLogin + TestCertNewLoadsClientCert"
+    },
+    {
+      "name": "The homelab backends are labeled second-tier and are not the default",
+      "req": "REQ-2408",
+      "status": "present",
+      "test": "core/preflight/secrettier_test.go: TestRecommendPicksTheStrongestAvailableTier (a homelab backend is recommended only when nothing stronger is configured) + TestUnconfiguredResolversAreNotAPostureAndEveryRowIsHonest (every homelab row must SAY it relocates rather than removes secret-zero, and the report keeps OpenBao the primary recommendation)"
+    },
+    {
+      "name": "A hardcoded env default is a violation under enforce",
+      "req": "REQ-2409",
+      "status": "present",
+      "test": "core/preflight/secretpolicy_test.go: TestCheckSecretPolicyClassifies (env: ref = violation) + TestEnforceErrorCitesTheDeploymentsOwnWorkingReference (the 21 env:<NAME> defaults narrative, killing mutation executed)"
+    },
+    {
+      "name": "A raw credential in the process environment fails the boot under enforce",
+      "req": "REQ-2410",
+      "status": "present",
+      "test": "TestRawSecretShapedEnvVarIsAViolation"
+    },
+    {
+      "name": "The backend selector labels each tier's assurance and never offers plaintext .env",
+      "req": "REQ-2408",
+      "status": "present",
+      "test": "core/preflight/secrettier_test.go: TestSelectorNeverOffersPlaintextAsATier + TestRecommendPicksTheStrongestAvailableTier + TestUnconfiguredResolversAreNotAPostureAndEveryRowIsHonest"
+    }
+  ]
+}

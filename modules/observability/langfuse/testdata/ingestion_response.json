@@ -1,0 +1,21 @@
+{
+  "successes": [
+    { "id": "9a1f0b8c4d5e6f70", "status": 201 }
+  ],
+  "errors": [
+    {
+      "id": "1c2d3e4f5a6b7c8d",
+      "status": 400,
+      "message": "Invalid request data",
+      "error": [
+        {
+          "code": "invalid_type",
+          "expected": "string",
+          "received": "undefined",
+          "path": ["body", "name"],
+          "message": "Required"
+        }
+      ]
+    }
+  ]
+}

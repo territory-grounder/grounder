@@ -1,0 +1,84 @@
+{
+  "runs": 3,
+  "overall_baseline": 3.09,
+  "overall_candidate": 2.95,
+  "overall_delta": -0.14,
+  "overall_max_drop": 0.15,
+  "overall_band": 0,
+  "overall_pass": true,
+  "dims": [
+    {
+      "dim": "appropriate_band",
+      "baseline": 3.67,
+      "candidate": 3.55,
+      "delta": -0.12,
+      "max_drop": 0.1,
+      "pass": true,
+      "unresolved": true,
+      "band": 0.18,
+      "samples": 108
+    },
+    {
+      "dim": "correct_diagnosis",
+      "baseline": 3.9,
+      "candidate": 3.53,
+      "delta": -0.37,
+      "max_drop": 0.3,
+      "pass": false,
+      "band": 0.18,
+      "samples": 108
+    },
+    {
+      "dim": "evidence_grounded",
+      "baseline": 3.42,
+      "candidate": 3.05,
+      "delta": -0.37,
+      "max_drop": 0.3,
+      "pass": false,
+      "band": 0.17,
+      "samples": 108
+    },
+    {
+      "dim": "falsifiable_prediction",
+      "baseline": 1.35,
+      "candidate": 1.7,
+      "delta": 0.35,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "sensible_proposal",
+      "baseline": 3.14,
+      "candidate": 2.91,
+      "delta": -0.23,
+      "max_drop": 0.3,
+      "pass": true
+    }
+  ],
+  "rates": [
+    {
+      "name": "proposal_recall",
+      "candidate": 0.54,
+      "floor": 0.5,
+      "pass": true
+    }
+  ],
+  "control_n": 0,
+  "control_violations": null,
+  "control_pass": true,
+  "pass": false,
+  "outcome": "fail",
+  "unmeasured": [
+    "appropriate_band at this measurement power: Δ -0.12 is a drop past the -0.10 floor but WITHIN the sample-aware band (±0.18 at n=108 judged samples, measured σ²=0.617), so the gate cannot tell it from the run's own noise; escalate to the pooled full gate (make eval-gate-full / TG_EVAL_FULL=1), where the summed per-dimension n shrinks the band and the same drop resolves to a real FAIL or a real PASS",
+    "negative controls: every control supplied was EXCLUDED as unobservable on the live estate (host absent from LibreNMS or administratively disabled), so the benign-incident bar was never applied — refresh the control corpus with hosts whose benignness can be READ"
+  ],
+  "reasons": [
+    "dim correct_diagnosis Δ -0.37 \u003c -0.30, beyond the ±0.18 sample-aware band at n=108",
+    "dim evidence_grounded Δ -0.37 \u003c -0.30, beyond the ±0.17 sample-aware band at n=108",
+    "UNMEASURED — appropriate_band at this measurement power: Δ -0.12 is a drop past the -0.10 floor but WITHIN the sample-aware band (±0.18 at n=108 judged samples, measured σ²=0.617), so the gate cannot tell it from the run's own noise; escalate to the pooled full gate (make eval-gate-full / TG_EVAL_FULL=1), where the summed per-dimension n shrinks the band and the same drop resolves to a real FAIL or a real PASS; the gate cannot certify a capability the run never exercised, so this run certifies nothing",
+    "UNMEASURED — negative controls: every control supplied was EXCLUDED as unobservable on the live estate (host absent from LibreNMS or administratively disabled), so the benign-incident bar was never applied — refresh the control corpus with hosts whose benignness can be READ; the gate cannot certify a capability the run never exercised, so this run certifies nothing"
+  ],
+  "warnings": [
+    "BASE-ARM DEGRADED: base proposal_rate 0.19 is under the 0.25 floor — main itself is collapsed (or an old card never recorded rates); the trend-watch owns that red"
+  ]
+}

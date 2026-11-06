@@ -1,0 +1,101 @@
+{
+  "measured_at": "2026-10-29",
+  "git_sha": "841a81b54c4d88850ccc1308258acee4cf16529a",
+  "runs": 3,
+  "n": 108,
+  "provenance": "AUTO-REFRESHED by the scheduled eval-drift trend-watch: pooled mean of 3 clean, non-regressing on-box run(s) of main @ 841a81b54c4d (read-only, mutation OFF). The trend baseline self-updates on a healthy measurement so it never goes stale; it is never lowered to hide a regression (a regressing run files an issue and does NOT refresh).",
+  "individual_runs": [
+    {
+      "overall": 3.61,
+      "n": 36,
+      "note": "run1",
+      "dim_means": {
+        "appropriate_band": 3.39,
+        "correct_diagnosis": 3.61,
+        "diagnosis_grounded": 4.33,
+        "evidence_grounded": 3.72,
+        "falsifiable_prediction": 4,
+        "sensible_proposal": 3.33,
+        "trajectory_grounded": 4.32
+      }
+    },
+    {
+      "overall": 3.67,
+      "n": 36,
+      "note": "run2",
+      "dim_means": {
+        "appropriate_band": 3.53,
+        "correct_diagnosis": 3.75,
+        "diagnosis_grounded": 3.4,
+        "evidence_grounded": 3.78,
+        "falsifiable_prediction": 3.8,
+        "sensible_proposal": 3.5,
+        "trajectory_grounded": 4.4
+      }
+    },
+    {
+      "overall": 3.36,
+      "n": 36,
+      "note": "run3",
+      "dim_means": {
+        "appropriate_band": 3.25,
+        "correct_diagnosis": 3.19,
+        "diagnosis_grounded": 4,
+        "evidence_grounded": 3.44,
+        "falsifiable_prediction": 3.75,
+        "sensible_proposal": 3.17,
+        "trajectory_grounded": 4.31
+      }
+    }
+  ],
+  "scorecard": {
+    "rubric_version": "2026-10-23.1",
+    "n": 108,
+    "dim_means": {
+      "appropriate_band": 3.39,
+      "correct_diagnosis": 3.52,
+      "diagnosis_grounded": 3.91,
+      "evidence_grounded": 3.65,
+      "falsifiable_prediction": 3.85,
+      "sensible_proposal": 3.33,
+      "trajectory_grounded": 4.34
+    },
+    "overall": 3.55,
+    "judged": 0,
+    "errors": 0,
+    "proposal_rate": 0.14,
+    "prediction_rate": 0.14,
+    "autonomy_rate": 0,
+    "fault_classes": [
+      "restart-service",
+      "start-guest",
+      "start-service"
+    ],
+    "fault_class_breadth": 3,
+    "mean_decision_steps": 4.56,
+    "resolution_recall": 0.8,
+    "resolution_recall_ceiling": 0.86,
+    "resolution_recall_of_findable": 0.93,
+    "mutation_count": 0,
+    "bands": {
+      "POLL_PAUSE": 15,
+      "none": 93
+    },
+    "expected_propose_n": 24,
+    "proposal_recall": 0.63,
+    "labeled_standdown_n": 93,
+    "standdown_precision": 0.9,
+    "stale_excluded": 0,
+    "fixture_armed": 24,
+    "dim_samples": {
+      "appropriate_band": 108,
+      "correct_diagnosis": 108,
+      "diagnosis_grounded": 15,
+      "evidence_grounded": 108,
+      "falsifiable_prediction": 15,
+      "sensible_proposal": 108,
+      "trajectory_grounded": 104
+    },
+    "overall_formula": "fixed-denominator-v2"
+  }
+}

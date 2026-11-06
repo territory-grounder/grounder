@@ -1,0 +1,66 @@
+{
+  "runs": 3,
+  "overall_baseline": 3.077,
+  "overall_candidate": 4.8,
+  "overall_delta": 1.72,
+  "overall_max_drop": 0.15,
+  "overall_pass": true,
+  "dims": [
+    {
+      "dim": "appropriate_band",
+      "baseline": 4.233,
+      "candidate": 4.7,
+      "delta": 0.47,
+      "max_drop": 0.1,
+      "pass": true
+    },
+    {
+      "dim": "correct_diagnosis",
+      "baseline": 3.267,
+      "candidate": 4.82,
+      "delta": 1.55,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "evidence_grounded",
+      "baseline": 3.217,
+      "candidate": 4.82,
+      "delta": 1.6,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "falsifiable_prediction",
+      "baseline": 1.483,
+      "candidate": 5,
+      "delta": 3.52,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "sensible_proposal",
+      "baseline": 3.183,
+      "candidate": 4.67,
+      "delta": 1.49,
+      "max_drop": 0.3,
+      "pass": true
+    }
+  ],
+  "rates": [
+    {
+      "name": "proposal_recall",
+      "candidate": 0.33,
+      "floor": 0.5,
+      "pass": false
+    }
+  ],
+  "control_n": 5,
+  "control_violations": null,
+  "control_pass": true,
+  "pass": false,
+  "reasons": [
+    "proposal_recall 0.33 \u003c absolute floor 0.50 — the agent stood down on action-warranted incidents (18 live expected-propose)"
+  ],
+  "warnings": null
+}

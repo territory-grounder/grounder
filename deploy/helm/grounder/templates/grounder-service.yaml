@@ -1,0 +1,59 @@
+{{/*
+grounder public API Service (spec/009 REQ-909).
+
+Only the AUTHENTICATED public API port (8080) is exposed. The elevated admin listener (8443) is
+deliberately absent from this Service and from any Ingress — it stays reachable only in-cluster. The
+optional Ingress below fronts the public port only; it never routes the admin/Temporal/Postgres ports.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "grounder.componentName" (dict "root" . "component" "grounder") }}
+  labels:
+    {{- include "grounder.labels" . | nindent 4 }}
+    {{- include "grounder.selectorLabels" (dict "root" . "component" "grounder") | nindent 4 }}
+spec:
+  type: {{ .Values.grounder.service.type }}
+  selector:
+    {{- include "grounder.selectorLabels" (dict "root" . "component" "grounder") | nindent 4 }}
+  ports:
+    - name: public
+      port: {{ .Values.grounder.service.port }}
+      targetPort: public
+      protocol: TCP
+    # NOTE: the admin listener (8443) is intentionally NOT published here (spec/009 REQ-909).
+{{- if .Values.grounder.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "grounder.componentName" (dict "root" . "component" "grounder") }}
+  labels:
+    {{- include "grounder.labels" . | nindent 4 }}
+  {{- with .Values.grounder.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.grounder.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.grounder.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.grounder.ingress.host | quote }}
+      secretName: {{ .Values.grounder.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.grounder.ingress.host | quote }}
+      http:
+        paths:
+          # public authenticated API only (spec/009 REQ-909)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "grounder.componentName" (dict "root" . "component" "grounder") }}
+                port:
+                  number: {{ .Values.grounder.service.port }}
+{{- end }}

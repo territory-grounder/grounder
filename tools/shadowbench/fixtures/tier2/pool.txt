@@ -1,0 +1,7 @@
+# tier2 --dry-run FIXTURE pool file (TG-72). Same positional format as the real injector pool
+# (tools/faultinjector/cmd/faultinjector/main.go loadPool):
+#   <vmid> <name> <node> [container] [unit] [logpath] [healthprobe...]     "-" = explicitly empty.
+# Hostnames here are FAKE by design: estate identities never enter committed files (STONITH rule);
+# the real pool file is operator-maintained outside the repo and named via $TIER2_POOL_FILE.
+9901 gp-alpha01 pve-fixture-a - fakeapp /var/log/fakeapp/app.log curl -sf http://127.0.0.1:8080/health
+9902 gp-beta01 pve-fixture-a - - - -

@@ -1,0 +1,96 @@
+{
+  "spec": "011-agent-loop",
+  "tasks": [
+    {
+      "id": "T-011-1",
+      "title": "Native Go ReAct loop over LiteLLM: typed directive dispatch, read-only tools, confidence STOP, cycle limits, ParseProposal emit; ACI tool contract + recoverable tool-errors + thought-as-data; tool-result observations input-screened; no model token becomes control flow",
+      "files_owned": [
+        "agent/loop.go",
+        "agent/tools.go",
+        "agent/confidence.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-1001",
+        "REQ-1002",
+        "REQ-1003",
+        "REQ-1004",
+        "REQ-1005",
+        "REQ-1006",
+        "REQ-1007",
+        "REQ-1008",
+        "REQ-1009",
+        "REQ-1010",
+        "REQ-1011",
+        "REQ-1012"
+      ],
+      "acceptance": {
+        "feature": "agent-loop.feature",
+        "scenarios": [
+          "The agent drives a read-only tool then emits a proposal via ParseProposal",
+          "A write tool is structurally withheld from the agent",
+          "A low-confidence turn stops and routes to a poll",
+          "A mid-confidence proposal escalates to a human poll",
+          "An unparseable model output fails closed with no second grammar",
+          "An injection tool name is never executed",
+          "The cycle hard-halt limit bounds the loop",
+          "A tool publishes an ACI schema that renders into the preamble and screens bad arguments",
+          "A tool error is recoverable and does not abort the session",
+          "A model thought is recorded as data and never routes dispatch",
+          "A hostile tool result is neutralized in the observation while a benign result and its id pass byte-clean"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 900,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "completed"
+    },
+    {
+      "id": "T-011-2",
+      "status": "completed",
+      "title": "Record WHY a session proposed nothing — the loop knew and the field died at the activity boundary",
+      "files_owned": [
+        "temporal/runner/stop_reason_test.go"
+      ],
+      "deps": [
+        "T-011-1"
+      ],
+      "req_ids": [
+        "REQ-1013"
+      ],
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 120
+      },
+      "acceptance": {
+        "go_test": "temporal/runner: TestANoProposalSessionRecordsWHYItStopped, TestTheStopReasonIsTheORCHESTRATORsNotTheAgentText, TestAProposingSessionCarriesNoStopReason, TestTheStopReasonReachesThePersistedRow, TestTheHaltVocabularyIsNotHandCopied, TestAFailedVoteRecordNamesWhatFailed",
+        "mutation_control": "EXECUTED RED 2026-07-28, four controls. (A) drop the workflow binding — the live defect verbatim -> 'a no-proposal session recorded NO stop reason ... a model-call FAILURE and a considered refusal are the same row'. (B2) stop carrying Reason across the activity boundary -> same. (C) bind the AGENT's conclusion into the trusted field -> 'not one of the orchestrator's known halt causes ... an untrusted string has entered a trusted field'. (D2) drop it before the persisted row -> 'the value existed in the workflow result and was dropped before the row, so no query can ever separate a correct refusal from a diagnosis miss'. CONTROL D DID NOT FIRE FIRST TIME and the ORACLE was at fault: it asserted the workflow RESULT, which proves the value was computed, not that it was RECORDED. Added TestTheStopReasonReachesThePersistedRow with a capturing TriageRecord fake. That is the same one-level-up gap this session kept finding. FOLLOW-UP, 3 more controls RED after the LIVE data caught a bug in MY OWN ORACLE: the first version hand-listed SIX of the loop's EIGHT halt causes and passed only because its fixture produced a listed one — the estate immediately recorded 'agent requested stop', which was NOT in my list, so the oracle would have failed SPURIOUSLY on a correct value. agent.StopReasons() now exports the vocabulary from source and the oracle asserts against it. Controls: (A) an empty cause in the vocabulary; (B) an empty vocabulary, which makes every downstream reason check pass vacuously; (C) a duplicate cause. FOLLOW-UP: RecordVoteActivity returned the ledger error BARE, so a lost vote surfaced only as Temporal's 'activity error' with an empty cause chain. Observed live 2026-07-28 — 1 of 8 votes lost on librenms-dc1-180379, and isolating it meant ruling out a uniqueness constraint, action-identity collapse and a ledger outage BY HAND. Controls: (A) return the bare error again -> the failure names neither the decision, the session, nor the action; (B) drop the %w wrap -> the underlying cause is lost; (C) proceed despite a failed append -> FAIL-OPEN, actuating on an approval that was never durably recorded, which INV-12/INV-19 forbid. The oracle uses a REAL audit.Ledger with a failing SINK rather than a fake ledger — the production failure mode — because faking the ledger would test the fake.",
+        "notes": "★ NEAR MISS WORTH RECORDING: my first edit landed the field in core/judge's SESSION FACT-SURFACE struct rather than TriageRow, because the regex matched the first `Conclusion string` in the file. That struct renders the JUDGE PROMPT, which is byte-pinned by a golden test and must not move mid-accrual (it would pool two instruments and void the paired Wilcoxon). Caught by the compiler, removed, and the judge prompt tests re-run green to confirm it is byte-identical. Migration 0044 adds session_triage.stop_reason (text NOT NULL DEFAULT '') with a down-pair."
+      }
+    },
+    {
+      "id": "T-011-3",
+      "status": "completed",
+      "title": "Surface the tool call OUTCOME in the OBSERVATION envelope — a proposal could be built on a FAILED lookup",
+      "files_owned": [
+        "agent/observation_outcome_test.go"
+      ],
+      "deps": [
+        "T-011-1"
+      ],
+      "req_ids": [
+        "REQ-1014"
+      ],
+      "budget": {
+        "max_loc_delta": 300,
+        "max_wall_clock_minutes": 120
+      },
+      "acceptance": {
+        "go_test": "agent: TestFailedObservationIsMarkedFAILEDInThePromptTheModelReads, TestPreambleTeachesTheOutcomeMarker, TestFailedObservationStillCostsACycle",
+        "mutation_control": "EXECUTED RED 2026-08-04, two controls. (A) THE DEFECT VERBATIM: drop the TOOL_OUTCOME line from observationEnvelope and return the pre-TG-199 bare fmt.Sprintf(\"OBSERVATION[%s]: %s\", tr.ID, screened) -> \"a proposal can rest on a FAILED lookup: get-tracker-history FAILED, but the model was shown OBSERVATION[trk-9] with no outcome marker ... the fix is justified by a lookup that never landed (it is then refused at the actuation evidence gate with no feedback, burning the session)\". (B) THE FAILURE MODE THE FIX CREATES: refund the cycle a failed observation spent (`if !tr.Success { cycle--; continue }`) -> \"an always-failing tool must run the cycle budget out and hand off, got stop ... if a FAILED observation is free, the model that can now READ FAILED retries without limit\". (C) THE HALF-FIX: revert the two preamble edits, leaving observationEnvelope stamping a marker the model was never taught to read -> \"the preamble must teach \\\"TOOL_OUTCOME[<id>]: SUCCEEDED|FAILED\\\" ... a marker the model was never taught to read leaves it citing failed lookups exactly as before\". All three restored -> green. The oracle carries a VACUITY FLOOR: it counts the OBSERVATION envelopes in the captured prompt and asserts the fixture really did fail before grading any marker, because a scan over an empty prompt passes every check for free.",
+        "notes": "The in-loop citation gate is deliberately UNCHANGED: it checks id membership, and the mechanical unbinding of a failed citation stays where it already lives (temporal/runner buildEvidence / actuateEvidence -> core/actuate evidence gate). What TG-199 changes is that the model reads the failure BEFORE it cites. agent/loop.go stays owned by T-011-1."
+      }
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "outcome": "measured",
+  "arms": [
+    {
+      "name": "ARM-CONTROL",
+      "investigate_tier": "arm-haiku",
+      "decide_tier": "arm-opus",
+      "served_signature": "claude-haiku-4-5-20251001+claude-opus-5",
+      "telemetry": {
+        "calls": 2,
+        "mean_call_ms": 2450,
+        "total_call_ms": 4900,
+        "cost_usd": 0.0013,
+        "served_models": [
+          "claude-haiku-4-5-20251001",
+          "claude-opus-5"
+        ]
+      },
+      "correct_diagnosis": 0,
+      "diagnosis_grounded": 0,
+      "overall": 0,
+      "decision_steps_a6a": 0,
+      "n": 0
+    },
+    {
+      "name": "ARM-STRONG",
+      "investigate_tier": "arm-opus",
+      "decide_tier": "arm-opus",
+      "served_signature": "claude-opus-5",
+      "telemetry": {
+        "calls": 1,
+        "mean_call_ms": 1641,
+        "total_call_ms": 1641,
+        "cost_usd": 0.0012,
+        "served_models": [
+          "claude-opus-5"
+        ]
+      },
+      "correct_diagnosis": 0,
+      "diagnosis_grounded": 0,
+      "overall": 0,
+      "decision_steps_a6a": 0,
+      "n": 0
+    },
+    {
+      "name": "ARM-CHEAP",
+      "investigate_tier": "arm-haiku",
+      "decide_tier": "arm-haiku",
+      "served_signature": "claude-haiku-4-5-20251001",
+      "telemetry": {
+        "calls": 1,
+        "mean_call_ms": 2179,
+        "total_call_ms": 2179,
+        "cost_usd": 0.0005,
+        "served_models": [
+          "claude-haiku-4-5-20251001"
+        ]
+      },
+      "correct_diagnosis": 0,
+      "diagnosis_grounded": 0,
+      "overall": 0,
+      "decision_steps_a6a": 0,
+      "n": 0
+    }
+  ],
+  "deltas": null,
+  "collapsed_groups": null,
+  "unknown_arms": null,
+  "unattributed_calls": 0,
+  "reasons": null,
+  "preflight": true
+}

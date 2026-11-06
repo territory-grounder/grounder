@@ -1,0 +1,9 @@
+{
+  "name": "tg-console-e2e",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Playwright browser oracle for the v2 operator console decision-tracer surfaces (spec/020 REQ-2012).",
+  "type": "module",
+  "scripts": { "test": "bash run.sh" },
+  "devDependencies": { "playwright": "1.61.1" }
+}

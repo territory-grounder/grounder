@@ -1,0 +1,106 @@
+{
+ "spec": "030-transaction-plan",
+ "note": "Governance model OWNER-RULED 2026-08-22 (one plan approval; any step failure auto-reverts; recorded in the rulings log). T-030-1 completed 2026-08-22 (core/plan registry + validation + PlanID, shipped empty); T-030-2 completed 2026-08-22 (migration 0111 + TransactionPlanStore, forward-only CAS machines); T-030-3 completed 2026-08-22 (TransactionPlanWorkflow + activities, registered on the worker; 9 oracles incl. 2 executed killing mutations); T-030-4 completed 2026-08-22 (propose-terminal compose + the plan poll on the EXISTING vote surface, bound to plan:<plan_id>; the child runs only carrying the taken approval; 2 executed killing mutations); T-030-5 completed 2026-08-22 (full plan_id on every ledger row, per-step action ids, verdicts + inverse identity in the narration; session terminal carries plan:<terminal>); T-030-6 blocked on the drill deferral.",
+ "tasks": [
+  {
+   "id": "T-030-1",
+   "title": "PlanRecipe registry: compiled closed set + BUILD-time validation (every step compensatable, known op-classes, step ceiling, no duplicates)",
+   "files_owned": [],
+   "deps": [],
+   "req_ids": [
+    "REQ-3001",
+    "REQ-3004"
+   ],
+   "status": "completed",
+   "budget": {
+    "max_loc_delta": 400,
+    "max_wall_clock_minutes": 180
+   }
+  },
+  {
+   "id": "T-030-2",
+   "title": "Plan identity + durable rows: content-addressed plan_id over the ordered step tuples; transaction_plan + per-step binding (plane: both — projection, the commit_confirm precedent; forward-only CAS transitions)",
+   "files_owned": [],
+   "deps": [
+    "T-030-1"
+   ],
+   "req_ids": [
+    "REQ-3002",
+    "REQ-3006"
+   ],
+   "status": "completed",
+   "budget": {
+    "max_loc_delta": 500,
+    "max_wall_clock_minutes": 240
+   }
+  },
+  {
+   "id": "T-030-3",
+   "title": "TransactionPlanWorkflow: classify ALL steps first (deny-overrides whole-plan refusal), execute in order through the unchanged interceptor, compensate N-1..1 on failure, page + breaker-trip on compensation failure",
+   "files_owned": [],
+   "deps": [
+    "T-030-2"
+   ],
+   "req_ids": [
+    "REQ-3003",
+    "REQ-3004",
+    "REQ-3005"
+   ],
+   "status": "completed",
+   "budget": {
+    "max_loc_delta": 700,
+    "max_wall_clock_minutes": 360
+   }
+  },
+  {
+   "id": "T-030-4",
+   "title": "The plan poll: every step + its compensation rendered into the vote surface; ONE approval binds the plan_id; recipe lookup at the propose terminal (pure, op-class-keyed)",
+   "files_owned": [],
+   "deps": [
+    "T-030-2"
+   ],
+   "req_ids": [
+    "REQ-3001",
+    "REQ-3002"
+   ],
+   "status": "completed",
+   "budget": {
+    "max_loc_delta": 500,
+    "max_wall_clock_minutes": 240
+   }
+  },
+  {
+   "id": "T-030-5",
+   "title": "Ledger + session-record shape: plan:* entries carrying plan_id AND step action_id; the session terminal carries committed|reverted|revert-failed",
+   "files_owned": [],
+   "deps": [
+    "T-030-3",
+    "T-030-4"
+   ],
+   "req_ids": [
+    "REQ-3006"
+   ],
+   "status": "completed",
+   "budget": {
+    "max_loc_delta": 300,
+    "max_wall_clock_minutes": 120
+   }
+  },
+  {
+   "id": "T-030-6",
+   "title": "First real recipe (owner-chosen remediation) + the live end-to-end drill (drill owner-attended; deferred with all drills)",
+   "files_owned": [],
+   "deps": [
+    "T-030-5"
+   ],
+   "req_ids": [
+    "REQ-3007"
+   ],
+   "status": "blocked",
+   "budget": {
+    "max_loc_delta": 200,
+    "max_wall_clock_minutes": 180
+   }
+  }
+ ]
+}

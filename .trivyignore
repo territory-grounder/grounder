@@ -1,0 +1,8 @@
+# trivy ignore list — read automatically by `trivy image` from the working directory (the trivy-image-scan
+# job runs at the repo root). EVERY entry carries an expiry and a tracker id; an expired entry re-reds the
+# gate by itself, so nothing here is a permanent hole. Entries are supply-chain findings in the PINNED
+# third-party gateway image for which NO fixed upstream image exists yet — not findings in TG's own code.
+#
+# No entries. The last one (GHSA-6q48-6c7w-9gw2, certifi's emSign roots, TG-589) was retired on 2026-11-03:
+# the re-pinned gateway image (litellm 1.106.6, main-stable @sha256:37e2dafb…) ships certifi 2026.10.19, the
+# fixed release, and scans with zero fixable CRITICALs under the gate's own flags WITHOUT this file.

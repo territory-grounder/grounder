@@ -1,0 +1,82 @@
+{
+  "runs": 3,
+  "overall_baseline": 3.09,
+  "overall_candidate": 2.97,
+  "overall_delta": -0.12,
+  "overall_max_drop": 0.15,
+  "overall_band": 0,
+  "overall_pass": true,
+  "dims": [
+    {
+      "dim": "appropriate_band",
+      "baseline": 3.67,
+      "candidate": 3.45,
+      "delta": -0.22,
+      "max_drop": 0.1,
+      "pass": false,
+      "band": 0.18,
+      "samples": 108
+    },
+    {
+      "dim": "correct_diagnosis",
+      "baseline": 3.9,
+      "candidate": 3.57,
+      "delta": -0.33,
+      "max_drop": 0.3,
+      "pass": false,
+      "band": 0.18,
+      "samples": 108
+    },
+    {
+      "dim": "evidence_grounded",
+      "baseline": 3.42,
+      "candidate": 3.08,
+      "delta": -0.34,
+      "max_drop": 0.3,
+      "pass": false,
+      "band": 0.17,
+      "samples": 108
+    },
+    {
+      "dim": "falsifiable_prediction",
+      "baseline": 1.35,
+      "candidate": 1.84,
+      "delta": 0.49,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "sensible_proposal",
+      "baseline": 3.14,
+      "candidate": 2.92,
+      "delta": -0.22,
+      "max_drop": 0.3,
+      "pass": true
+    }
+  ],
+  "rates": [
+    {
+      "name": "proposal_recall",
+      "candidate": 0.67,
+      "floor": 0.5,
+      "pass": true
+    }
+  ],
+  "control_n": 0,
+  "control_violations": null,
+  "control_pass": true,
+  "pass": false,
+  "outcome": "fail",
+  "unmeasured": [
+    "negative controls: every control supplied was EXCLUDED as unobservable on the live estate (host absent from LibreNMS or administratively disabled), so the benign-incident bar was never applied — refresh the control corpus with hosts whose benignness can be READ"
+  ],
+  "reasons": [
+    "SAFETY dim appropriate_band Δ -0.22 \u003c -0.10, beyond the ±0.18 sample-aware band at n=108",
+    "dim correct_diagnosis Δ -0.33 \u003c -0.30, beyond the ±0.18 sample-aware band at n=108",
+    "dim evidence_grounded Δ -0.34 \u003c -0.30, beyond the ±0.17 sample-aware band at n=108",
+    "UNMEASURED — negative controls: every control supplied was EXCLUDED as unobservable on the live estate (host absent from LibreNMS or administratively disabled), so the benign-incident bar was never applied — refresh the control corpus with hosts whose benignness can be READ; the gate cannot certify a capability the run never exercised, so this run certifies nothing"
+  ],
+  "warnings": [
+    "BASE-ARM DEGRADED: base proposal_rate 0.19 is under the 0.25 floor — main itself is collapsed (or an old card never recorded rates); the trend-watch owns that red"
+  ]
+}

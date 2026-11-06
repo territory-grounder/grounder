@@ -1,0 +1,90 @@
+{
+  "feature": "open-proposal-plane.feature",
+  "note": "Coverage frontier after Stage 1 (T-026-1..8): four scenarios bind in-dir via godog against real code (workflow test env, the one grammar, the real interceptor + empty-argv effect leaf); the remaining scenarios' real-path oracles live in the named package tests / the console Playwright oracle - named per row rather than re-driven, a duplicate being no more coverage. REQ-2611's composition-seam half stays with spec/028 T-028-4 by design.",
+  "scenarios": [
+    {
+      "name": "An action-warranted fault with an empty catalog yields a free-form proposal, not a stand-down",
+      "req": "REQ-2601",
+      "status": "present",
+      "test": "spec/026-open-proposal-plane/acceptance/acceptance_test.go:TestOpenProposalPlaneAcceptance"
+    },
+    {
+      "name": "The one grammar accepts a free-form op_class and an optional undo sketch",
+      "req": "REQ-2602",
+      "status": "present",
+      "test": "spec/026-open-proposal-plane/acceptance/acceptance_test.go:TestOpenProposalPlaneAcceptance"
+    },
+    {
+      "name": "An unregistered op_class diverts to shadow before notify, projection, and vote",
+      "req": "REQ-2603",
+      "status": "present",
+      "test": "temporal/runner/shadow_propose_test.go:TestAnUnregisteredOpClassDivertsToShadowBeforeTheApprovalLane"
+    },
+    {
+      "name": "A registered op_class does not divert",
+      "req": "REQ-2603",
+      "status": "present",
+      "test": "temporal/runner/shadow_propose_test.go:TestARegisteredOpClassDoesNotDivert"
+    },
+    {
+      "name": "A shadow proposal persists first-wins with its screened fields and shadow outcome",
+      "req": "REQ-2604",
+      "status": "present",
+      "test": "core/db/triage_judgment_test.go (DSN-gated) + temporal/runner/shadow_propose_test.go"
+    },
+    {
+      "name": "Every shadow proposal appends exactly one withheld propose:open ledger row",
+      "req": "REQ-2605",
+      "status": "present",
+      "test": "temporal/runner/shadow_propose_test.go:TestAnUnregisteredOpClassDivertsToShadowBeforeTheApprovalLane + TestShadowLedgerFailureFailsTheActivityLoudly (append failure fails the activity loudly)"
+    },
+    {
+      "name": "Screening neutralizes hostile free text on the new fields",
+      "req": "REQ-2606",
+      "status": "present",
+      "test": "temporal/runner/shadow_propose_test.go:TestShadowScreensModelTextBeforePersistAndLedger"
+    },
+    {
+      "name": "An uncited free-form proposal never reaches a shadow record",
+      "req": "REQ-2606",
+      "status": "present",
+      "test": "agent/freeform_cite_gate_test.go::TestUncitedFreeFormProposalNeverReachesAShadowRecord (the mechanical re-prompt asserted as the TEXT the model received, plus no proposal leaving the loop for the runner to record) + agent/freeform_cite_gate_test.go::TestACitedFreeFormProposalIsAdmittedWithItsSlugIntact (the mirror: the gate refuses on citation, not on the free-form lane) + agent/freeform_cite_gate_test.go::TestAFreeFormProposalCitingAnInventedIDIsRefused"
+    },
+    {
+      "name": "The proposals read surface fails closed with a nil reader",
+      "req": "REQ-2607",
+      "status": "present",
+      "test": "core/httpapi/proposals_test.go:TestProposalsFailsClosedWithANilReader"
+    },
+    {
+      "name": "The proposals view renders live states honestly and offers no mutating control",
+      "req": "REQ-2607",
+      "status": "present",
+      "test": "deploy/console/v2/e2e/proposals-honesty.mjs"
+    },
+    {
+      "name": "A force-routed free-form action is refused at the empty-argv leaf and the refusal is ledgered",
+      "req": "REQ-2608",
+      "status": "present",
+      "test": "spec/026-open-proposal-plane/acceptance/acceptance_test.go:TestOpenProposalPlaneAcceptance"
+    },
+    {
+      "name": "Actor evidence never suppresses the proposal itself",
+      "req": "REQ-2609",
+      "status": "present",
+      "test": "spec/026-open-proposal-plane/acceptance/acceptance_test.go:TestOpenProposalPlaneAcceptance"
+    },
+    {
+      "name": "Actor evidence is captured as a structured field and screened",
+      "req": "REQ-2610",
+      "status": "present",
+      "test": "temporal/runner/shadow_propose_test.go:TestShadowRowCarriesTheStructuredActorEvidence"
+    },
+    {
+      "name": "Authored-action evidence raises the band to a POLL_PAUSE floor and never lowers a computed band",
+      "req": "REQ-2611",
+      "status": "present",
+      "test": "core/proposal/evidence_test.go (floor table; composition seam deferred to spec/028 T-028-4)"
+    }
+  ]
+}

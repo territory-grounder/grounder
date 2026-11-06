@@ -1,0 +1,22 @@
+-- 0114 — restore the missing plane grant on actuation_target_state (TG-554).
+--
+-- 0107 created the durable per-target actuation-admission row (TG-81 b2, spec/013 gate 4h2 — the claim +
+-- cooldown the interceptor's TargetAdmission gate READS and WRITES) and declared it plane:actuation, but
+-- OMITTED the write grant to tg_runtime that every peer ActuationAuthorityTable carries (action_prestate and
+-- action_execution both hold tg_runtime=arw). Plane grants are mirrored tg_runtime -> tg_actuate / tg_triage
+-- at boot by tg_apply_plane_grants, which cannot mirror a grant tg_runtime never had — so tg_actuate held NO
+-- privilege on the table, and the TargetAdmission gate (running as tg_actuate) refused EVERY SSH-lane heal
+-- with `permission denied for table actuation_target_state (SQLSTATE 42501)`. Effect: service-down and
+-- container-down could not auto-heal (the action passed all 15 prior gates, then target-admission refused ->
+-- mutated=false, no systemctl), while proxmox guest ops — which admit via a different path that does not touch
+-- this table — kept actuating. That is the whole of TG-554.
+--
+-- This restores the grant; the boot mirror propagates it to tg_actuate (write) and tg_triage (read). The row
+-- is MUTABLE (a target row is INSERTed once, keyed by target; claim / release / cooldown are UPDATEs), so the
+-- grant is INSERT + SELECT + UPDATE and the table is NOT append-only (no id sequence — the PK is the target
+-- text — so no sequence grant is needed). The UPDATE is a SEPARATE statement on purpose: the TG-80
+-- append-only write-tracer (append_only_default_test.go, tg80MutableWorkingSet) parses standalone
+-- `GRANT UPDATE ... TO tg_runtime` lines, so actuation_target_state is added to that traced working set in the
+-- same change — a write grant is only legitimate once it is NAMED there.
+GRANT SELECT, INSERT ON actuation_target_state TO tg_runtime;
+GRANT UPDATE ON actuation_target_state TO tg_runtime;

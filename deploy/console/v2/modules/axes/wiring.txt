@@ -1,0 +1,8 @@
+views.axes = axesView;
+VIEW_META.axes = ["Benchmark axes", "The live benchmark-axis scoreboard — the same A1–A8 + G5/G6 core/axis.Scorecard the axisscore CLI prints, every rate beside its denominator, coverage gaps named (TG-480 · GET /v1/axes)"];
+/* nav rail — STATIC in console.html (assemble.py strips module-side AddNav; nav is not registered from here).
+   Placed in the Record group, right after Grounding:
+   <a class="navi" href="#axes" data-view="axes"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 2.5v11h10.5"/><path d="M5.7 13.5v-3.4M8.3 13.5V7.2M10.9 13.5V4.8"/></svg><span class="t">Benchmark axes</span><span class="n" data-badge="axes">—</span></a>
+   badge feed: data-badge="axes" is set in modules/_live/js.txt from the REAL count of axes NOT
+   live-measurable this window (0 when all eight are measurable), only after a live read lands; it
+   stays "—" otherwise — a fixture count must never sit on the rail looking like telemetry. */

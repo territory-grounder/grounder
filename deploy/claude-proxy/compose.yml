@@ -1,0 +1,141 @@
+# tg-claude-proxy — OpenAI-compatible Claude Opus 5 completion proxy over the
+# operator's Max SUBSCRIPTION (no per-token API spend), for the model-identical
+# head-to-head: TG <-> LiteLLM (opus-cc alias) <-> this sidecar <-> Opus 5.
+#
+# Forked from omoikane.coach/daemon/claudecode-runner; deployment notes inherited:
+#   - Runs as UID 1001 (host claude-runner) so the bind-mounted credentials stay
+#     host-owned; HOME points at a dedicated state dir (NOT the host ~/.claude —
+#     that would drag the host's hooks/settings/plugins into every completion).
+#   - AUTH IS A LONG-LIVED TOKEN IN .env, NOT A FILE MOUNT. The old single-file
+#     :ro mount of ~/.claude/.credentials.json pinned an INODE: the host CLI
+#     refreshes that credential by writing a new file and renaming over it, so the
+#     container kept reading the ORIGINAL, now-unlinked inode. Measured 2026-08-03:
+#     host inode 16846175 (fresh) vs container inode 13177515 (link count 0, access
+#     token expired 76h earlier). It only kept working because the refresh token was
+#     still valid, so every spawn paid an OAuth round-trip it could never persist —
+#     and it would have failed totally, with /healthz and /readyz still green, when
+#     that refresh token expired. CLAUDE_CODE_OAUTH_TOKEN has no inode to lose.
+#   - ANTHROPIC_API_KEY is deliberately ABSENT: if present the CLI prefers it and
+#     bills per-token instead of the subscription.
+#
+# Host: dc1claude01 (where the CLI + subscription login live). LiteLLM on
+# dc1tg01 reaches it over the mgmt LAN at :8094.
+#
+# Ops:
+#   DEPLOYS ARE AUTOMATIC. A merge to main touching deploy/claude-proxy/** runs
+#   sidecar-test (cargo test) -> image-sidecar (build+push) -> cosign-sidecar
+#   (sign+verify) -> deploy-sidecar (AWX ad-hoc to this host: pull the SIGNED
+#   image, retag, `up -d --no-build --force-recreate`). Until 2026-08-03 this
+#   image was built by hand here and main matched production only because
+#   somebody checked.
+#
+#   Local iteration (does NOT reach production):
+#     test:   cd deploy/claude-proxy && cargo test --release --locked
+#     build:  docker compose -f compose.yml build
+#     run:    SIDECAR_API_KEY=... docker compose -f compose.yml up -d
+#     check:  curl -s localhost:8094/readyz ; curl -s localhost:8094/probe-auth
+#
+#   `--no-build` on the CI path is load-bearing: `build: .` below is for local
+#   development, and without that flag a deploy would rebuild from source ON THE
+#   BOX and serve an image cosign never signed.
+
+name: tg-claude-proxy
+
+services:
+  # THE TLS TERMINATOR (TG-287) THAT FRONTED THIS PROXY ON :8095 WAS RETIRED (TG-414). TG-413 moved the
+  # sidecar on-box, where litellm reaches it compose-internally over tg-backplane by service name — so the
+  # cleartext management-LAN hop the terminator existed to close no longer exists, and neither does its
+  # subject. Removed with it: the nginx `tls` profile/service, its config (deploy/claude-proxy/tls/), the
+  # committed CA trust anchor (deploy/tls/model-channel-ca.crt) and the litellm-side CA-bundle logic. The
+  # private key lived ONLY on dc1claude01; decommissioning that host's cold-spare containers is TG-414
+  # item 3, a host op sequenced after this change so the revert path stayed real until the on-box path was
+  # proven over a longer window.
+  sidecar:
+    build: .
+    # THIS TAG IS A LOCAL ALIAS, AND IT NOW TRACKS Cargo.toml.
+    #
+    # What actually DEPLOYS is still identified by the pipeline SHA: deploy-sidecar pulls the signed,
+    # CI-built $CI_REGISTRY_IMAGE/claude-proxy:<short-sha> and retags it over this name. So bumping this
+    # string does not change what runs, and to see what is really running you still compare
+    # `docker inspect tg-claude-proxy` against the digest the pipeline pushed.
+    #
+    # It is kept in step with the crate version anyway, because a stale alias is a lie an operator reads
+    # every time they open this file — it said 1.0.0 while the tree carried TG-279 (unauthenticated
+    # /probe-auth and /metrics), TG-287 (the model channel moved onto TLS), TG-288 (the container left
+    # host networking and gained cap_drop/no-new-privileges) and the multi-model ModelPolicy. The
+    # downstream agentic-agri-webapp-ng fork had already shipped the contributed AGRIOPS-208 fixes as
+    # claudecode-runner 1.1.0, so 1.0.0 understated this tree twice over.
+    #
+    # deploy/claude_proxy_version_test.go pins compose ↔ Cargo.toml. `--version` needs no pin: main.rs
+    # prints env!("CARGO_PKG_VERSION"), so it cannot drift from the crate by construction.
+    image: tg-claude-proxy:1.2.1
+    container_name: tg-claude-proxy
+    restart: unless-stopped
+    # ★ PUBLISHED PORT, NOT THE HOST NETNS (TG-288).
+    #
+    # This was `network_mode: host`, which is a strictly worse posture than the compose default and was
+    # never needed: the service binds ONE port. Sharing the host network namespace put it alongside every
+    # loopback service on dc1claude01 — measured with `ss -lntp`: kubectl port-forwards on 19090/19091,
+    # an ssh-forwarded postgres on 15432, and :4000/:8099/:4010/:8201-8204/:8384. Those all assume loopback
+    # is private. A process in the host netns is ON that loopback.
+    #
+    # It also defeated the container's own boundary: `LISTEN_ADDR: 0.0.0.0:8094` inside a host netns binds
+    # every interface on the box, and main.rs:1063 still carried a comment claiming "the listener is
+    # host-local" — false, and it is why /probe-auth and /metrics were left unauthenticated (TG-279).
+    ports:
+      - "8094:8094"
+    # REQUIRED by the no-wait success path (contribution change 1): the success path no longer
+    # child.wait()s, so CLI grandchildren (git, ripgrep) reparent to PID 1. PID 1 here is the Rust
+    # binary and tokio only waitpid()s pids it knows, so without an init they become PERMANENT zombies.
+    init: true
+    # Let graceful shutdown drain the warm pool instead of orphaning it.
+    stop_grace_period: 45s
+    user: "1000:1000"  # host claude-runner uid on dc1claude01 (omoikane used 1001 on its host)
+    # ★ CONTAINER HARDENING (TG-288), the same posture TG-289 put on the tg01 stack. This container spawns
+    # a CLI that executes model-directed work on the box holding an OpenBao ROOT token — it had none of it.
+    #
+    # read_only is NOT set, deliberately and with a measurement behind it: the CLI writes into its HOME
+    # (/home/sidecar, a bind mount) and the rotated OAuth token is persisted there by design. A read-only
+    # rootfs with tmpfs over HOME would discard the rotation across restarts, which trades a real
+    # capability for a smaller one. Recorded here rather than left as an unexplained omission.
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      HOME: /home/sidecar
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:?set in deploy/claude-proxy/.env}
+      # --- contribution knobs (each is a revert lever; all default sanely) ---
+      SIDECAR_POOL_SIZE: "2"            # 0 disables the warm pool entirely
+      SIDECAR_POOL_MAX_AGE_MS: "900000" # reap warm workers older than 15 min
+      # Concurrency bound = MEMORY bound: every claude spawn is ~245 MiB RSS. 8 x 245 MiB ~= 2 GiB on a
+      # host with 32 GiB (19 free) and 64 cores at load ~14, so this is not where the box is constrained.
+      # It was 4, and 4 is what the eval harness ran 8 concurrent sessions into: half of them were shed.
+      SIDECAR_MAX_INFLIGHT: "8"
+      # How long a caller QUEUES for a slot before we shed. This was a hardcoded 5 s while the measured
+      # mean completion is 9.0 s (sidecar_duration_ms_sum / 2371 completions, 2026-08-06) — a caller
+      # waited less than one completion, so the queue could never succeed under contention and shed 334
+      # requests in 24 h. Downstream that is `503 sidecar at capacity`, which no fallback absorbs and
+      # TG's model breaker counts as a failure (TG-357).
+      SIDECAR_QUEUE_WAIT_MS: "120000"
+      SIDECAR_TOOLS_MODE: "none"        # "disallowed-list" restores the legacy 15-name list
+      SIDECAR_LOG_FORMAT: "json"        # text restores the old human format
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+      LISTEN_ADDR: "0.0.0.0:8094"
+      CLAUDE_BIN: /usr/bin/claude
+      OPUS_MODEL: "claude-opus-5"  # canonical id — the container CLI resolved the "opus" alias to haiku
+      SIDECAR_API_KEY: "${SIDECAR_API_KEY:-}"
+      # Bearer for /admin/rotate-token (long-lived-token seeding); from .env, never committed.
+      OMOIKANE_CLAUDECODE_RUNNER_ADMIN_TOKEN: "${OMOIKANE_CLAUDECODE_RUNNER_ADMIN_TOKEN:-}"
+      # Persist the rotated token inside the mounted HOME (uid 1000) — the image default
+      # (/home/tg/.claude-state, uid 1001) is neither mounted nor writable here.
+      OMOIKANE_RUNNER_STATE_DIR: /home/sidecar/.claude-state
+      RUST_LOG: "info,claudecode_runner=debug"
+      # ANTHROPIC_API_KEY intentionally NOT set (subscription auth path).
+    volumes:
+      # Dedicated clean HOME (contains .claude.json onboarding stamp only).
+      - /srv/tg-claude-proxy/home:/home/sidecar
+      # Subscription OAuth: single file, read-only; host CLI keeps it fresh.
+    healthcheck:
+      test: ["CMD", "claudecode-runner", "--version"]
+      interval: 60s
+      timeout: 5s
+      retries: 3

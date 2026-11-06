@@ -1,0 +1,43 @@
+{
+  "feature": "benchmark-harness.feature",
+  "note": "Honest coverage frontier. status: present = a runnable godog step drives real code and passes (must name a test); pending = specified behavior whose implementation does not exist yet. Two scenarios are pending because the reporting work they assert (the rule-of-three bound) is not yet implemented — declared rather than papered over (INV-22).",
+  "scenarios": [
+    {
+      "name": "Every measurement surface is bound to this spec in the lockstep lock",
+      "req": "REQ-2500",
+      "status": "present",
+      "test": "spec/025-benchmark-harness/acceptance/acceptance_test.go:TestBenchmarkHarnessAcceptance"
+    },
+    {
+      "name": "The measurement SQL is covered by a golden fixture whose expected values are hand-computed",
+      "req": "REQ-2501",
+      "status": "present",
+      "test": "spec/025-benchmark-harness/acceptance/acceptance_test.go:TestBenchmarkHarnessAcceptance"
+    },
+    {
+      "name": "A perturbed axis query turns its golden test red",
+      "req": "REQ-2501",
+      "status": "present",
+      "test": "spec/025-benchmark-harness/acceptance/acceptance_test.go:TestBenchmarkHarnessAcceptance"
+    },
+    {
+      "name": "An axis that excludes unmeasurable rows reports the exclusion",
+      "req": "REQ-2502",
+      "status": "present",
+      "test": "spec/025-benchmark-harness/acceptance/acceptance_test.go:TestBenchmarkHarnessAcceptance"
+    },
+    {
+      "name": "A zero-numerator axis is published with its upper bound",
+      "req": "REQ-2502",
+      "status": "present",
+      "test": "core/axis/zero_numerator_test.go:TestAZeroIsNeverPublishedBare",
+      "note": "The rule was implemented as a closure inside cmd/axisscore's text renderer, so nothing could execute it and nothing else could reuse it. Extracted to core/axis.ZeroNumeratorBound (+ the numeric ZeroNumeratorUpperBound for gauge callers) and driven by four oracles: the bare-zero refusal, the bound shrinking with n (the property a bare zero hides), the empty-sample vacuity floor in BOTH the string and numeric forms, and the requirement's own worked example 0-of-12 = 25%."
+    },
+    {
+      "name": "A comparative aggregate covers only dimensions both systems are scored on",
+      "req": "REQ-2504",
+      "status": "present",
+      "test": "spec/025-benchmark-harness/acceptance/acceptance_test.go:TestBenchmarkHarnessAcceptance"
+    }
+  ]
+}

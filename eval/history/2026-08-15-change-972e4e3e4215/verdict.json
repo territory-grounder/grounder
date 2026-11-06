@@ -1,0 +1,73 @@
+{
+  "runs": 1,
+  "overall_baseline": 4.1,
+  "overall_candidate": 4.13,
+  "overall_delta": 0.03,
+  "overall_max_drop": 0.15,
+  "overall_pass": true,
+  "dims": [
+    {
+      "dim": "appropriate_band",
+      "baseline": 3.75,
+      "candidate": 3.75,
+      "delta": 0,
+      "max_drop": 0.1,
+      "pass": true
+    },
+    {
+      "dim": "correct_diagnosis",
+      "baseline": 4.38,
+      "candidate": 4.75,
+      "delta": 0.37,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "evidence_grounded",
+      "baseline": 4.13,
+      "candidate": 4.38,
+      "delta": 0.25,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "falsifiable_prediction",
+      "baseline": 4.5,
+      "candidate": 4,
+      "delta": -0.5,
+      "max_drop": 0.3,
+      "pass": true,
+      "unresolved": true,
+      "band": 0.55,
+      "samples": 3
+    },
+    {
+      "dim": "sensible_proposal",
+      "baseline": 3.75,
+      "candidate": 3.75,
+      "delta": 0,
+      "max_drop": 0.3,
+      "pass": true
+    }
+  ],
+  "rates": [
+    {
+      "name": "proposal_recall",
+      "candidate": 1,
+      "floor": 0.5,
+      "pass": true
+    }
+  ],
+  "control_n": 2,
+  "control_violations": null,
+  "control_pass": true,
+  "pass": false,
+  "outcome": "inconclusive",
+  "unmeasured": [
+    "falsifiable_prediction at this measurement power: Δ -0.50 is a drop past the -0.30 floor but WITHIN the sample-aware band (±0.55 at n=3 judged samples, measured σ²=0.133), so the gate cannot tell it from the run's own noise; escalate to the pooled full gate (make eval-gate-full / TG_EVAL_FULL=1), where the summed per-dimension n shrinks the band and the same drop resolves to a real FAIL or a real PASS"
+  ],
+  "reasons": [
+    "UNMEASURED — falsifiable_prediction at this measurement power: Δ -0.50 is a drop past the -0.30 floor but WITHIN the sample-aware band (±0.55 at n=3 judged samples, measured σ²=0.133), so the gate cannot tell it from the run's own noise; escalate to the pooled full gate (make eval-gate-full / TG_EVAL_FULL=1), where the summed per-dimension n shrinks the band and the same drop resolves to a real FAIL or a real PASS; the gate cannot certify a capability the run never exercised, so this run certifies nothing"
+  ],
+  "warnings": null
+}

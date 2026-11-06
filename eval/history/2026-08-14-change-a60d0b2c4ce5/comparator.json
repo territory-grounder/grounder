@@ -1,0 +1,43 @@
+{
+  "measured_at": "2026-08-14",
+  "git_sha": "6b33429fbe71d68f6b00ea6a516213cdbe3a046f",
+  "runs": 2,
+  "n": 16,
+  "provenance": "FRESH BASE ARM: origin/main pooled over 2 same-window run(s) (drift-cancelling A/B comparator, not the committed baseline) — base arm measured at 6b33429fbe71d68f6b00ea6a516213cdbe3a046f",
+  "scorecard": {
+    "rubric_version": "2026-08-04.3",
+    "n": 8,
+    "dim_means": {
+      "appropriate_band": 3.63,
+      "correct_diagnosis": 4.69,
+      "diagnosis_grounded": 4.34,
+      "evidence_grounded": 4.63,
+      "falsifiable_prediction": 4.17,
+      "sensible_proposal": 3.63
+    },
+    "overall": 4.15,
+    "judged": 0,
+    "errors": 0,
+    "proposal_rate": 0.38,
+    "prediction_rate": 0.38,
+    "autonomy_rate": 0,
+    "fault_classes": [
+      "start-guest",
+      "start-service"
+    ],
+    "fault_class_breadth": 2,
+    "mean_decision_steps": 6.94,
+    "mutation_count": 0,
+    "bands": {
+      "POLL_PAUSE": 6,
+      "none": 10
+    },
+    "expected_propose_n": 6,
+    "proposal_recall": 1,
+    "labeled_standdown_n": 10,
+    "standdown_precision": 1,
+    "stale_excluded": 0,
+    "fixture_armed": 6,
+    "overall_formula": "fixed-denominator-v2"
+  }
+}

@@ -1,0 +1,5 @@
+FACETS.estatedepth = EST2_FACETS;  // [["all","All"],["crit","Crit"],["warn","Warn"],["ok","OK"]]
+facetState.estatedepth = "all";
+// Filter logic lives inside est2View()'s draw(): the node list applies
+//   nodes.filter(n => facetState.estatedepth === "all" || n.health === facetState.estatedepth)
+// so after a facet click the shell just re-invokes route("estatedepth") / the view function.
