@@ -1,0 +1,206 @@
+{
+  "feature": "actor-attribution.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes (must name a test); pending = specified behavior whose implementation does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior, INV-22). Phase 1 (T-023-1..7) landed: the seam, the deterministic attributor, the rules-as-data mapping, the PVE reader, the runner wiring, the persistence, and the security routing. The embedded default ruleset is GENERIC (taxonomy->disposition mapping only); site principals + pool carve-outs are supplied by a deploy-time override (TG_ATTRIBUTION_CONFIG) and are never baked into the binary. REQ-2304 dominance is per-record: a positively-unsanctioned actor co-occurring with a sanctioned/self/carve-out record still resolves attributed-suspicious (a carve-out can never mask an intruder into authorized-test). Persistence covers the taxonomy outcome + minimized evidence on session_triage; the matched rule id and candidate set are not separately columned in Phase 1 (a Phase-2 refinement). Phase-2 items (the covered-trail-no-entry disposition, the tracer named step, the journal/k8s/netbox/awx/gitops/docker readers, the expires_at retention job) remain pending.",
+  "scenarios": [
+    {
+      "name": "Every classification carries a typed attribution derived from reader evidence",
+      "req": "REQ-2300",
+      "status": "present",
+      "test": "TestRunnerAttributionUnattributableWhenNoReader; TestAttribute (core/attribution)"
+    },
+    {
+      "name": "An admin-attributed fault stands down to the approver graph and is never auto-undone",
+      "req": "REQ-2301",
+      "status": "present",
+      "test": "TestRunnerAttributionAuthorizedStandsDown; TestAttribute/REQ-2301"
+    },
+    {
+      "name": "A TG-self-remediated incident terminates already-remediated without re-actuation",
+      "req": "REQ-2302",
+      "status": "present",
+      "test": "TestRunnerAttributionSelfNoopTerminates; TestSelfHealOnPoolHostStaysSelf (core/attribution — self survives a carve-out)"
+    },
+    {
+      "name": "Absent evidence yields unattributable and the pre-feature ladder unchanged",
+      "req": "REQ-2303",
+      "status": "present",
+      "test": "TestRunnerAttributionUnattributableWhenNoReader; TestUnattributableIsTheZeroValue"
+    },
+    {
+      "name": "An unsanctioned-actor change polls with security escalation and is never auto-healed",
+      "req": "REQ-2304",
+      "status": "present",
+      "test": "TestRunnerAttributionSuspiciousEscalates; TestSuspiciousDominatesContradiction; TestSuspiciousDominatesCarveOut (a carve-out never masks an intruder); TestDispositionForResolution (suspicious keeps security-escalate under a contradiction)"
+    },
+    {
+      "name": "A covered audit trail missing an entry for an observed mutation escalates as suspicious",
+      "req": "REQ-2304",
+      "status": "present",
+      "test": "core/attribution/coverage_empty_test.go::TestCoveredEmptyOnObservedMutationEscalatesSuspicious (covered + answered + zero-actor + observed-mutation ⇒ attributed-suspicious) + ::TestMutationFlagIsWhatDiscriminates (the observed-mutation flag is the SOLE discriminator — byte-identical covered-but-empty inputs resolve observe-only vs suspicious) + the three non-escalation guards ::TestObservedMutationWithActorResolvesOnActorNotEmptiness, ::TestFailedReaderNeverSuspiciousEvenWithObservedMutation, ::TestUncoveredSubjectNeverSuspiciousEvenWithObservedMutation + the observe-only floor ::TestCoveredButEmptyIsSurfacedNotEscalated, ::TestCommonNoActorFaultDoesNotFlood (no mutation ⇒ no flood). The attributed-suspicious → security-escalate → POLL_PAUSE + security_escalation routing it rides is already proven by TestDispositionForResolution (REQ-2304 half 1).",
+      "note": "TG-407 DELIVERED (classifier mechanism). REQ-2304 half 2 was UNIMPLEMENTABLE as originally shaped — Evidence.Covered rode on the evidence ROWS, so a reader that affirmatively covers the target and finds NOTHING had no row to carry the flag. Now: a reader emits a CoverageMarker (Covered=true, empty Actor) on a clean answered miss (modules/actorevidence pve/journal/awx/netbox); Attribute holds the marker aside (never an actor) and sets coveredSubject; AttributeObserving escalates covered-but-empty to attributed-suspicious IFF the session carries a confirmed OBSERVED MUTATION (Observation.MutationObserved). The predicate is (a) an affirmative coverage marker for the subject, (b) the reader ANSWERED — a failed read emits no marker and is never suspicious (REQ-2307), (c) ZERO admissible actor entries, (d) obs.MutationObserved. The observed-mutation gate is the ingredient the first-cut review (de3bbb19) named as missing: without it, covered-but-empty is the COMMON no-actor fault (a crash) and escalating it floods SECURITY and neuters auto-heal — measured live 2026-08-07, of 3,383 sessions 1,773 carry no evidence, most covered-but-empty. LIVE-ARMING FOLLOW-UP: the estate does not yet emit a positive observed-mutation signal (only a recovery-transition label exists; no config/resource-hash diff is computed), and deriving one from alert-name heuristics would be the exact spurious-suspicion source INV-09 warns against — so the production call site (temporal/runner AttributeActivity) keeps the safe observe-only default (Observation{}, MutationObserved=false) and attributed-suspicious stays 0 live until a positive observed-mutation source is wired. The classifier behavior THIS scenario asserts is implemented and unit-proven; wiring the source is the remaining live step."
+    },
+    {
+      "name": "An authorized-test outcome traverses every existing gate unchanged",
+      "req": "REQ-2305",
+      "status": "present",
+      "test": "TestRunnerAttributionCarveOutHealsUnchanged; TestRunnerAttributionUnattributableWhenNoReader"
+    },
+    {
+      "name": "Actor evidence is collected only by registered read-only readers with least-privilege credentials",
+      "req": "REQ-2306",
+      "status": "present",
+      "test": "TestReadRefusesHostNotInAllowlist; TestReadFailsClosedOnUnknownHost; TestReadFailsClosedOnAmbiguousHost; TestReadFailsClosedOnUnknownDevice; TestReadFailsClosedOnAmbiguousDevice; TestReadFailsClosedOnAmbiguousOrMissingGuest (modules/actorevidence/* — a reader refuses any target outside its declared allowlist)"
+    },
+    {
+      "name": "The PVE task-log reader returns actor evidence for a guest lifecycle change",
+      "req": "REQ-2306",
+      "status": "present",
+      "test": "TestReadRefusesHostNotInAllowlist; TestReadFailsClosedOnUnknownHost; TestReadFailsClosedOnAmbiguousHost; TestReadFailsClosedOnUnknownDevice; TestReadFailsClosedOnAmbiguousDevice; TestReadFailsClosedOnAmbiguousOrMissingGuest (modules/actorevidence/* — a reader refuses any target outside its declared allowlist)"
+    },
+    {
+      "name": "The PVE reader authenticates with a read-only token distinct from the actuation token",
+      "req": "REQ-2306",
+      "status": "present",
+      "test": "TestReadRefusesHostNotInAllowlist; TestReadFailsClosedOnUnknownHost; TestReadFailsClosedOnAmbiguousHost; TestReadFailsClosedOnUnknownDevice; TestReadFailsClosedOnAmbiguousDevice; TestReadFailsClosedOnAmbiguousOrMissingGuest (modules/actorevidence/* — a reader refuses any target outside its declared allowlist)"
+    },
+    {
+      "name": "A reader error is treated as absent evidence with a recorded warning and never blocks triage",
+      "req": "REQ-2307",
+      "status": "present",
+      "test": "TestRunnerAttributionReaderErrorDegradesToUnattributable; TestReadFailsClosedOnAmbiguousOrMissingGuest; TestReadDegradesOnShortErrorBodyWithoutPanic (a short auth-failure body degrades, never panics)"
+    },
+    {
+      "name": "The taxonomy-to-disposition mapping is loadable data with a closed disposition enum",
+      "req": "REQ-2308",
+      "status": "present",
+      "test": "TestParseConfigDefault (generic embedded default: no site principals/carve-outs); TestParseConfigOverride (deploy-time site override parses); TestClosedEnums (core/attribution)"
+    },
+    {
+      "name": "An absent or corrupt mapping escalates every non-unattributable taxonomy to a human",
+      "req": "REQ-2308",
+      "status": "present",
+      "test": "TestDispositionForResolution; TestParseConfigFailsClosedOnUnknownEnum"
+    },
+    {
+      "name": "A valid carve-out classifies a harness fault authorized-test, heals, and records the attribution",
+      "req": "REQ-2309",
+      "status": "present",
+      "test": "TestRunnerAttributionCarveOutHealsUnchanged; TestAttribute/REQ-2309 valid"
+    },
+    {
+      "name": "An expired carve-out rule no longer matches and the attribution stands down",
+      "req": "REQ-2309",
+      "status": "present",
+      "test": "TestAttribute/REQ-2309 expired"
+    },
+    {
+      "name": "Contradictory non-suspicious evidence escalates to the approver graph with all candidates recorded",
+      "req": "REQ-2310",
+      "status": "present",
+      "test": "TestAttribute/REQ-2310; TestDispositionForResolution"
+    },
+    {
+      "name": "The attribution outcome and evidence references persist on session_triage and the governance ledger",
+      "req": "REQ-2311",
+      "status": "present",
+      "test": "TestAttributionPersistsOnTheTriageRow; TestUnattributedPersistsAsAValueNotAsAbsence (core/db, real Postgres — written 2026-07-27 when spec/023's new acceptance runner found this scenario claimed `present` while naming a migration and a function rather than a test)"
+    },
+    {
+      "name": "The decision tracer surfaces the attribution as a named trace step",
+      "req": "REQ-2311",
+      "status": "present",
+      "test": "core/trace/attribute_step_test.go::TestAttributeStepIsEmittedBeforeProposeAndCarriesTheTaxonomy (the step exists, precedes propose because attribution is an INPUT to the decision, and carries the taxonomy value plus the domain-native evidence references) + ::TestNoAttributionRecordedEmitsNoStepRatherThanAFabricatedVerdict and ::TestABlankTaxonomyIsTreatedAsAbsent (absent must not render as 'unattributable' — that is itself a verdict nobody reached, INV-15) + ::TestEveryTaxonomyRendersItsConsequenceAndAnUnknownOneIsNamed (each taxonomy renders what it MEANT for the decision, and an unrecognised one is NAMED as vocabulary drift rather than defaulted into a known meaning) + core/db/trace_attribute_step_test.go::TestAttributionReachesTheTraceThroughTheRealRead — DSN-gated, and the load-bearing one: dropping actor_attribution from the SELECT leaves every core/trace oracle GREEN (measured: 0 failures) because they build the record in memory. Only the real read catches the column never arriving, which is this requirement's own defect shape one layer down. It also pins INV-13: the projection carries '<domain>:<ref>' pointers and never the actor identity."
+    },
+    {
+      "name": "Agent free-text can never set or alter the taxonomy value",
+      "req": "REQ-2312",
+      "status": "present",
+      "test": "TestAttribute (taxonomy derived from typed reader evidence only, core/attribution)"
+    },
+    {
+      "name": "Persisted evidence is retention-bounded and redacted at every boundary",
+      "req": "REQ-2313",
+      "status": "present",
+      "test": "core/attribution/minimized_fields_test.go: TestEvidenceCarriesOnlyTheMinimizedFields (REQ-2313 structurally — the type has NOWHERE to put a raw log line; killing mutation executed: adding a RawLine field reds it) + modules/actorevidence/tool/tool_test.go: TestHostileEvidenceCannotForgeStructure / TestEvidenceIsRenderedWithACiteableID (the seed-facing rendering is delimited and citeable, and hostile field content cannot forge it) + core/db/agent_step_evidence_reap_test.go: TestEvidenceReaperDeletesOnlyRowsPastRetention / TestEvidenceReaperRefusesACutoffInsideTheFloor / TestOnlyTheSecurityDefinerPathCanDeleteEvidence (the RAW evidence this is derived from is TTL-bounded through a SECURITY DEFINER path; the derived minimized record lives on the audit spine, which migration 0055's header states is preserved by archival rather than TTL — the spine/body split, INV-14)",
+      "note": "PENDING WORK, not a missing oracle — and only ONE of its three assertions is missing. Measured 2026-08-07: (a) 'seed-rendered evidence is delimited as data and input-screened' EXISTS — screen.Scrub runs before the agent_step write (temporal/runner/activities.go:743,752) and screen.IsJailbreak guards the proposal surface; (b) secret-shaped material is MEASURED — core/db/agent_step_evidence_shape.go and governance_ledger_shape.go publish SecretShaped counts (TG-345) — though a counter is monitoring, not redaction; (c) 'the record carries a retention bound' does NOT exist: there is no expires_at column on any actor-evidence migration and no ExpiresAt field in core/attribution or core/db. So the scenario cannot pass until the retention bound is built, and the honest split is roughly two-thirds present."
+    },
+    {
+      "name": "The journal reader returns typed actor evidence for a privileged host action",
+      "req": "REQ-2314",
+      "status": "present",
+      "test": "TestReadParsesSudoActorEvidence; TestSudoInvoker (modules/actorevidence/journal)"
+    },
+    {
+      "name": "The journal reader fails closed when no known-hosts file is configured",
+      "req": "REQ-2314",
+      "status": "present",
+      "test": "TestReadDegradesOnUnresolvableCredential; TestReadDegradesOnRunnerError; TestReadRefusesHostNotInAllowlist (modules/actorevidence/journal)"
+    },
+    {
+      "name": "An identity fact can never by itself set a taxonomy value",
+      "req": "REQ-2315",
+      "status": "present",
+      "test": "TestAttribute (taxonomy from action-evidence only); TestUIDFallbackActorIsNotQueried (ldapident)"
+    },
+    {
+      "name": "Identity enrichment leaves the deterministic core attributor unchanged",
+      "req": "REQ-2316",
+      "status": "present",
+      "test": "TestEnrichSanctionedPromotesAndDemotes (base config unmutated, temporal/runner)"
+    },
+    {
+      "name": "A confirmed live admin is promoted to a stand-down",
+      "req": "REQ-2317",
+      "status": "present",
+      "test": "TestResolveConfirmedAndDisabled (ldapident); TestEnrichSanctionedPromotesAndDemotes (temporal/runner)"
+    },
+    {
+      "name": "A disabled admin credential in use is demoted to a security escalation",
+      "req": "REQ-2318",
+      "status": "present",
+      "test": "TestDisabledDominatesConfirmed (ldapident); TestEnrichSanctionedPromotesAndDemotes (temporal/runner)"
+    },
+    {
+      "name": "A directory outage reproduces the Phase-1 classification",
+      "req": "REQ-2319",
+      "status": "present",
+      "test": "TestResolveFailsOpenOnError (ldapident); TestEnrichSanctionedFailsOpenOnError (temporal/runner)"
+    },
+    {
+      "name": "Identity data is retention-bounded and redacted at every boundary",
+      "req": "REQ-2320",
+      "status": "present",
+      "test": "TestWarningsCarryNoPrincipal (ldapident — provider+domain only, no principal); SanctionFacts carries no membership field; identity facts are never persisted (transient in the activity)"
+    },
+    {
+      "name": "A missing authentication event never moves a classification",
+      "req": "REQ-2321",
+      "status": "present",
+      "test": "core/attribution/auth_never_moves_test.go::TestAMissingAuthenticationEventMovesNothing (runs Attribute BOTH WAYS — with and without an auth-shaped record — across a sanctioned actor, an unsanctioned actor and an empty set, asserting the taxonomy, the CANDIDATE SET and the matched rule id are all identical; a second candidate escalates as a contradiction, so it moves the outcome even when the taxonomy matches) + ::TestAnAuthRecordNamingTheSubjectIsStillNotAMover (the sharp case: an auth record whose Target IS the investigated host. This was RED before the guard — the Target filter was doing REQ-2321's job by accident, and a login-on-web01 reader would have minted attributed-suspicious. Also pins case/trim folding on the domain, caught because a case-sensitive match SURVIVED the first mutation round) + ::TestTheDerivationDoesMoveOnAdmissibleEvidence (the vacuity floor: the two above assert 'adding a record changes nothing', which is also what they would report if Attribute ignored everything)."
+    },
+    {
+      "name": "The AWX job-history reader returns actor evidence for a playbook-driven change",
+      "req": "REQ-2306",
+      "status": "present",
+      "test": "TestReadRefusesHostNotInAllowlist; TestReadFailsClosedOnUnknownHost; TestReadFailsClosedOnAmbiguousHost; TestReadFailsClosedOnUnknownDevice; TestReadFailsClosedOnAmbiguousDevice; TestReadFailsClosedOnAmbiguousOrMissingGuest (modules/actorevidence/* — a reader refuses any target outside its declared allowlist)"
+    },
+    {
+      "name": "The NetBox changelog reader returns actor evidence for an inventory change",
+      "req": "REQ-2306",
+      "status": "present",
+      "test": "TestReadRefusesHostNotInAllowlist; TestReadFailsClosedOnUnknownHost; TestReadFailsClosedOnAmbiguousHost; TestReadFailsClosedOnUnknownDevice; TestReadFailsClosedOnAmbiguousDevice; TestReadFailsClosedOnAmbiguousOrMissingGuest (modules/actorevidence/* — a reader refuses any target outside its declared allowlist)"
+    },
+    {
+      "name": "The GitOps MR-history reader returns actor evidence for a declarative change",
+      "req": "REQ-2306",
+      "status": "present",
+      "test": "TestReadRefusesHostNotInAllowlist; TestReadFailsClosedOnUnknownHost; TestReadFailsClosedOnAmbiguousHost; TestReadFailsClosedOnUnknownDevice; TestReadFailsClosedOnAmbiguousDevice; TestReadFailsClosedOnAmbiguousOrMissingGuest (modules/actorevidence/* — a reader refuses any target outside its declared allowlist)"
+    },
+    {
+      "name": "The k8s audit reader returns actor evidence for a cluster object change",
+      "req": "REQ-2306",
+      "status": "present",
+      "test": "modules/actorevidence/k8saudit/k8saudit_test.go: TestAuditParseIsDeterministicAndMutatingOnly + TestAuditTransportIsOneFixedBoundedArgv + TestAuditFailDirectionsAndCoverage + TestAuditParseAccessGrantsNothingOnMalformedRows"
+    }
+  ]
+}

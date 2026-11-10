@@ -1,0 +1,13 @@
+{
+  "_comment": "tier2 --dry-run FIXTURE (TG-72): the answers the preflight/scorecard would read from the estate (breaker row, tg_may_actuate gauge, guest state, LibreNMS rule rows, action_execution events). The assert LOGIC runs identically in both modes; only the reader differs (ssh vs this file). All names fake.",
+  "breaker_state": "closed",
+  "tg_may_actuate": "1",
+  "guest_hostname": "gp-alpha01",
+  "unit_active": "active",
+  "storage_perc": 52,
+  "log_presize_bytes": 2048,
+  "disk_rule_disabled": 0,
+  "service_rule_disabled": 0,
+  "service_checks": 1,
+  "autoheal_events": []
+}

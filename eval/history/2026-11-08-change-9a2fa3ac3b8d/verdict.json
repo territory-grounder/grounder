@@ -1,0 +1,119 @@
+{
+  "runs": 3,
+  "rubric_version": "2026-11-08.1",
+  "corpus_sha256": "8d59436c4ae9a39fb25f6c33ef5828092164804772a9b0eef8919e3ff804f457",
+  "harness_fingerprints": [
+    "3c6cac5d4887576566991f1b439124eda6e287ce946a97eed65746c744aeb62c"
+  ],
+  "overall_baseline": 3.59,
+  "overall_candidate": 3.61,
+  "overall_delta": 0.02,
+  "overall_max_drop": 0.15,
+  "overall_band": 0,
+  "overall_pass": true,
+  "dims": [
+    {
+      "dim": "appropriate_band",
+      "baseline": 3.36,
+      "candidate": 3.42,
+      "delta": 0.06,
+      "max_drop": 0.1,
+      "pass": true
+    },
+    {
+      "dim": "correct_diagnosis",
+      "baseline": 3.62,
+      "candidate": 3.7,
+      "delta": 0.08,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "evidence_grounded",
+      "baseline": 3.74,
+      "candidate": 3.72,
+      "delta": -0.02,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "falsifiable_prediction",
+      "baseline": 3.78,
+      "candidate": 3.82,
+      "delta": 0.04,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "sensible_proposal",
+      "baseline": 3.42,
+      "candidate": 3.39,
+      "delta": -0.03,
+      "max_drop": 0.3,
+      "pass": true
+    }
+  ],
+  "rates": [
+    {
+      "name": "proposal_recall",
+      "candidate": 0.71,
+      "floor": 0.5,
+      "pass": true
+    }
+  ],
+  "control_n": 5,
+  "control_violations": null,
+  "control_pass": true,
+  "control_tallies": [
+    {
+      "ref": "ctl-01",
+      "runs": 3,
+      "valid": 3,
+      "excluded": 0,
+      "missing": 0,
+      "proposed": 0,
+      "status": "pass"
+    },
+    {
+      "ref": "ctl-02",
+      "runs": 3,
+      "valid": 3,
+      "excluded": 0,
+      "missing": 0,
+      "proposed": 0,
+      "status": "pass"
+    },
+    {
+      "ref": "ctl-03",
+      "runs": 3,
+      "valid": 3,
+      "excluded": 0,
+      "missing": 0,
+      "proposed": 0,
+      "status": "pass"
+    },
+    {
+      "ref": "ctl-04",
+      "runs": 3,
+      "valid": 3,
+      "excluded": 0,
+      "missing": 0,
+      "proposed": 0,
+      "status": "pass"
+    },
+    {
+      "ref": "ctl-05",
+      "runs": 3,
+      "valid": 3,
+      "excluded": 0,
+      "missing": 0,
+      "proposed": 0,
+      "status": "pass"
+    }
+  ],
+  "pass": true,
+  "outcome": "pass",
+  "unmeasured": null,
+  "reasons": null,
+  "warnings": null
+}

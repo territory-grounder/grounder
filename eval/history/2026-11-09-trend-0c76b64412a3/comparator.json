@@ -1,0 +1,149 @@
+{
+  "measured_at": "2026-11-08",
+  "git_sha": "9c634db7da619995b51d35ced658a7a7a9daa39a",
+  "runs": 3,
+  "n": 108,
+  "provenance": "AUTO-RE-ANCHORED on a RUBRIC VERSION CROSSING by the scheduled eval-drift trend-watch (TG-595): the first anchor under rubric \"2026-11-08.1\" — pooled mean of 3 on-box run(s) of main @ 9c634db7da619995b51d35ced658a7a7a9daa39a; deltas against the previous anchor measured the instrument, not the agent",
+  "individual_runs": [
+    {
+      "overall": 3.52,
+      "n": 36,
+      "note": "run1",
+      "dim_means": {
+        "appropriate_band": 3.25,
+        "correct_diagnosis": 3.56,
+        "diagnosis_grounded": 3.67,
+        "evidence_grounded": 3.75,
+        "falsifiable_prediction": 3.83,
+        "sensible_proposal": 3.22,
+        "trajectory_grounded": 4.31
+      }
+    },
+    {
+      "overall": 3.39,
+      "n": 36,
+      "note": "run2",
+      "dim_means": {
+        "appropriate_band": 3.25,
+        "correct_diagnosis": 3.56,
+        "diagnosis_grounded": 4.2,
+        "evidence_grounded": 3.56,
+        "falsifiable_prediction": 3.4,
+        "sensible_proposal": 3.19,
+        "trajectory_grounded": 4.38
+      }
+    },
+    {
+      "overall": 3.61,
+      "n": 36,
+      "note": "run3",
+      "dim_means": {
+        "appropriate_band": 3.42,
+        "correct_diagnosis": 3.64,
+        "diagnosis_grounded": 3.67,
+        "evidence_grounded": 3.81,
+        "falsifiable_prediction": 3.83,
+        "sensible_proposal": 3.36,
+        "trajectory_grounded": 4.32
+      }
+    }
+  ],
+  "scorecard": {
+    "rubric_version": "2026-11-08.1",
+    "corpus_sha256": "8d59436c4ae9a39fb25f6c33ef5828092164804772a9b0eef8919e3ff804f457",
+    "harness_fingerprints": [
+      "3c6cac5d4887576566991f1b439124eda6e287ce946a97eed65746c744aeb62c"
+    ],
+    "n": 108,
+    "dim_means": {
+      "appropriate_band": 3.31,
+      "correct_diagnosis": 3.59,
+      "diagnosis_grounded": 3.85,
+      "evidence_grounded": 3.71,
+      "falsifiable_prediction": 3.69,
+      "sensible_proposal": 3.26,
+      "trajectory_grounded": 4.34
+    },
+    "overall": 3.51,
+    "judged": 108,
+    "errors": 0,
+    "counters_recorded": true,
+    "runs": 3,
+    "run_provenance": [
+      {
+        "run": 1,
+        "n": 36,
+        "judged": 36,
+        "errors": 0,
+        "overall": 3.52,
+        "rubric_version": "2026-11-08.1",
+        "corpus_sha256": "8d59436c4ae9a39fb25f6c33ef5828092164804772a9b0eef8919e3ff804f457",
+        "harness_fingerprints": [
+          "3c6cac5d4887576566991f1b439124eda6e287ce946a97eed65746c744aeb62c"
+        ],
+        "counters_recorded": true
+      },
+      {
+        "run": 2,
+        "n": 36,
+        "judged": 36,
+        "errors": 0,
+        "overall": 3.39,
+        "rubric_version": "2026-11-08.1",
+        "corpus_sha256": "8d59436c4ae9a39fb25f6c33ef5828092164804772a9b0eef8919e3ff804f457",
+        "harness_fingerprints": [
+          "3c6cac5d4887576566991f1b439124eda6e287ce946a97eed65746c744aeb62c"
+        ],
+        "counters_recorded": true
+      },
+      {
+        "run": 3,
+        "n": 36,
+        "judged": 36,
+        "errors": 0,
+        "overall": 3.61,
+        "rubric_version": "2026-11-08.1",
+        "corpus_sha256": "8d59436c4ae9a39fb25f6c33ef5828092164804772a9b0eef8919e3ff804f457",
+        "harness_fingerprints": [
+          "3c6cac5d4887576566991f1b439124eda6e287ce946a97eed65746c744aeb62c"
+        ],
+        "counters_recorded": true
+      }
+    ],
+    "proposal_rate": 0.16,
+    "prediction_rate": 0.15,
+    "autonomy_rate": 0,
+    "fault_classes": [
+      "restart-container",
+      "restart-service",
+      "start-guest",
+      "start-service"
+    ],
+    "fault_class_breadth": 4,
+    "mean_decision_steps": 4.67,
+    "resolution_recall": 0.8,
+    "resolution_recall_ceiling": 0.86,
+    "resolution_recall_of_findable": 0.93,
+    "mutation_count": 0,
+    "bands": {
+      "POLL_PAUSE": 16,
+      "none": 92
+    },
+    "expected_propose_n": 24,
+    "proposal_recall": 0.67,
+    "labeled_standdown_n": 91,
+    "standdown_precision": 0.91,
+    "stale_excluded": 0,
+    "fixture_armed": 24,
+    "dim_samples": {
+      "appropriate_band": 108,
+      "correct_diagnosis": 108,
+      "diagnosis_grounded": 17,
+      "evidence_grounded": 108,
+      "falsifiable_prediction": 17,
+      "sensible_proposal": 108,
+      "trajectory_grounded": 103
+    },
+    "overall_formula": "fixed-denominator-v2"
+  }
+}

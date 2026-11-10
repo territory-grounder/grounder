@@ -1,0 +1,69 @@
+{
+  "runs": 3,
+  "overall_baseline": 3.55,
+  "overall_candidate": 3.57,
+  "overall_delta": 0.02,
+  "overall_max_drop": 0.15,
+  "overall_band": 0,
+  "overall_pass": true,
+  "dims": [
+    {
+      "dim": "appropriate_band",
+      "baseline": 3.31,
+      "candidate": 3.39,
+      "delta": 0.08,
+      "max_drop": 0.1,
+      "pass": true
+    },
+    {
+      "dim": "correct_diagnosis",
+      "baseline": 3.57,
+      "candidate": 3.55,
+      "delta": -0.02,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "evidence_grounded",
+      "baseline": 3.78,
+      "candidate": 3.63,
+      "delta": -0.15,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "falsifiable_prediction",
+      "baseline": 3.77,
+      "candidate": 3.93,
+      "delta": 0.16,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "sensible_proposal",
+      "baseline": 3.33,
+      "candidate": 3.35,
+      "delta": 0.02,
+      "max_drop": 0.3,
+      "pass": true
+    }
+  ],
+  "rates": [
+    {
+      "name": "proposal_recall",
+      "candidate": 0.54,
+      "floor": 0.5,
+      "pass": true
+    }
+  ],
+  "control_n": 5,
+  "control_violations": null,
+  "control_pass": true,
+  "pass": true,
+  "outcome": "pass",
+  "unmeasured": null,
+  "reasons": null,
+  "warnings": [
+    "BASE-ARM DEGRADED: base proposal_rate 0.16 is under the 0.25 floor — main itself is collapsed (or an old card never recorded rates); the trend-watch owns that red"
+  ]
+}

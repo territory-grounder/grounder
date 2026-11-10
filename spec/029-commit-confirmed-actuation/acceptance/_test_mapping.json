@@ -1,0 +1,66 @@
+{
+ "feature": "commit-confirmed.feature",
+ "note": "Owner sign-off recorded 2026-08-14 (TG-488 B5). T-029-1 and T-029-2 are built: the REQ-2904 and REQ-2901 scenarios are PRESENT with runnable oracles. Every other scenario stays pending until its owning task builds the behavior — the lattice reads the honest count, never an absence. REQ-2906 stays pending: T-029-2 delivered the arm/abort/elapse ledger appends (asserted in its drills), but the scenario's own bar includes the fired-revert page + breaker, which is T-029-3.",
+ "scenarios": [
+  {
+   "name": "A commit-confirmed effect cannot execute without its armed revert",
+   "req": "REQ-2901",
+   "status": "present",
+   "test": "temporal/runner/commit_confirm_test.go: TestRunnerRefusesForwardWhenCommitConfirmUnarmable (full-workflow, mutation ON, executed killing mutation: arm-failure fall-through → effect ran unarmed → red) + TestRunnerExecutedEffectConfirmsFromTerminus (arm STARTS before execute, history-order oracle; renamed at T-029-3 when the interim keeps-armed claim became the confirm claim) + core/db/commit_confirm_test.go (durable once-only state, executed guard-drop mutation)"
+  },
+  {
+   "name": "Only the mechanical match confirms — an unverifiable post-state does not",
+   "req": "REQ-2902",
+   "status": "present",
+   "test": "temporal/runner/commit_confirm_test.go: TestConsultCommitConfirmRoutesTheTerminus (match+verified is the ONLY confirming reading; executed killing mutation: unverifiable→confirmed flip, red at two layers) + TestCommitConfirmChildElapseRoutesByTerminus/unverifiable_holds + TestCommitConfirmChildHoldFiresOnObservedDeviation (HOLD+page; inverse only on a POSITIVELY observed deviation; failed reads never fire — TestConsultCommitConfirmObservesPositively) + (TG-662) temporal/runner/terminus_facts_test.go: TestConsultCommitConfirmRequiresTheTerminusFacts (a match confirms ONLY with settled facts: confirmed clear ∧ collateral observed quiet; pending/unconfirmed/collateral readings never confirm; executed killing mutation M2: facts gate deleted → red) + TestCommitConfirmChildAwaitsTheTerminusFacts (pending facts AWAIT at elapse then confirm; never-settled → elapsed_unconfirmed; collateral → hold+page, no fire; executed killing mutation M5) + TestClearConfirmRequiresAPositiveObjectRead (ConfirmedClear needs the healed OBJECT positively healthy; unhealthy/unobserved never credits; executed killing mutation M1) + (review of !1819, 2026-11-07) TestConsultTreatsFactsOlderThanTheExecutionAsPending (facts settled before the judged execution read PENDING; executed killing mutation M6: stale-facts case dropped → red) + TestLegacyClearLoopHistoriesNeverPersistTheFacts (a pre-TG-662 in-flight history takes the legacy mark, never the facts write; executed killing mutation M7: objectReadV1 conjunct dropped → red) + TestCommitConfirmFactsAwaitOutlastsTheClearLoop (the facts await covers the clear-loop bound for every commit-confirmed class)"
+  },
+  {
+   "name": "The fired inverse traverses the full interceptor chain",
+   "req": "REQ-2903",
+   "status": "present",
+   "test": "temporal/runner/commit_confirm_test.go: the fire path dispatches ONLY SealRollbackExecuteActivity (the TG-462/464-drilled full-chain execute; no bypass exists) with the forward's captured basis — TestBuildRollbackRequestCarriesTheSealedBandAndBasis (band=sealed band, Approved=basis, InvertsActionID) — and a chain/seal refusal PAGES and resolves revert_failed (TestCommitConfirmChildElapseRoutesByTerminus/deviation_fires...), never a silent skip"
+  },
+  {
+   "name": "A class without a registry inverse is never eligible",
+   "req": "REQ-2904",
+   "status": "present",
+   "test": "core/actuate/opschema/commit_confirmed_test.go: TestCommitConfirmedWithoutAnyInverseIsRefused + TestDanglingRollbackOpClassRefusesTheRegistry (executed registry-refusal drill)"
+  },
+  {
+   "name": "A staged-canary class cannot execute unconfirmed",
+   "req": "REQ-2905",
+   "status": "present",
+   "test": "temporal/runner/commit_confirm_test.go: TestCommitConfirmArmActivityEnforcesTheCanaryMandate (both posture sources — the pinned allowlist and the AUTO_NOTICE rung — refuse an ineligible class; eligibility satisfies the mandate by arming; RungApprove is not a stage; executed killing mutation: mandate block dropped → a staged class executes with no armed revert → red)"
+  },
+  {
+   "name": "Every commit-confirmed transition is on the ledger and a failed revert pages and trips the breaker",
+   "req": "REQ-2906",
+   "status": "present",
+   "test": "temporal/runner/commit_confirm_test.go: ledger appends asserted for arm/abort/elapse-family transitions (capture sink); a fired revert PAGES (the fire drills route NotifyActivity); revert_failed pages AND trips the mutation breaker — executed killing mutation: breaker-trip dispatch dropped, red at two drills (trips=0). Console timeline chips remain T-029-5. + the RENDERED half (T-029-5): core/httpapi/session_detail_test.go TestSessionDetailCarriesTheCommitConfirmChip (the chip rides the walk; nil seam / no window / chip error all omit, never fabricate or 503; executed killing mutation: enrichment dropped → queryable-but-not-rendered → red) + the console render (wfCommitConfirmChip, assemble.py-built)"
+  },
+  {
+   "name": "Graduation credits only the confirmed outcome",
+   "req": "REQ-2907",
+   "status": "present",
+   "test": "temporal/runner/commit_confirm_test.go: TestResolveCommitConfirmFeedsTheLadderConfirmedOnly (confirmed = the one promoting outcome; fired/failed revert demote; aborted/elapsed/held feed nothing; duplicate resolves feed nothing — executed killing mutation: reverted→clean flip → promotion on a fired revert → red) + TestTerminusCreditsCommitConfirmedClassOnlyWhenWindowConfirmed (TG-662: the terminus is the one credit author; an eligible class's clean terminus feeds only once its window resolved confirmed; executed killing mutation M4: pre-TG-662 early return re-added → red) + temporal/runner/terminus_facts_test.go: TestTerminusCreditRequiresKnownQuietCollateral + reconcile_graduation_test.go: TestReconcileFeedsNotCleanWhenAnyPreconditionFails/collateral-unknown (unknown collateral is indeterminate, never clean — TG-668; executed killing mutation M3) + (owner prompt 2026-11-07 §2.D) temporal/runner/causality_test.go: TestClassifyCausality (tg-caused only with every reader known and quiet; injector restore / carve-out actor → injector-restore; recovery before execute or another actor → external; any unreadable reader or overlapping injection → indeterminate; executed killing mutations M1, M2) + TestTerminusClassifiesEveryNonCleanOutcome (no-op, no-verdict, deviation, still-faulted, unmonitored, host-alerting, collateral harm, collateral unknown, poll unanswered — each named in the record) + TestTerminusWithholdsCreditAndLessonWhenCausalityIsNotEstablished (verified target state without tg-caused: no feed, no precedent, no caution, record withheld:causality-<v>; executed killing mutations M3, M5) + TestWindowConfirmedFeedRequiresTGCausedFacts (the window's confirmed feed reads the persisted causality; executed killing mutation M4) + TestMarkTerminusFactsClassifiesCausality + TestInjectorRestoreWithholdsTheCreditEndToEnd (full runner workflow: an injector restore in the interval withholds credit and lesson; the record carries the evidence) + cmd/worker/causality_wire_test.go: TestCausalityEvidenceReaderReadsEverySourcePositively + core/db/terminus_causality_db_test.go: TestTerminusFactsCausalityRoundTrip, TestTerminusRecordAppendAndRead (append-only; CHECK refuses a clean non-tg-caused credit), TestCausalityReadersCountTheEvidence"
+  },
+  {
+   "name": "An empty pre-action diff is a refused no-op before anything arms",
+   "req": "REQ-2908",
+   "status": "present",
+   "test": "temporal/runner/commit_confirm_test.go: TestCommitConfirmArmActivityRefusesTheFreeNoOp (already-desired refuses before arming; unestablished/unwired fail toward arming) + TestRunnerRefusesNoOpWhenTargetRecoversAfterSeal (the TOCTOU e2e: not-running at seal, recovered by arm → refused:no-op, zero executions, zero window state; executed killing mutation: guard dropped → red at both layers)"
+  },
+  {
+   "name": "A person's later action on the guest stands the inverse down without a breaker trip",
+   "req": "REQ-2903",
+   "status": "present",
+   "test": "temporal/runner/commit_confirm_later_actor_test.go: TestTheInverseDecisionSeparatesWhoMovedTheGuest + TestAPersonStoppingAHeldGuestResolvesSupersededWithoutATrip; cmd/worker/later_actor_contract_test.go: TestTheRealTaskLogReadsWhoMovedTheGuestAfterTheWindowArmed (real Proxmox reader + real attribution core)"
+  },
+  {
+   "name": "An unexplained already-stopped guest keeps the kill path",
+   "req": "REQ-2903",
+   "status": "present",
+   "test": "temporal/runner/commit_confirm_later_actor_test.go: TestAnUnexplainedAlreadyStoppedGuestStillTripsTheBreaker + TestTheInverseDecisionSeparatesWhoMovedTheGuest"
+  }
+ ]
+}

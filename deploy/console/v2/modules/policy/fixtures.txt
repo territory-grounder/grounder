@@ -1,0 +1,29 @@
+/* POLICY module (pol-) — the Policy Engine surface (spec/015 T-015-12, epic TG-94/TG-106).
+   HONESTY CONTRACT: this surface has NO fixture. Every value it shows is fetched live from the
+   read-only policy API (/v1/policy/{mode,rules,graduation,decisions}) at session adoption — there is
+   no representative/sample data to fall back to. Unauthenticated the console shows only the auth gate;
+   authenticated, an unavailable endpoint (503 fail-closed) renders an honest error state and an empty
+   spine renders an honest empty state, never a fabricated row (INV-15). The payload carries ONLY
+   non-secret metadata (modes, verdicts, bands, op-classes, selectors, counts) — no key material, no
+   argv, no host credential (INV-13). The autonomy-mode change (TG-106) is the LIVE gated admin write here:
+   admin-elevated (the shared step-up), compare-and-swap on expected_from, double-confirmed in RED for the
+   allow-all Full-auto posture, executed by the worker — honest states only, never a fabricated success; the
+   rule-edit control is now the LIVE gated admin write too (TG-104 slice-2): the "Edit rules…" button opens an
+   inline per-rule-card editor that composes the FULL replacement document and POSTs {document,
+   expected_version, rationale} to /api/v1/policy/ruleset — admin-elevated (the shared step-up), compare-and-swap
+   on the version the read pinned (a 409 says "changed underneath you — re-read, never overwrite"), validated by
+   the worker (a 400 shows the validator's VERBATIM message), honest states only, and FAIL-CLOSED on a ruleset
+   whose top-level default the read can't project (has_default → the editor refuses to edit/save rather than drop
+   it). The packet-tracer (TG-105)
+   is LIVE but READ-ONLY — it POSTs a hypothetical candidate to /api/v1/policy/trace and renders the
+   worker's REAL composed verdict; it actuates nothing, writes no decision row, and shows an honest
+   error (never a verdict) when the engine is unreachable.
+   State held on liveState (populated by modules/_live/js.txt):
+     liveState.policyMode        — undefined (pre-adopt) | null (503) | PolicyMode
+     liveState.policyRules       — undefined (pre-adopt) | null (503) | PolicyRulesPage
+       (PolicyRulesPage now also carries `version` — the editor's compare-and-swap expected_version — and
+        `has_default` — the editor's fail-closed guard for an unrepresentable top-level default block.)
+     liveState.policyGraduation  — undefined (pre-adopt) | null (503) | [PolicyGraduationClass]
+     liveState.policyDecisions   — undefined (pre-adopt) | null (503) | [PolicyDecision]
+   HONESTY CONTRACT still holds: this surface has NO fixture — the rule editor is a live WRITE, and its e2e
+   oracle (e2e/rule-editor.mjs) STUBS /api/v1/policy/ruleset rather than seeding any fabricated ruleset here. */

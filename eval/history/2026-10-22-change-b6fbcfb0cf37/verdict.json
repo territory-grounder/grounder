@@ -1,0 +1,88 @@
+{
+  "runs": 1,
+  "overall_baseline": 3.9,
+  "overall_candidate": 3.69,
+  "overall_delta": -0.21,
+  "overall_max_drop": 0.15,
+  "overall_band": 0.62,
+  "overall_pass": true,
+  "dims": [
+    {
+      "dim": "appropriate_band",
+      "baseline": 4.5,
+      "candidate": 3.88,
+      "delta": -0.62,
+      "max_drop": 0.1,
+      "pass": true,
+      "unresolved": true,
+      "band": 0.65,
+      "samples": 8
+    },
+    {
+      "dim": "correct_diagnosis",
+      "baseline": 4.63,
+      "candidate": 4.75,
+      "delta": 0.12,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "evidence_grounded",
+      "baseline": 4.25,
+      "candidate": 5,
+      "delta": 0.75,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "falsifiable_prediction",
+      "baseline": 2,
+      "candidate": 1.33,
+      "delta": -0.67,
+      "max_drop": 0.3,
+      "pass": true,
+      "unresolved": true,
+      "band": 0.69,
+      "samples": 3
+    },
+    {
+      "dim": "sensible_proposal",
+      "baseline": 4.13,
+      "candidate": 3.5,
+      "delta": -0.63,
+      "max_drop": 0.3,
+      "pass": true,
+      "unresolved": true,
+      "band": 0.67,
+      "samples": 8
+    }
+  ],
+  "rates": [
+    {
+      "name": "proposal_recall",
+      "candidate": 1,
+      "floor": 0.5,
+      "pass": true
+    }
+  ],
+  "control_n": 2,
+  "control_violations": null,
+  "control_pass": true,
+  "pass": false,
+  "outcome": "inconclusive",
+  "unmeasured": [
+    "overall at this measurement power: Δ -0.21 is a drop past the -0.15 floor but WITHIN the sample-aware band (±0.62 at n=8/8 sessions, measured σ²=0.57), so the gate cannot tell it from the run's own noise; escalate to the pooled full gate (make eval-gate-full / TG_EVAL_FULL=1), where the summed sessions shrink the band and the same drop resolves to a real FAIL or a real PASS",
+    "appropriate_band at this measurement power: Δ -0.62 is a drop past the -0.10 floor but WITHIN the sample-aware band (±0.65 at n=8 judged samples, measured σ²=0.617), so the gate cannot tell it from the run's own noise; escalate to the pooled full gate (make eval-gate-full / TG_EVAL_FULL=1), where the summed per-dimension n shrinks the band and the same drop resolves to a real FAIL or a real PASS",
+    "falsifiable_prediction at this measurement power: Δ -0.67 is a drop past the -0.30 floor but WITHIN the sample-aware band (±0.69 at n=3 judged samples, measured σ²=0.133), so the gate cannot tell it from the run's own noise; escalate to the pooled full gate (make eval-gate-full / TG_EVAL_FULL=1), where the summed per-dimension n shrinks the band and the same drop resolves to a real FAIL or a real PASS",
+    "sensible_proposal at this measurement power: Δ -0.63 is a drop past the -0.30 floor but WITHIN the sample-aware band (±0.67 at n=8 judged samples, measured σ²=0.667), so the gate cannot tell it from the run's own noise; escalate to the pooled full gate (make eval-gate-full / TG_EVAL_FULL=1), where the summed per-dimension n shrinks the band and the same drop resolves to a real FAIL or a real PASS"
+  ],
+  "reasons": [
+    "UNMEASURED — overall at this measurement power: Δ -0.21 is a drop past the -0.15 floor but WITHIN the sample-aware band (±0.62 at n=8/8 sessions, measured σ²=0.57), so the gate cannot tell it from the run's own noise; escalate to the pooled full gate (make eval-gate-full / TG_EVAL_FULL=1), where the summed sessions shrink the band and the same drop resolves to a real FAIL or a real PASS; the gate cannot certify a capability the run never exercised, so this run certifies nothing",
+    "UNMEASURED — appropriate_band at this measurement power: Δ -0.62 is a drop past the -0.10 floor but WITHIN the sample-aware band (±0.65 at n=8 judged samples, measured σ²=0.617), so the gate cannot tell it from the run's own noise; escalate to the pooled full gate (make eval-gate-full / TG_EVAL_FULL=1), where the summed per-dimension n shrinks the band and the same drop resolves to a real FAIL or a real PASS; the gate cannot certify a capability the run never exercised, so this run certifies nothing",
+    "UNMEASURED — falsifiable_prediction at this measurement power: Δ -0.67 is a drop past the -0.30 floor but WITHIN the sample-aware band (±0.69 at n=3 judged samples, measured σ²=0.133), so the gate cannot tell it from the run's own noise; escalate to the pooled full gate (make eval-gate-full / TG_EVAL_FULL=1), where the summed per-dimension n shrinks the band and the same drop resolves to a real FAIL or a real PASS; the gate cannot certify a capability the run never exercised, so this run certifies nothing",
+    "UNMEASURED — sensible_proposal at this measurement power: Δ -0.63 is a drop past the -0.30 floor but WITHIN the sample-aware band (±0.67 at n=8 judged samples, measured σ²=0.667), so the gate cannot tell it from the run's own noise; escalate to the pooled full gate (make eval-gate-full / TG_EVAL_FULL=1), where the summed per-dimension n shrinks the band and the same drop resolves to a real FAIL or a real PASS; the gate cannot certify a capability the run never exercised, so this run certifies nothing"
+  ],
+  "warnings": [
+    "BASE-ARM DEGRADED: base proposal_rate 0.13 is under the 0.25 floor — main itself is collapsed (or an old card never recorded rates); the trend-watch owns that red"
+  ]
+}

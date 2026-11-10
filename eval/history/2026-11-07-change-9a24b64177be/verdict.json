@@ -1,0 +1,76 @@
+{
+  "runs": 1,
+  "rubric_version": "2026-10-23.1",
+  "corpus_sha256": "8d59436c4ae9a39fb25f6c33ef5828092164804772a9b0eef8919e3ff804f457",
+  "harness_fingerprints": [
+    "3c6cac5d4887576566991f1b439124eda6e287ce946a97eed65746c744aeb62c"
+  ],
+  "overall_baseline": 3.83,
+  "overall_candidate": 3.83,
+  "overall_delta": 0,
+  "overall_max_drop": 0.15,
+  "overall_band": 0,
+  "overall_pass": true,
+  "dims": [
+    {
+      "dim": "appropriate_band",
+      "baseline": 3.5,
+      "candidate": 3.5,
+      "delta": 0,
+      "max_drop": 0.1,
+      "pass": true
+    },
+    {
+      "dim": "correct_diagnosis",
+      "baseline": 4,
+      "candidate": 4,
+      "delta": 0,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "evidence_grounded",
+      "baseline": 4,
+      "candidate": 4,
+      "delta": 0,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "falsifiable_prediction",
+      "baseline": 4,
+      "candidate": 4,
+      "delta": 0,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "sensible_proposal",
+      "baseline": 3.63,
+      "candidate": 3.63,
+      "delta": 0,
+      "max_drop": 0.3,
+      "pass": true
+    }
+  ],
+  "rates": [
+    {
+      "name": "proposal_recall",
+      "candidate": 0.33,
+      "floor": 0.5,
+      "pass": false
+    }
+  ],
+  "control_n": 5,
+  "control_violations": null,
+  "control_pass": true,
+  "pass": false,
+  "outcome": "fail",
+  "unmeasured": null,
+  "reasons": [
+    "proposal_recall 0.33 \u003c absolute floor 0.50 — the agent stood down on action-warranted incidents (3 live expected-propose)"
+  ],
+  "warnings": [
+    "BASE-ARM DEGRADED: base proposal_rate 0.13 fails the candidate's own recall floor 0.50 (base proposal_recall 0.33; the corpus's expected-propose share is 3/8 = 0.38, escalate and stand-down labels count as stops) — main itself is collapsed (or an old card never recorded rates); the trend-watch owns that red"
+  ]
+}

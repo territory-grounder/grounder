@@ -1,0 +1,126 @@
+{
+  "runs": 3,
+  "rubric_version": "2026-11-08.1",
+  "corpus_sha256": "8d59436c4ae9a39fb25f6c33ef5828092164804772a9b0eef8919e3ff804f457",
+  "harness_fingerprints": [
+    "3c6cac5d4887576566991f1b439124eda6e287ce946a97eed65746c744aeb62c"
+  ],
+  "overall_baseline": 3.63,
+  "overall_candidate": 3.59,
+  "overall_delta": -0.04,
+  "overall_max_drop": 0.15,
+  "overall_band": 0,
+  "overall_pass": true,
+  "dims": [
+    {
+      "dim": "appropriate_band",
+      "baseline": 3.42,
+      "candidate": 3.31,
+      "delta": -0.11,
+      "max_drop": 0.1,
+      "pass": true,
+      "unresolved": true,
+      "band": 0.18,
+      "samples": 108
+    },
+    {
+      "dim": "correct_diagnosis",
+      "baseline": 3.66,
+      "candidate": 3.67,
+      "delta": 0.01,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "evidence_grounded",
+      "baseline": 3.82,
+      "candidate": 3.71,
+      "delta": -0.11,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "falsifiable_prediction",
+      "baseline": 3.88,
+      "candidate": 3.93,
+      "delta": 0.05,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "sensible_proposal",
+      "baseline": 3.38,
+      "candidate": 3.35,
+      "delta": -0.03,
+      "max_drop": 0.3,
+      "pass": true
+    }
+  ],
+  "rates": [
+    {
+      "name": "proposal_recall",
+      "candidate": 0.71,
+      "floor": 0.5,
+      "pass": true
+    }
+  ],
+  "control_n": 5,
+  "control_violations": null,
+  "control_pass": true,
+  "control_tallies": [
+    {
+      "ref": "ctl-01",
+      "runs": 3,
+      "valid": 3,
+      "excluded": 0,
+      "missing": 0,
+      "proposed": 0,
+      "status": "pass"
+    },
+    {
+      "ref": "ctl-02",
+      "runs": 3,
+      "valid": 3,
+      "excluded": 0,
+      "missing": 0,
+      "proposed": 0,
+      "status": "pass"
+    },
+    {
+      "ref": "ctl-03",
+      "runs": 3,
+      "valid": 3,
+      "excluded": 0,
+      "missing": 0,
+      "proposed": 0,
+      "status": "pass"
+    },
+    {
+      "ref": "ctl-04",
+      "runs": 3,
+      "valid": 3,
+      "excluded": 0,
+      "missing": 0,
+      "proposed": 0,
+      "status": "pass"
+    },
+    {
+      "ref": "ctl-05",
+      "runs": 3,
+      "valid": 3,
+      "excluded": 0,
+      "missing": 0,
+      "proposed": 0,
+      "status": "pass"
+    }
+  ],
+  "pass": false,
+  "outcome": "inconclusive",
+  "unmeasured": [
+    "appropriate_band at this measurement power: Δ -0.11 is a drop past the -0.10 floor but WITHIN the sample-aware band (±0.18 at n=108 judged samples, measured σ²=0.617), so the gate cannot tell it from the run's own noise; escalate to the pooled full gate (make eval-gate-full / TG_EVAL_FULL=1), where the summed per-dimension n shrinks the band and the same drop resolves to a real FAIL or a real PASS"
+  ],
+  "reasons": [
+    "UNMEASURED — appropriate_band at this measurement power: Δ -0.11 is a drop past the -0.10 floor but WITHIN the sample-aware band (±0.18 at n=108 judged samples, measured σ²=0.617), so the gate cannot tell it from the run's own noise; escalate to the pooled full gate (make eval-gate-full / TG_EVAL_FULL=1), where the summed per-dimension n shrinks the band and the same drop resolves to a real FAIL or a real PASS; the gate cannot certify a capability the run never exercised, so this run certifies nothing"
+  ],
+  "warnings": null
+}

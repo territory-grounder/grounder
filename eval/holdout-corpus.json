@@ -1,0 +1,47 @@
+[
+ {
+  "external_ref": "hold-01",
+  "source_id": "eval-holdout",
+  "alert_rule": "Devices up/down",
+  "host": "dc1haproxy01",
+  "severity": "critical",
+  "site": "dc1",
+  "summary": "dc1haproxy01 not responding (load-balancer down)"
+ },
+ {
+  "external_ref": "hold-02",
+  "source_id": "eval-holdout",
+  "alert_rule": "Linux High Memory Usage, >= 90% in use",
+  "host": "dc1gitlab01",
+  "severity": "warning",
+  "site": "dc1",
+  "summary": "memory >=90%"
+ },
+ {
+  "external_ref": "hold-03",
+  "source_id": "eval-holdout",
+  "alert_rule": "Space on / is >= 90% and < 95% in use",
+  "host": "dc1graylog01",
+  "severity": "warning",
+  "site": "dc1",
+  "summary": "root filesystem >=90%"
+ },
+ {
+  "external_ref": "hold-04",
+  "source_id": "eval-holdout",
+  "alert_rule": "01 Ping Latency",
+  "host": "dc1freeipa01",
+  "severity": "critical",
+  "site": "dc1",
+  "summary": "ping latency over threshold"
+ },
+ {
+  "external_ref": "hold-05",
+  "source_id": "eval-holdout",
+  "alert_rule": "Service up/down",
+  "host": "dc1imap01",
+  "severity": "critical",
+  "site": "dc1",
+  "summary": "a monitored service is down"
+ }
+]

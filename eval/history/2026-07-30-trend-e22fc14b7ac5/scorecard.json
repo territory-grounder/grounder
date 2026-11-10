@@ -1,0 +1,29 @@
+{
+  "n": 20,
+  "dim_means": {
+    "appropriate_band": 4.95,
+    "correct_diagnosis": 4.82,
+    "evidence_grounded": 4.75,
+    "falsifiable_prediction": 1,
+    "sensible_proposal": 4.93
+  },
+  "overall": 4.09,
+  "judged": 0,
+  "errors": 0,
+  "proposal_rate": 0,
+  "prediction_rate": 0,
+  "autonomy_rate": 0,
+  "fault_classes": [],
+  "fault_class_breadth": 0,
+  "mean_decision_steps": 4.15,
+  "mutation_count": 0,
+  "bands": {
+    "none": 60
+  },
+  "expected_propose_n": 0,
+  "proposal_recall": 0,
+  "labeled_standdown_n": 42,
+  "standdown_precision": 1,
+  "stale_excluded": 18,
+  "overall_formula": "fixed-denominator-v2"
+}

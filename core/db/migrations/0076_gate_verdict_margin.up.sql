@@ -1,0 +1,12 @@
+-- 0076: per-gate decision MARGIN on the interceptor gate-verdict trail (TG-178).
+--
+-- interceptor_gate_verdict (0030, spec/020 T-020-7) records WHICH gate fired and its verdict, but not BY HOW
+-- MUCH it decided. A signed, NON-SECRET margin (value - threshold) makes boundary-case decisions — a gate that
+-- passed or refused within ε of its threshold — a reviewable set and the skill-store flywheel's preferential
+-- input. NEGATIVE ⇒ the value was on the refusing side by |margin|; POSITIVE ⇒ it cleared by margin.
+--
+-- Nullable by design: a gate with no numeric threshold (a binary match/floor) has no margin, and every row
+-- written before this column existed carries NULL. Append-only tamper-resistance is UNCHANGED — the 0030
+-- REVOKE UPDATE, DELETE on tg_runtime still holds; adding a nullable column is a migration-role DDL and grants
+-- the runtime role nothing. First producer is the policy gate's min_confidence clamp (core/actuate).
+ALTER TABLE interceptor_gate_verdict ADD COLUMN margin double precision;

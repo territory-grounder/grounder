@@ -1,0 +1,25 @@
+# Anthropic — Advanced Tool Use (Tool Search / deferred loading, programmatic + parallel tool calling)
+
+> **[O] audit-overlay · TG-38 source benchmark.** Category: **Anthropic** · TG adherence: **2.5 / 5** · Practices audited: **4** (implemented 0 · partial 2 · gap 1 · N/A-by-design 1).
+
+## Verdict
+
+TG's native Go ReAct loop is deliberately at the opposite end of the design space from this source. Of the two token-reduction mechanisms the source headlines, TG implements neither: there is no Tool Search / deferred tool loading and no parallel tool calling — the loop is strictly one-tool-per-turn. It does, however, achieve the source's underlying token-efficiency GOAL by other means: it surfaces tool NAMES only (never full JSON schemas) and bounds every tool result at the source (eventlog limit=20, listCap=8, 8MB body cap). Programmatic / code-as-orchestrator tool calling is correctly N/A-by-design — executing model-authored code would violate INV-08, TG's core 'no model token becomes control flow' invariant. The two real misses (parallel batching, and no deferred loading before the read-only catalog grows) are low-to-moderate severity today because the agent-facing catalog is only 4 tools, but they are the right child issues.
+
+## Practice-by-practice
+
+| # | Advice / best practice | TG status | Evidence | Remediation |
+|---|------------------------|-----------|----------|-------------|
+| 1 | Deferred tool loading / Tool Search — load tool definitions on demand instead of listing the whole catalog up-front, cutting the token cost of tool definitions (~85% reduction on large catalogs). | partial | agent/loop.go:19-38 (protocolPreamble puts the FULL tool-name list, from tools.Names(), into the system message every turn — no search, no on-demand loading); catalog is only 4 read-only tools (modules/ingest/librenms/tools.go:90 get-device-status/eventlog/active-alerts; modules/estate/tools.go:26 get-estate-context) | The search/deferred mechanism is absent; it is moot at 4 tools but will bloat the preamble as the predecessor tool fleet + read-only vendor-MCP interceptor land. Add relevance-scoped tool surfacing (include only tools plausibly relevant to the incident's alert class) before the catalog grows past ~15-20. |
+| 2 | Parallel tool calling — issue multiple tool calls in a single turn / execute independent tool calls concurrently to cut turns and latency. | gap | agent/loop.go:106-117 (directive.Tool is a single string — the wire contract permits exactly ONE tool per turn) and agent/loop.go:227-254 (each cycle does exactly one t.Invoke then re-prompts); no batching or concurrency anywhere in agent/ or adapters/model/ (grep for goroutine/errgroup/parallel returns only unrelated hits) | Allow a directive to carry a batch of independent read-only calls (e.g. get-active-alerts across the estate-context siblings, or estate-context + device-status together) and Invoke them concurrently, appending each as its own OBSERVATION[id]. Keeps the per-observation citation gate (REQ-1007) and deterministic trajectory veto intact while collapsing multi-host investigations from N turns to 1. |
+| 3 | Programmatic tool calling — the agent writes code that orchestrates tools in a sandbox (asyncio.gather-style parallelism, filtering data before the model sees it) for large token savings (~37%). | N/A-by-design | agent/loop.go:60-63 ('The agent calls ONLY this — it never spawns a subprocess'); adapters/model/model.go:75-76 + agent/tools.go:31-33 (INV-08: model output is untrusted DATA dispatched by an exact typed switch; 'no model token becomes control flow'). Executing model-authored orchestration code is categorically forbidden by TG's core safety invariant. | — |
+| 4 | Keep the token footprint of tool definitions AND tool results small (the outcome the source optimizes for) — filter/bound data before it enters the model's context. | partial | Names-only tool surface, no schemas/descriptions (agent/loop.go:22-24); results bounded at the SOURCE deterministically in Go — eventlog capped (modules/ingest/librenms/tools.go:216 limit=20), estate lists capped (modules/estate/tools.go:22 listCap=8), HTTP body capped (modules/ingest/librenms/tools.go:32 LimitReader 8<<20) | Two honest weaknesses: (1) names-only means the model gets zero per-tool descriptions or param schemas, relying entirely on the seed/skills — a tool-selection accuracy trade that worsens as the catalog grows; consider one-line hints per tool. (2) OBSERVATIONs accumulate raw in msgs across all cycles (agent/loop.go:254) with no cross-turn compaction — a 10-cycle session's transcript grows unbounded even though each single result is bounded. |
+
+## Top gaps
+
+- Add parallel/batched read-only tool calls (one directive → concurrent Invoke of independent reads) to collapse multi-host cascade investigations from N turns to 1
+- Add relevance-scoped ('tool search'-style) tool surfacing plus minimal per-tool param hints, so the preamble stays lean and tool selection stays accurate as the read-only catalog grows beyond the current 4 tools
+
+---
+
+[← Source-benchmark catalog](../SOURCE-BENCHMARK-CATALOG.md) · [Audit index](README.md)

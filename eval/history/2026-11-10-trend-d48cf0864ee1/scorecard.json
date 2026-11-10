@@ -1,0 +1,97 @@
+{
+  "rubric_version": "2026-11-08.1",
+  "corpus_sha256": "8d59436c4ae9a39fb25f6c33ef5828092164804772a9b0eef8919e3ff804f457",
+  "harness_fingerprints": [
+    "3c6cac5d4887576566991f1b439124eda6e287ce946a97eed65746c744aeb62c"
+  ],
+  "n": 36,
+  "dim_means": {
+    "appropriate_band": 3.2,
+    "correct_diagnosis": 3.55,
+    "diagnosis_grounded": 3.33,
+    "evidence_grounded": 3.71,
+    "falsifiable_prediction": 3.57,
+    "sensible_proposal": 3.27,
+    "trajectory_grounded": 4.37
+  },
+  "overall": 3.46,
+  "judged": 108,
+  "errors": 0,
+  "counters_recorded": true,
+  "runs": 3,
+  "run_provenance": [
+    {
+      "run": 1,
+      "n": 36,
+      "judged": 36,
+      "errors": 0,
+      "overall": 3.49,
+      "rubric_version": "2026-11-08.1",
+      "corpus_sha256": "8d59436c4ae9a39fb25f6c33ef5828092164804772a9b0eef8919e3ff804f457",
+      "harness_fingerprints": [
+        "3c6cac5d4887576566991f1b439124eda6e287ce946a97eed65746c744aeb62c"
+      ],
+      "counters_recorded": true
+    },
+    {
+      "run": 2,
+      "n": 36,
+      "judged": 36,
+      "errors": 0,
+      "overall": 3.36,
+      "rubric_version": "2026-11-08.1",
+      "corpus_sha256": "8d59436c4ae9a39fb25f6c33ef5828092164804772a9b0eef8919e3ff804f457",
+      "harness_fingerprints": [
+        "3c6cac5d4887576566991f1b439124eda6e287ce946a97eed65746c744aeb62c"
+      ],
+      "counters_recorded": true
+    },
+    {
+      "run": 3,
+      "n": 36,
+      "judged": 36,
+      "errors": 0,
+      "overall": 3.53,
+      "rubric_version": "2026-11-08.1",
+      "corpus_sha256": "8d59436c4ae9a39fb25f6c33ef5828092164804772a9b0eef8919e3ff804f457",
+      "harness_fingerprints": [
+        "3c6cac5d4887576566991f1b439124eda6e287ce946a97eed65746c744aeb62c"
+      ],
+      "counters_recorded": true
+    }
+  ],
+  "proposal_rate": 0.2,
+  "prediction_rate": 0.19,
+  "autonomy_rate": 0,
+  "fault_classes": [
+    "restart-service",
+    "start-guest",
+    "start-service"
+  ],
+  "fault_class_breadth": 3,
+  "mean_decision_steps": 4.63,
+  "resolution_recall": 0.8,
+  "resolution_recall_ceiling": 0.86,
+  "resolution_recall_of_findable": 0.93,
+  "mutation_count": 0,
+  "bands": {
+    "POLL_PAUSE": 20,
+    "none": 88
+  },
+  "expected_propose_n": 24,
+  "proposal_recall": 0.79,
+  "labeled_standdown_n": 86,
+  "standdown_precision": 0.94,
+  "stale_excluded": 0,
+  "fixture_armed": 24,
+  "dim_samples": {
+    "appropriate_band": 108,
+    "correct_diagnosis": 108,
+    "diagnosis_grounded": 22,
+    "evidence_grounded": 108,
+    "falsifiable_prediction": 22,
+    "sensible_proposal": 108,
+    "trajectory_grounded": 102
+  },
+  "overall_formula": "fixed-denominator-v2"
+}

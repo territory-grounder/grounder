@@ -1,0 +1,8 @@
+// The logs surface owns a richer 3-dimension facet bar (actor x level x source) rendered inside its own
+// header and driven by LOG_STATE (multi-select Sets per dimension), so no shell FACETS entry is required.
+// If the shell mandates one, mirror the actor dimension through it:
+// FACETS.logs = [["all","All"],["ai","AI"],["human","Human"],["system","System"]];
+// in the shell facet handler for view "logs":
+//   const f = facetState.logs;
+//   LOG_STATE.actor = new Set(f && f !== "all" ? [f] : []);
+//   route("logs");   // re-invoke the view; logsView repaints from LOG_STATE

@@ -1,0 +1,29 @@
+{
+  "feature": "actuation-interceptor.feature",
+  "note": "Honest coverage frontier. status: present = a runnable step drives real code and passes (must name a test); pending = specified behavior whose implementation does not exist yet; retrospective_gap = shipped without a driving test (must be zero for governed behavior, INV-22). All scenarios drive the real core/actuate.Interceptor with an in-memory actuator + ledger.",
+  "scenarios": [
+    { "name": "A mutating request is refused while mutation is off", "req": "REQ-1203", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "An unwired interception chain fails loud and does not execute", "req": "REQ-1202", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "A never-auto floor op is refused at the adapter even with mutation on", "req": "REQ-1203", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "An ungated action is refused", "req": "REQ-1204", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "An action_id mismatch is refused", "req": "REQ-1204", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "An action with no bound evidence is refused", "req": "REQ-1205", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "Mutation is enabled only through the proven wired gate", "req": "REQ-1206", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "A fully-admissible governed actuation executes, verifies, and audits", "req": "REQ-1201", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "A mutating action with no post-execution observer is refused before executing", "req": "REQ-1208", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "A mispredicted post-state verifies as a deviation", "req": "REQ-1208", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "An executed mutation records an execution_log bound to the action id", "req": "REQ-1209", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "A breaker trip in one worker force-Shadows a sibling worker sharing the durable store", "req": "REQ-1210", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "A policy approve verdict with a recorded human approval executes", "req": "REQ-1216", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "A policy approve verdict with no recorded approval is refused", "req": "REQ-1216", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "A policy deny verdict is refused even with a recorded human approval", "req": "REQ-1216", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "The never-auto floor refuses an irreversible op even when approved and policy-auto", "req": "REQ-1203", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "A single-host-bound effect leaf refuses an action targeting a different host", "req": "REQ-1219", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "Cost accrues for each model completion into the daily and session accumulators", "req": "REQ-1211", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "Exceeding the daily budget trips the cost breaker and force-Shadows", "req": "REQ-1212", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "Exceeding a session ceiling trips the cost breaker and force-Shadows", "req": "REQ-1212", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "A cost breaker trip force-Shadows a sibling worker sharing the durable store", "req": "REQ-1213", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "A zero budget disables cost enforcement", "req": "REQ-1214", "status": "present", "test": "TestActuationInterceptorAcceptance" },
+    { "name": "An unreadable cost store fails open and does not halt operations", "req": "REQ-1215", "status": "present", "test": "TestActuationInterceptorAcceptance" }
+  ]
+}

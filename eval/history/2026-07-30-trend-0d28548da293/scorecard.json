@@ -1,0 +1,35 @@
+{
+  "n": 20,
+  "dim_means": {
+    "appropriate_band": 4.28,
+    "correct_diagnosis": 4.83,
+    "evidence_grounded": 4.75,
+    "falsifiable_prediction": 5,
+    "sensible_proposal": 4.32
+  },
+  "overall": 4.64,
+  "judged": 0,
+  "errors": 0,
+  "proposal_rate": 0.25,
+  "prediction_rate": 0.25,
+  "autonomy_rate": 0,
+  "fault_classes": [
+    "restart-service",
+    "start-guest",
+    "start-service"
+  ],
+  "fault_class_breadth": 3,
+  "mean_decision_steps": 4.63,
+  "mutation_count": 0,
+  "bands": {
+    "POLL_PAUSE": 15,
+    "none": 45
+  },
+  "expected_propose_n": 18,
+  "proposal_recall": 0.83,
+  "labeled_standdown_n": 45,
+  "standdown_precision": 0.93,
+  "stale_excluded": 0,
+  "fixture_armed": 18,
+  "overall_formula": "fixed-denominator-v2"
+}

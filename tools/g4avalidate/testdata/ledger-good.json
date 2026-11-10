@@ -1,0 +1,11 @@
+{
+  "rows": 900,
+  "max_seq": 900,
+  "head_hash": "abc",
+  "chain_ok": true,
+  "chain_error": "",
+  "anchors_checked": 4,
+  "anchors_ok": true,
+  "anchor_error": "",
+  "verified_at": "2030-01-01T00:00:00Z"
+}

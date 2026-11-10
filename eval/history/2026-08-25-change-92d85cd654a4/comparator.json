@@ -1,0 +1,57 @@
+{
+  "measured_at": "2026-08-25",
+  "git_sha": "be48234fcbf797409cfa54b23e7cb6abfd880618",
+  "runs": 3,
+  "n": 81,
+  "provenance": "FRESH BASE ARM: origin/main pooled over 3 same-window run(s) (drift-cancelling A/B comparator, not the committed baseline) — base arm measured at be48234fcbf797409cfa54b23e7cb6abfd880618",
+  "scorecard": {
+    "rubric_version": "2026-08-04.3",
+    "n": 27,
+    "dim_means": {
+      "appropriate_band": 4.09,
+      "correct_diagnosis": 4.52,
+      "diagnosis_grounded": 3.1,
+      "evidence_grounded": 4.43,
+      "falsifiable_prediction": 1.46,
+      "sensible_proposal": 3.7,
+      "trajectory_grounded": 4.57
+    },
+    "overall": 3.64,
+    "judged": 0,
+    "errors": 0,
+    "proposal_rate": 0.23,
+    "prediction_rate": 0.23,
+    "autonomy_rate": 0,
+    "fault_classes": [
+      "restart-service",
+      "start-guest",
+      "start-service"
+    ],
+    "fault_class_breadth": 3,
+    "mean_decision_steps": 4.68,
+    "resolution_recall": 0.8,
+    "resolution_recall_ceiling": 0.86,
+    "resolution_recall_of_findable": 0.93,
+    "mutation_count": 0,
+    "bands": {
+      "POLL_PAUSE": 19,
+      "none": 62
+    },
+    "expected_propose_n": 24,
+    "proposal_recall": 0.79,
+    "labeled_standdown_n": 62,
+    "standdown_precision": 0.92,
+    "stale_excluded": 0,
+    "fixture_armed": 24,
+    "dim_samples": {
+      "appropriate_band": 81,
+      "correct_diagnosis": 81,
+      "diagnosis_grounded": 19,
+      "evidence_grounded": 81,
+      "falsifiable_prediction": 19,
+      "sensible_proposal": 81,
+      "trajectory_grounded": 78
+    },
+    "overall_formula": "fixed-denominator-v2"
+  }
+}

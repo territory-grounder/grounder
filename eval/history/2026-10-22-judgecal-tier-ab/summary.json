@@ -1,0 +1,160 @@
+{
+  "what": "the same live session_triage window (last 168h at 2026-10-22T21:41Z, newest 120 rows) re-judged under two gateway tiers with the current rubric (2026-08-04.3) via tools/rejudge DB-replay; per-session scores paired by ref; identifiers and judge comments deliberately omitted from this committed record",
+  "ticket": "TG-584",
+  "rubric_version": "2026-08-04.3",
+  "rubric_note": "measured under 2026-08-04.3 (params.model=primary at the time); the switch this record justifies created 2026-10-23.1 with IDENTICAL rubric text and params.model=judge — the version moved because the measurement did (TG-194)",
+  "paired_sessions": 120,
+  "arms": {
+    "primary (the agent's own tier)": {
+      "n": 120,
+      "all_dims_identical": 28,
+      "dims": {
+        "appropriate_band": {
+          "mean": 2.792,
+          "sd": 1.884,
+          "dist": {
+            "1": 55,
+            "2": 14,
+            "3": 1,
+            "4": 1,
+            "5": 49
+          }
+        },
+        "correct_diagnosis": {
+          "mean": 3.108,
+          "sd": 1.606,
+          "dist": {
+            "1": 16,
+            "2": 53,
+            "3": 1,
+            "4": 2,
+            "5": 48
+          }
+        },
+        "evidence_grounded": {
+          "mean": 2.625,
+          "sd": 1.937,
+          "dist": {
+            "1": 70,
+            "3": 1,
+            "4": 3,
+            "5": 46
+          }
+        },
+        "falsifiable_prediction": {
+          "mean": 1.467,
+          "sd": 1.251,
+          "dist": {
+            "1": 104,
+            "2": 2,
+            "3": 1,
+            "5": 13
+          }
+        },
+        "sensible_proposal": {
+          "mean": 2.642,
+          "sd": 1.936,
+          "dist": {
+            "1": 69,
+            "2": 1,
+            "4": 4,
+            "5": 46
+          }
+        }
+      }
+    },
+    "judge (the ruled judge tier)": {
+      "n": 120,
+      "all_dims_identical": 5,
+      "dims": {
+        "appropriate_band": {
+          "mean": 3.933,
+          "sd": 0.616,
+          "dist": {
+            "1": 4,
+            "2": 1,
+            "4": 109,
+            "5": 6
+          }
+        },
+        "correct_diagnosis": {
+          "mean": 4.1,
+          "sd": 0.79,
+          "dist": {
+            "1": 5,
+            "3": 2,
+            "4": 84,
+            "5": 29
+          }
+        },
+        "evidence_grounded": {
+          "mean": 3.983,
+          "sd": 0.73,
+          "dist": {
+            "1": 5,
+            "3": 3,
+            "4": 96,
+            "5": 16
+          }
+        },
+        "falsifiable_prediction": {
+          "mean": 1.65,
+          "sd": 0.963,
+          "dist": {
+            "1": 69,
+            "2": 38,
+            "4": 12,
+            "5": 1
+          }
+        },
+        "sensible_proposal": {
+          "mean": 4.025,
+          "sd": 0.724,
+          "dist": {
+            "1": 5,
+            "4": 97,
+            "5": 18
+          }
+        }
+      }
+    }
+  },
+  "paired": {
+    "appropriate_band": {
+      "n": 120,
+      "mean_delta_judge_minus_primary": 1.142,
+      "agree_same_score": 9,
+      "abs_delta_ge_2": 64
+    },
+    "correct_diagnosis": {
+      "n": 120,
+      "mean_delta_judge_minus_primary": 0.992,
+      "agree_same_score": 30,
+      "abs_delta_ge_2": 65
+    },
+    "evidence_grounded": {
+      "n": 120,
+      "mean_delta_judge_minus_primary": 1.358,
+      "agree_same_score": 23,
+      "abs_delta_ge_2": 65
+    },
+    "falsifiable_prediction": {
+      "n": 120,
+      "mean_delta_judge_minus_primary": 0.183,
+      "agree_same_score": 67,
+      "abs_delta_ge_2": 1
+    },
+    "sensible_proposal": {
+      "n": 120,
+      "mean_delta_judge_minus_primary": 1.383,
+      "agree_same_score": 25,
+      "abs_delta_ge_2": 65
+    }
+  },
+  "overall_pearson_r": 0.457,
+  "overall_sd": {
+    "primary": 1.586,
+    "judge": 0.602
+  },
+  "reading": "primary scores bimodally (1-or-5 on every judged dimension; 23% of sessions identical on all five dims; sd 1.6-1.9); judge grades (mode 4; 4% identical; sd 0.6-0.8). The largest disagreements are dedup stand-downs the primary tier scores ~1 and the judge tier scores 3.6-4.2 with the deferral named. Same sessions, same rubric: a judge property. Mean shift judge-primary is +1.0..+1.4 on the four graded dims \u2014 a MEASUREMENT change; every pooled statistic re-anchors on the bumped rubric version."
+}

@@ -1,0 +1,232 @@
+{
+  "spec": "021-groundnet",
+  "note": "UN-DEFERRED 2026-08-28 (owner directive TG-128: 'deliver groundnet; solve yourself all blockers'). Under active implementation, built DORMANT + gated, task by task, in build order 1 -> {2,5} -> {3,7} -> 4 -> 6 -> 8. LANDED so far: the SCITT statement layer — T-021-1 (envelope.go/payload.go/doc.go) and T-021-2 (pseudonym.go/signature.go), real veraison/go-cose COSE_Sign1; the A1 generalizable projection (core/trace/layers.go, spec/020 REQ-2017); T-021-5 (adapter.go/seam.go — the typed Emit/Ingest seam sourcing only the generalizable layer, subordinate-not-authority Ingest); and T-021-3 (translog.go/provenance.go — the local transparency-log Receipt as a third append-only hash-chain reusing core/audit anchors, + the atomic replay guard RecordIfNew). and T-021-7 (membership.go/posture.go — opt-in default-off Posture, org-admin-gated + audited enablement, consumption never gated behind contribution, unrecallable governed record). and T-021-6 (ingest.go/regraduate.go — the subordinate-not-authority ReGraduator: a foreign chunk lands as a no-authority hint at graduation LevelApprove and earns authority ONLY via LOCAL verified-clean runs through the consumer's own core/policy graduation ladder, never inheriting producer trust). All unit-tested, incl. the FULL in-process e2e (TestFullE2ERegraduation: node A Emit -> node B Ingest -> land subordinate -> local re-graduation) with the real translog + ladder. Acceptance scenarios bind as each task completes; until bound they stay @pending, tracked as declared debt in acceptance/_test_mapping.json, so tasks with landed code sit at 'pending' until their scenarios are bound and they flip to 'completed'. WIRE ENVELOPE: the canonical groundnet SCITT profile (RFC 9943; products/ground-net/spec, authoritative) — envelope.go/signature.go/translog.go implement the SCITT Signed Statement + COSE signature + Transparency Service, not a custom envelope. The whole package is DORMANT (unwired, seam default-off); while unwired it is outside every binary's reachability graph, so deadcode-gate does not analyze it (Phase-C wiring brings it in).",
+  "tasks": [
+    {
+      "id": "T-021-1",
+      "title": "Wisdom-chunk ENVELOPE + versioned payload types: the SCITT Transparent Statement (RFC 9943) born-compatible contract (standard envelope, media-type-versioned payload)",
+      "files_owned": [
+        "core/groundnet/doc.go",
+        "core/groundnet/envelope.go",
+        "core/groundnet/payload.go"
+      ],
+      "deps": [],
+      "req_ids": [
+        "REQ-2100",
+        "REQ-2101",
+        "REQ-2102"
+      ],
+      "acceptance": {
+        "feature": "groundnet.feature",
+        "scenarios": [
+          "The wisdom-chunk envelope is a versioned signed unit with the stable field set",
+          "The two-layer marker keeps every chunk generalizable and the estate-specific layer has no export path",
+          "The payload is versioned and evolvable while the envelope stays stable"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 450,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-021-2",
+      "title": "Pseudonymous attestation keypair + envelope signature verify: reputation to the pseudonym, refuse an unverified chunk",
+      "files_owned": [
+        "core/groundnet/pseudonym.go",
+        "core/groundnet/signature.go"
+      ],
+      "deps": [
+        "T-021-1"
+      ],
+      "req_ids": [
+        "REQ-2103",
+        "REQ-2104"
+      ],
+      "acceptance": {
+        "feature": "groundnet.feature",
+        "scenarios": [
+          "The producer attestation is a stable pseudonym and reputation accrues to it not an identity",
+          "A chunk whose signature does not verify is refused before ingest"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 400,
+        "max_wall_clock_minutes": 120
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-021-3",
+      "title": "Transparency-log provenance (Sigstore/Rekor + CT multi-witness, NOT blockchain) anchored to the local governance_ledger + replay rejection",
+      "files_owned": [
+        "core/groundnet/translog.go",
+        "core/groundnet/provenance.go"
+      ],
+      "deps": [
+        "T-021-1",
+        "T-021-2"
+      ],
+      "req_ids": [
+        "REQ-2105",
+        "REQ-2106",
+        "REQ-2115"
+      ],
+      "acceptance": {
+        "feature": "groundnet.feature",
+        "scenarios": [
+          "Provenance is anchored in a signed append-only transparency log and not a blockchain",
+          "The groundnet log extends the local hash-chained governance ledger",
+          "A replayed or duplicate chunk is rejected by its id and provenance anchor"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 550,
+        "max_wall_clock_minutes": 150
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-021-4",
+      "title": "Reputation rollup: CRDT-style aggregation of signed pseudonymous verified-outcome attestations, weighted by quality not volume, never an on-chain token",
+      "files_owned": [
+        "core/groundnet/reputation.go"
+      ],
+      "deps": [
+        "T-021-2",
+        "T-021-3"
+      ],
+      "req_ids": [
+        "REQ-2107"
+      ],
+      "acceptance": {
+        "feature": "groundnet.feature",
+        "scenarios": [
+          "Reputation aggregates signed verified-outcome attestations weighted by quality not volume"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 450,
+        "max_wall_clock_minutes": 130
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-021-5",
+      "title": "Typed adapter SEAM Emit/Ingest: Emit sources only the spec/020 generalizable layer, the local tracer never depends on the seam (ordering invariant)",
+      "files_owned": [
+        "core/groundnet/adapter.go",
+        "core/groundnet/seam.go"
+      ],
+      "deps": [
+        "T-021-1"
+      ],
+      "req_ids": [
+        "REQ-2108",
+        "REQ-2113"
+      ],
+      "acceptance": {
+        "feature": "groundnet.feature",
+        "scenarios": [
+          "The adapter seam emits from the generalizable layer and ingests into local re-graduation",
+          "A node is born groundnet-compatible while the local tracer does not depend on the contract"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 500,
+        "max_wall_clock_minutes": 140
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-021-6",
+      "title": "Subordinate-not-authority ingest: a foreign chunk is a hint that re-graduates locally and passes the full local gate stack (never lifts the floor/interceptor/mode)",
+      "files_owned": [
+        "core/groundnet/ingest.go",
+        "core/groundnet/regraduate.go"
+      ],
+      "deps": [
+        "T-021-5"
+      ],
+      "req_ids": [
+        "REQ-2109",
+        "REQ-2110"
+      ],
+      "acceptance": {
+        "feature": "groundnet.feature",
+        "scenarios": [
+          "An ingested chunk is a subordinate hint that passes the full local gate stack",
+          "An ingested chunk re-graduates locally before it earns any local standing"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 550,
+        "max_wall_clock_minutes": 150
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-021-7",
+      "title": "Membership + posture: opt-in default-off org-admin membership/export/consumption, authenticated members, public tier gate, no over-share, un-deletability",
+      "files_owned": [
+        "core/groundnet/membership.go",
+        "core/groundnet/posture.go"
+      ],
+      "deps": [
+        "T-021-5"
+      ],
+      "req_ids": [
+        "REQ-2111",
+        "REQ-2112",
+        "REQ-2114"
+      ],
+      "acceptance": {
+        "feature": "groundnet.feature",
+        "scenarios": [
+          "Membership export and consumption are opt-in default-off and authenticated",
+          "Consumption is never gated behind contribution and no over-share is required",
+          "A shared chunk is treated as unrecallable and the export decision is the last point of control"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 500,
+        "max_wall_clock_minutes": 140
+      },
+      "status": "pending"
+    },
+    {
+      "id": "T-021-8",
+      "title": "Groundnet persistence + standing checks: append-only ledger-anchored non-secret groundnet_emit/groundnet_ingest rows + the standing-check invariant guard",
+      "files_owned": [
+        "core/db/migrations/0113_groundnet.up.sql",
+        "core/db/migrations/0113_groundnet.down.sql",
+        "core/groundnet/audit.go",
+        "core/groundnet/standingcheck.go"
+      ],
+      "deps": [
+        "T-021-3",
+        "T-021-6",
+        "T-021-7"
+      ],
+      "req_ids": [
+        "REQ-2101",
+        "REQ-2109",
+        "REQ-2113"
+      ],
+      "acceptance": {
+        "feature": "groundnet.feature",
+        "scenarios": [
+          "The two-layer marker keeps every chunk generalizable and the estate-specific layer has no export path",
+          "An ingested chunk is a subordinate hint that passes the full local gate stack",
+          "A node is born groundnet-compatible while the local tracer does not depend on the contract"
+        ]
+      },
+      "budget": {
+        "max_loc_delta": 550,
+        "max_wall_clock_minutes": 150
+      },
+      "status": "completed"
+    }
+  ]
+}

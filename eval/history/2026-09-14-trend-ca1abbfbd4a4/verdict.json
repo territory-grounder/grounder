@@ -1,0 +1,76 @@
+{
+  "runs": 3,
+  "overall_baseline": 2.95,
+  "overall_candidate": 3.09,
+  "overall_delta": 0.14,
+  "overall_max_drop": 0.15,
+  "overall_band": 0,
+  "overall_pass": true,
+  "dims": [
+    {
+      "dim": "appropriate_band",
+      "baseline": 3.55,
+      "candidate": 3.67,
+      "delta": 0.12,
+      "max_drop": 0.1,
+      "pass": true
+    },
+    {
+      "dim": "correct_diagnosis",
+      "baseline": 3.53,
+      "candidate": 3.9,
+      "delta": 0.37,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "evidence_grounded",
+      "baseline": 3.01,
+      "candidate": 3.42,
+      "delta": 0.41,
+      "max_drop": 0.3,
+      "pass": true
+    },
+    {
+      "dim": "falsifiable_prediction",
+      "baseline": 1.73,
+      "candidate": 1.35,
+      "delta": -0.38,
+      "max_drop": 0.3,
+      "pass": false,
+      "band": 0.21,
+      "samples": 20
+    },
+    {
+      "dim": "sensible_proposal",
+      "baseline": 2.95,
+      "candidate": 3.14,
+      "delta": 0.19,
+      "max_drop": 0.3,
+      "pass": true
+    }
+  ],
+  "rates": [
+    {
+      "name": "proposal_recall",
+      "candidate": 0.83,
+      "floor": 0.5,
+      "pass": true
+    }
+  ],
+  "control_n": 0,
+  "control_violations": null,
+  "control_pass": true,
+  "pass": false,
+  "outcome": "fail",
+  "unmeasured": [
+    "negative controls: every control supplied was EXCLUDED as unobservable on the live estate (host absent from LibreNMS or administratively disabled), so the benign-incident bar was never applied — refresh the control corpus with hosts whose benignness can be READ"
+  ],
+  "reasons": [
+    "dim falsifiable_prediction Δ -0.38 \u003c -0.30, beyond the ±0.21 sample-aware band at n=20",
+    "UNMEASURED — negative controls: every control supplied was EXCLUDED as unobservable on the live estate (host absent from LibreNMS or administratively disabled), so the benign-incident bar was never applied — refresh the control corpus with hosts whose benignness can be READ; the gate cannot certify a capability the run never exercised, so this run certifies nothing"
+  ],
+  "warnings": [
+    "BASE-ARM DEGRADED: base proposal_rate 0.13 is under the 0.25 floor — main itself is collapsed (or an old card never recorded rates); the trend-watch owns that red"
+  ]
+}

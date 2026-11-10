@@ -1,0 +1,42 @@
+# TG-675 (deep-review F17) — the litellm egress proxy's FENCE, ENFORCED. Supersedes the TG-488 B11 set and its
+# 2026-08-14 correction, both of which named a model plane that no longer exists: the owner's model-plane
+# ruling of 2026-08-31 (TG-556 ROUNDs 4–5, do not relitigate) moved primary/fast to the Azure Foundry rail,
+# the judge and every Claude lane to the operator's litellm01 proxy, and kept deepseek/mistral/z.ai only as
+# balance-dead second-position auto-heal rows. The fix-first program (owner prompt 2026-11-07, pack item 19)
+# directed: arm FilterDefaultDeny with the DEPLOYED provider hosts, read from the live configuration — not a
+# stale ruling — and document what leaves the estate (docs/THREAT-MODEL.md §5.3).
+#
+# DERIVED FROM THE DEPLOYED SET (read on the box 2026-11-07, read-only; key presence only, never values):
+#   AZURE_API_KEY set, DEEPSEEK_API_KEY set, MISTRAL_API_KEY set, ZAI_API_KEY set, TG_LITELLM01_KEY set;
+#   ANTHROPIC/OPENAI/XAI empty (no model row uses them); KIMI_API_KEY set but NO model row uses moonshot/,
+#   so api.moonshot.ai is deliberately NOT fenced in — the stranger report flags it the day a row appears.
+#
+# THE FENCE (one per line, bare host tokens). Each PUBLIC HTTPS host below has a matching anchored line in
+# enforce-filter (the file tinyproxy actually loads; TestProxyFenceMatchesEnforceFilter pins the two equal):
+#   territory-grounder.cognitiveservices.azure.com — the Azure Foundry endpoint behind primary/fast
+#                         (azure/gpt-4.1, azure/gpt-5.4-mini). A public cloud endpoint, committed in
+#                         litellm-config.yaml already; not an estate coordinate.
+#   api.deepseek.com    — fallback-deepseek (balance-dead, kept as an auto-heal slot; key present).
+#   api.mistral.ai      — fallback-mistral (same).
+#   api.z.ai            — fallback-zai (same).
+#
+# OUTSIDE THE FENCE BY CONSTRUCTION — the HTTP direct lanes, which never traverse an HTTPS proxy and which
+# this control therefore does NOT bound (stated as a limitation in THREAT-MODEL.md §5.3):
+#   ${TG_LITELLM01_BASE} — the operator's litellm01 (HTTP, estate-private, env-ref only): judge, opus-cc,
+#                         arm-haiku/arm-opus, forensic-ir, fallback-cc-sonnet/fable — i.e. EVERY Claude call.
+#   ${TG_OLLAMA_HOST}   — the GPU-node Ollama embed lane (HTTP, estate-private, env-ref only).
+#   sidecar             — the on-box Anthropic sidecar (HTTP compose service; no model row dials it today).
+# They are listed so the fence file still names every lane the brain uses; the proxy enforces only the four
+# HTTPS hosts above. The in-process core/egress meter bounds the worker's own HTTP(S) calls separately.
+#
+# CI-CHECKED: deploy/egress_proxy_allowlist_test.go asserts these lines == the deployed-set fence, asserts
+# enforce-filter == the anchored form of the HTTPS entries, and REPORTS which litellm-config providers fall
+# outside the fence (the stranger list — must be empty for the brain to keep working under default-deny).
+# Change the fence only with the deployed set (a new provider row + key), and cite the change here.
+sidecar
+${TG_OLLAMA_HOST}
+${TG_LITELLM01_BASE}
+territory-grounder.cognitiveservices.azure.com
+api.deepseek.com
+api.mistral.ai
+api.z.ai

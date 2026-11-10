@@ -1,0 +1,55 @@
+{
+  "bar": "g4a",
+  "verdict": "PASS",
+  "since": "2026-11-10T00:00:00Z",
+  "until": "2026-11-20T17:00:00Z",
+  "rubric_versions": [
+    {
+      "value": "2026-11-08.1",
+      "n": 900
+    }
+  ],
+  "harness_fps": [
+    {
+      "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "n": 140
+    }
+  ],
+  "instrument_ids": [
+    {
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "n": 140
+    }
+  ],
+  "failures": [],
+  "ledger_gaps": 0,
+  "sites": [
+    "dc1",
+    "dc2"
+  ],
+  "cross_host_actuations": 0,
+  "excluded_refs": [
+    "sess-neg-dc1-1",
+    "sess-neg-dc1-2",
+    "sess-neg-dc1-3",
+    "sess-neg-dc1-4",
+    "sess-neg-dc1-5",
+    "sess-neg-dc1-6",
+    "sess-neg-dc1-7",
+    "sess-neg-dc1-8",
+    "sess-neg-dc1-9",
+    "sess-neg-dc1-10",
+    "sess-neg-dc2-1",
+    "sess-neg-dc2-2",
+    "sess-neg-dc2-3",
+    "sess-neg-dc2-4",
+    "sess-neg-dc2-5",
+    "sess-neg-dc2-6",
+    "sess-neg-dc2-7",
+    "sess-neg-dc2-8",
+    "sess-neg-dc2-9",
+    "sess-neg-dc2-10",
+    "sess-neg-opt-1"
+  ],
+  "excluded_refs_unmatched": []
+}
